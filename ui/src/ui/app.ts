@@ -85,6 +85,7 @@ import type {
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 import { generateUUID } from "./uuid.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import type { SecurityAuditReport, SecurityActivityEntry } from "./views/security.types.ts";
 
 declare global {
   interface Window {
@@ -352,6 +353,15 @@ export class OpenClawApp extends LitElement {
   @state() debugCallParams = "{}";
   @state() debugCallResult: string | null = null;
   @state() debugCallError: string | null = null;
+
+  @state() securityAuditReport: SecurityAuditReport | null = null;
+  @state() securityAuditLoading = false;
+  @state() securityAuditError: string | null = null;
+  @state() securityActivityEntries: SecurityActivityEntry[] = [];
+  @state() securityActivityFilter = "all";
+  @state() securityAuditFilterSeverity = "all";
+  @state() securityExpandedToggleGroups: Set<string> = new Set(["sandbox", "tools", "gateway"]);
+  private securityPollInterval: number | null = null;
 
   @state() logsLoading = false;
   @state() logsError: string | null = null;

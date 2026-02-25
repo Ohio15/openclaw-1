@@ -43,6 +43,7 @@ import type {
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
+import type { SecurityAuditReport, SecurityActivityEntry } from "./views/security.types.ts";
 
 export type AppViewState = {
   settings: UiSettings;
@@ -245,6 +246,16 @@ export type AppViewState = {
   debugCallParams: string;
   debugCallResult: string | null;
   debugCallError: string | null;
+
+  // Security
+  securityAuditReport: SecurityAuditReport | null;
+  securityAuditLoading: boolean;
+  securityAuditError: string | null;
+  securityActivityEntries: SecurityActivityEntry[];
+  securityActivityFilter: string;
+  securityAuditFilterSeverity: string;
+  securityExpandedToggleGroups: Set<string>;
+  securityPollInterval: number | null;
   logsLoading: boolean;
   logsError: string | null;
   logsFile: string | null;

@@ -42,6 +42,12 @@ import type {
   StatusSummary,
   UpdateAvailable,
 } from "./types.ts";
+import {
+  addSecurityActivityEntry,
+  parseToolEventToActivity,
+  parseExecApprovalToActivity,
+} from "./controllers/security-activity.ts";
+
 
 type GatewayHost = {
   settings: UiSettings;
@@ -301,6 +307,12 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
   }
 
   if (evt.event === "exec.approval.requested") {
+    if (host.tab === "security") {
+      const actEntry = parseExecApprovalToActivity(evt.payload, "requested");
+      if (actEntry) {
+        addSecurityActivityEntry(host, { ...actEntry, id: crypto.randomUUID() });
+      }
+    }
     const entry = parseExecApprovalRequested(evt.payload);
     if (entry) {
       host.execApprovalQueue = addExecApproval(host.execApprovalQueue, entry);
@@ -317,6 +329,12 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     const resolved = parseExecApprovalResolved(evt.payload);
     if (resolved) {
       host.execApprovalQueue = removeExecApproval(host.execApprovalQueue, resolved.id);
+    }
+    if (host.tab === "security") {
+      const actEntry = parseExecApprovalToActivity(evt.payload, "resolved");
+      if (actEntry) {
+        addSecurityActivityEntry(host, { ...actEntry, id: crypto.randomUUID() });
+      }
     }
     return;
   }

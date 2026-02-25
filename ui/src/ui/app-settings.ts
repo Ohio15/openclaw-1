@@ -3,7 +3,9 @@ import {
   startLogsPolling,
   stopLogsPolling,
   startDebugPolling,
+  startSecurityPolling,
   stopDebugPolling,
+  stopSecurityPolling,
 } from "./app-polling.ts";
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
 import type { OpenClawApp } from "./app.ts";
@@ -18,6 +20,7 @@ import {
   loadCronRuns,
   loadCronStatus,
 } from "./controllers/cron.ts";
+import { loadSecurityAudit } from "./controllers/security.ts";
 import { loadDebug } from "./controllers/debug.ts";
 import { loadDevices } from "./controllers/devices.ts";
 import { loadExecApprovals } from "./controllers/exec-approvals.ts";
@@ -165,6 +168,11 @@ export function setTab(host: SettingsHost, next: Tab) {
   } else {
     stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
   }
+  if (next === "security") {
+    startSecurityPolling(host as unknown as Parameters<typeof startSecurityPolling>[0]);
+  } else {
+    stopSecurityPolling(host as unknown as Parameters<typeof stopSecurityPolling>[0]);
+  }
   void refreshActiveTab(host);
   syncUrlWithTab(host, next, false);
 }
@@ -245,6 +253,11 @@ export async function refreshActiveTab(host: SettingsHost) {
   if (host.tab === "debug") {
     await loadDebug(host as unknown as OpenClawApp);
     host.eventLog = host.eventLogBuffer;
+  }
+  if (host.tab === "security") {
+    await loadConfig(host as unknown as OpenClawApp);
+    await loadSecurityAudit(host as unknown as OpenClawApp);
+    await loadSessions(host as unknown as OpenClawApp);
   }
   if (host.tab === "logs") {
     host.logsAtBottom = true;
@@ -364,6 +377,11 @@ export function setTabFromRoute(host: SettingsHost, next: Tab) {
     startDebugPolling(host as unknown as Parameters<typeof startDebugPolling>[0]);
   } else {
     stopDebugPolling(host as unknown as Parameters<typeof stopDebugPolling>[0]);
+  }
+  if (next === "security") {
+    startSecurityPolling(host as unknown as Parameters<typeof startSecurityPolling>[0]);
+  } else {
+    stopSecurityPolling(host as unknown as Parameters<typeof stopSecurityPolling>[0]);
   }
   if (host.connected) {
     void refreshActiveTab(host);

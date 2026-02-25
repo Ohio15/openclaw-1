@@ -71,6 +71,8 @@ import { renderChat } from "./views/chat.ts";
 import { renderConfig } from "./views/config.ts";
 import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
+import { renderSecurity } from "./views/security.ts";
+import { loadSecurityAudit } from "./controllers/security.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
 import { renderInstances } from "./views/instances.ts";
@@ -1108,6 +1110,51 @@ export function renderApp(state: AppViewState) {
                 onCallParamsChange: (next) => (state.debugCallParams = next),
                 onRefresh: () => loadDebug(state),
                 onCall: () => callDebugMethod(state),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "security"
+            ? renderSecurity({
+                report: state.securityAuditReport,
+                auditLoading: state.securityAuditLoading,
+                configForm: state.configForm,
+                sessionsCount: state.sessions?.length ?? null,
+                onRunAudit: () => void loadSecurityAudit(state),
+                onRunDeepAudit: () => void loadSecurityAudit(state, { deep: true }),
+                configDirty: state.configDirty,
+                configSaving: state.configSaving,
+                expandedToggleGroups: state.securityExpandedToggleGroups,
+                onToggleGroup: (groupId) => {
+                  const next = new Set(state.securityExpandedToggleGroups);
+                  if (next.has(groupId)) next.delete(groupId);
+                  else next.add(groupId);
+                  state.securityExpandedToggleGroups = next;
+                },
+                onPatch: (path, value) => {
+                  if (typeof state.handleConfigFormUpdate === "function") {
+                    state.handleConfigFormUpdate(path.join("."), value);
+                  }
+                },
+                onSave: () => {
+                  if (typeof state.handleConfigSave === "function") {
+                    void state.handleConfigSave();
+                  }
+                },
+                onSaveAndApply: () => {
+                  if (typeof state.handleConfigApply === "function") {
+                    void state.handleConfigApply();
+                  }
+                },
+                activityEntries: state.securityActivityEntries,
+                activityFilter: state.securityActivityFilter,
+                onActivityFilterChange: (category) => (state.securityActivityFilter = category),
+                auditFilterSeverity: state.securityAuditFilterSeverity,
+                onAuditFilterChange: (severity) => (state.securityAuditFilterSeverity = severity),
+                approvalQueue: state.execApprovalQueue ?? [],
+                approvalBusy: false,
+                onApprovalDecision: () => {},
               })
             : nothing
         }

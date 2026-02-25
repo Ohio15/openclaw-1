@@ -1,0 +1,13 @@
+services:
+  openclaw-gateway:
+    command:
+      [
+        "node",
+        "dist/index.js",
+        "gateway",
+        "--bind",
+        "${OPENCLAW_GATEWAY_BIND:-lan}",
+        "--port",
+        "18789",
+        "--allow-unconfigured",
+      ]
