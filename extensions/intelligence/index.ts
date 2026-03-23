@@ -35,7 +35,7 @@ const intelligencePlugin = {
     "Response quality augmentation: complexity decomposition, confidence scoring, self-review, multi-pass generation, domain knowledge injection",
 
   register(api: OpenClawPluginApi) {
-    const cfg = api.pluginConfig as IntelligenceConfig;
+    const cfg = (api.pluginConfig ?? {}) as Partial<IntelligenceConfig>;
     const enabled = cfg.enabled ?? true;
 
     // Initialize core components
