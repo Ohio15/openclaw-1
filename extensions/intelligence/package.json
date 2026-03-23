@@ -1,0 +1,15 @@
+{
+  "name": "@openclaw/intelligence",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Intelligence pipeline extension: complexity decomposition, confidence scoring, self-review, multi-pass generation",
+  "type": "module",
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

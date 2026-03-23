@@ -1,0 +1,63 @@
+{
+  "id": "intelligence",
+  "name": "Intelligence Pipeline",
+  "description": "Response quality augmentation: complexity decomposition, confidence scoring, self-review, multi-pass generation, domain knowledge injection",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "selfReviewEnabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "multiPassEnabled": {
+        "type": "boolean",
+        "default": false
+      },
+      "qualityThresholds": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "min": { "type": "number", "default": 0.65 },
+          "good": { "type": "number", "default": 0.75 },
+          "high": { "type": "number", "default": 0.85 }
+        }
+      },
+      "pipelineRules": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "complexityThreshold": { "type": "number", "default": 0.4 },
+          "maxSimpleRequirements": { "type": "number", "default": 3 }
+        }
+      },
+      "feedbackPath": {
+        "type": "string"
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Intelligence Pipeline",
+      "help": "Augment AI responses with complexity analysis, confidence scoring, and quality gates"
+    },
+    "selfReviewEnabled": {
+      "label": "Self-Review",
+      "help": "Enable automatic self-review when confidence is below threshold"
+    },
+    "multiPassEnabled": {
+      "label": "Multi-Pass Generation",
+      "help": "Enable 3-pass generation (initial + critic + specialist) for complex tasks",
+      "advanced": true
+    },
+    "feedbackPath": {
+      "label": "Feedback Log Path",
+      "placeholder": "~/.openclaw/intelligence/feedback.jsonl",
+      "advanced": true
+    }
+  }
+}
