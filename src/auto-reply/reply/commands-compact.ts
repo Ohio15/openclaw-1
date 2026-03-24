@@ -92,7 +92,6 @@ export const handleCompactCommand: CommandHandler = async (params) => {
       }),
     ),
     workspaceDir: params.workspaceDir,
-    agentDir: params.agentDir,
     config: params.cfg,
     skillsSnapshot: params.sessionEntry.skillsSnapshot,
     provider: params.provider,

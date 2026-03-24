@@ -1,11 +1,15 @@
 import type { ChannelId } from "../channels/plugins/types.js";
-import type { AgentModelConfig, AgentSandboxConfig } from "./types.agents-shared.js";
 import type {
   BlockStreamingChunkConfig,
   BlockStreamingCoalesceConfig,
   HumanDelayConfig,
   TypingMode,
 } from "./types.base.js";
+import type {
+  SandboxBrowserSettings,
+  SandboxDockerSettings,
+  SandboxPruneSettings,
+} from "./types.sandbox.js";
 import type { MemorySearchConfig } from "./types.tools.js";
 
 export type AgentModelEntryConfig = {
@@ -118,10 +122,10 @@ export type CliBackendConfig = {
 };
 
 export type AgentDefaultsConfig = {
-  /** Primary model and fallbacks (provider/model). Accepts string or {primary,fallbacks}. */
-  model?: AgentModelConfig;
-  /** Optional image-capable model and fallbacks (provider/model). Accepts string or {primary,fallbacks}. */
-  imageModel?: AgentModelConfig;
+  /** Primary model and fallbacks (provider/model). */
+  model?: AgentModelListConfig;
+  /** Optional image-capable model and fallbacks (provider/model). */
+  imageModel?: AgentModelListConfig;
   /** Model catalog with optional aliases (full provider/model keys). */
   models?: Record<string, AgentModelEntryConfig>;
   /** Agent working directory (preferred). Used as the default cwd for agent runs. */
@@ -186,11 +190,6 @@ export type AgentDefaultsConfig = {
   timeoutSeconds?: number;
   /** Max inbound media size in MB for agent-visible attachments (text note or future image attach). */
   mediaMaxMb?: number;
-  /**
-   * Max image side length (pixels) when sanitizing base64 image payloads in transcripts/tool results.
-   * Default: 1200.
-   */
-  imageMaxDimensionPx?: number;
   typingIntervalSeconds?: number;
   /** Typing indicator start mode (never|instant|thinking|message). */
   typingMode?: TypingMode;
@@ -213,7 +212,7 @@ export type AgentDefaultsConfig = {
     session?: string;
     /** Delivery target ("last", "none", or a channel id). */
     target?: "last" | "none" | ChannelId;
-    /** Optional delivery override (E.164 for WhatsApp, chat id for Telegram). Supports :topic:NNN suffix for Telegram topics. */
+    /** Optional delivery override (E.164 for WhatsApp, chat id for Telegram). */
     to?: string;
     /** Optional account id for multi-account channels. */
     accountId?: string;
@@ -244,16 +243,40 @@ export type AgentDefaultsConfig = {
     /** Auto-archive sub-agent sessions after N minutes (default: 60). */
     archiveAfterMinutes?: number;
     /** Default model selection for spawned sub-agents (string or {primary,fallbacks}). */
-    model?: AgentModelConfig;
+    model?: string | { primary?: string; fallbacks?: string[] };
     /** Default thinking level for spawned sub-agents (e.g. "off", "low", "medium", "high"). */
     thinking?: string;
-    /** Default run timeout in seconds for spawned sub-agents (0 = no timeout). */
-    runTimeoutSeconds?: number;
-    /** Gateway timeout in ms for sub-agent announce delivery calls (default: 60000). */
-    announceTimeoutMs?: number;
   };
   /** Optional sandbox settings for non-main sessions. */
-  sandbox?: AgentSandboxConfig;
+  sandbox?: {
+    /** Enable sandboxing for sessions. */
+    mode?: "off" | "non-main" | "all";
+    /**
+     * Agent workspace access inside the sandbox.
+     * - "none": do not mount the agent workspace into the container; use a sandbox workspace under workspaceRoot
+     * - "ro": mount the agent workspace read-only; disables write/edit tools
+     * - "rw": mount the agent workspace read/write; enables write/edit tools
+     */
+    workspaceAccess?: "none" | "ro" | "rw";
+    /**
+     * Session tools visibility for sandboxed sessions.
+     * - "spawned": only allow session tools to target the current session and sessions spawned from it (default)
+     * - "all": allow session tools to target any session
+     */
+    sessionToolsVisibility?: "spawned" | "all";
+    /** Container/workspace scope for sandbox isolation. */
+    scope?: "session" | "agent" | "shared";
+    /** Legacy alias for scope ("session" when true, "shared" when false). */
+    perSession?: boolean;
+    /** Root directory for sandbox workspaces. */
+    workspaceRoot?: string;
+    /** Docker-specific sandbox settings. */
+    docker?: SandboxDockerSettings;
+    /** Optional sandboxed browser settings. */
+    browser?: SandboxBrowserSettings;
+    /** Auto-prune sandbox containers. */
+    prune?: SandboxPruneSettings;
+  };
 };
 
 export type AgentCompactionMode = "default" | "safeguard";
@@ -261,10 +284,6 @@ export type AgentCompactionMode = "default" | "safeguard";
 export type AgentCompactionConfig = {
   /** Compaction summarization mode. */
   mode?: AgentCompactionMode;
-  /** Pi reserve tokens target before floor enforcement. */
-  reserveTokens?: number;
-  /** Pi keepRecentTokens budget used for cut-point selection. */
-  keepRecentTokens?: number;
   /** Minimum reserve tokens enforced for Pi compaction (0 disables the floor). */
   reserveTokensFloor?: number;
   /** Max share of context window for history during safeguard pruning (0.1–0.9, default 0.5). */

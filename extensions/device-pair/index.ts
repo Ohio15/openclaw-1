@@ -1,12 +1,6 @@
 import os from "node:os";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import {
-  approveDevicePairing,
-  listDevicePairing,
-  resolveGatewayBindUrl,
-  runPluginCommandWithTimeout,
-  resolveTailnetHostWithRunner,
-} from "openclaw/plugin-sdk";
+import { approveDevicePairing, listDevicePairing } from "openclaw/plugin-sdk";
 import qrcode from "qrcode-terminal";
 
 function renderQrAscii(data: string): Promise<string> {
@@ -43,49 +37,45 @@ type ResolveAuthResult = {
 };
 
 function normalizeUrl(raw: string, schemeFallback: "ws" | "wss"): string | null {
-  const candidate = raw.trim();
-  if (!candidate) {
+  const trimmed = raw.trim();
+  if (!trimmed) {
     return null;
   }
-  const parsedUrl = parseNormalizedGatewayUrl(candidate);
-  if (parsedUrl) {
-    return parsedUrl;
-  }
-  const hostPort = candidate.split("/", 1)[0]?.trim() ?? "";
-  return hostPort ? `${schemeFallback}://${hostPort}` : null;
-}
-
-function parseNormalizedGatewayUrl(raw: string): string | null {
   try {
-    const parsed = new URL(raw);
-    const scheme = parsed.protocol.slice(0, -1);
-    const normalizedScheme = scheme === "http" ? "ws" : scheme === "https" ? "wss" : scheme;
-    if (!(normalizedScheme === "ws" || normalizedScheme === "wss")) {
+    const parsed = new URL(trimmed);
+    const scheme = parsed.protocol.replace(":", "");
+    if (!scheme) {
       return null;
     }
-    if (!parsed.hostname) {
+    const resolvedScheme = scheme === "http" ? "ws" : scheme === "https" ? "wss" : scheme;
+    if (resolvedScheme !== "ws" && resolvedScheme !== "wss") {
       return null;
     }
-    return `${normalizedScheme}://${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+    const host = parsed.hostname;
+    if (!host) {
+      return null;
+    }
+    const port = parsed.port ? `:${parsed.port}` : "";
+    return `${resolvedScheme}://${host}${port}`;
   } catch {
-    return null;
+    // Fall through to host:port parsing.
   }
-}
 
-function parsePositiveInteger(raw: string | undefined): number | null {
-  if (!raw) {
+  const withoutPath = trimmed.split("/")[0] ?? "";
+  if (!withoutPath) {
     return null;
   }
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  return `${schemeFallback}://${withoutPath}`;
 }
 
 function resolveGatewayPort(cfg: OpenClawPluginApi["config"]): number {
-  const envPort =
-    parsePositiveInteger(process.env.OPENCLAW_GATEWAY_PORT?.trim()) ??
-    parsePositiveInteger(process.env.CLAWDBOT_GATEWAY_PORT?.trim());
-  if (envPort) {
-    return envPort;
+  const envRaw =
+    process.env.OPENCLAW_GATEWAY_PORT?.trim() || process.env.CLAWDBOT_GATEWAY_PORT?.trim();
+  if (envRaw) {
+    const parsed = Number.parseInt(envRaw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
   }
   const configPort = cfg.gateway?.port;
   if (typeof configPort === "number" && Number.isFinite(configPort) && configPort > 0) {
@@ -172,32 +162,78 @@ function pickTailnetIPv4(): string | null {
   return pickMatchingIPv4(isTailnetIPv4);
 }
 
-async function resolveTailnetHost(): Promise<string | null> {
-  return await resolveTailnetHostWithRunner((argv, opts) =>
-    runPluginCommandWithTimeout({
-      argv,
-      timeoutMs: opts.timeoutMs,
-    }),
-  );
+async function resolveTailnetHost(api: OpenClawPluginApi): Promise<string | null> {
+  const candidates = ["tailscale", "/Applications/Tailscale.app/Contents/MacOS/Tailscale"];
+  for (const candidate of candidates) {
+    try {
+      const result = await api.runtime.system.runCommandWithTimeout(
+        [candidate, "status", "--json"],
+        {
+          timeoutMs: 5000,
+        },
+      );
+      if (result.code !== 0) {
+        continue;
+      }
+      const raw = result.stdout.trim();
+      if (!raw) {
+        continue;
+      }
+      const parsed = parsePossiblyNoisyJsonObject(raw);
+      const self =
+        typeof parsed.Self === "object" && parsed.Self !== null
+          ? (parsed.Self as Record<string, unknown>)
+          : undefined;
+      const dns = typeof self?.DNSName === "string" ? self.DNSName : undefined;
+      if (dns && dns.length > 0) {
+        return dns.replace(/\.$/, "");
+      }
+      const ips = Array.isArray(self?.TailscaleIPs) ? (self?.TailscaleIPs as string[]) : [];
+      if (ips.length > 0) {
+        return ips[0] ?? null;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function parsePossiblyNoisyJsonObject(raw: string): Record<string, unknown> {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) {
+    return {};
+  }
+  try {
+    return JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 function resolveAuth(cfg: OpenClawPluginApi["config"]): ResolveAuthResult {
   const mode = cfg.gateway?.auth?.mode;
   const token =
-    pickFirstDefined([
-      process.env.OPENCLAW_GATEWAY_TOKEN,
-      process.env.CLAWDBOT_GATEWAY_TOKEN,
-      cfg.gateway?.auth?.token,
-    ]) ?? undefined;
+    process.env.OPENCLAW_GATEWAY_TOKEN?.trim() ||
+    process.env.CLAWDBOT_GATEWAY_TOKEN?.trim() ||
+    cfg.gateway?.auth?.token?.trim();
   const password =
-    pickFirstDefined([
-      process.env.OPENCLAW_GATEWAY_PASSWORD,
-      process.env.CLAWDBOT_GATEWAY_PASSWORD,
-      cfg.gateway?.auth?.password,
-    ]) ?? undefined;
+    process.env.OPENCLAW_GATEWAY_PASSWORD?.trim() ||
+    process.env.CLAWDBOT_GATEWAY_PASSWORD?.trim() ||
+    cfg.gateway?.auth?.password?.trim();
 
-  if (mode === "token" || mode === "password") {
-    return resolveRequiredAuth(mode, { token, password });
+  if (mode === "password") {
+    if (!password) {
+      return { error: "Gateway auth is set to password, but no password is configured." };
+    }
+    return { password, label: "password" };
+  }
+  if (mode === "token") {
+    if (!token) {
+      return { error: "Gateway auth is set to token, but no token is configured." };
+    }
+    return { token, label: "token" };
   }
   if (token) {
     return { token, label: "token" };
@@ -206,30 +242,6 @@ function resolveAuth(cfg: OpenClawPluginApi["config"]): ResolveAuthResult {
     return { password, label: "password" };
   }
   return { error: "Gateway auth is not configured (no token or password)." };
-}
-
-function pickFirstDefined(candidates: Array<string | undefined>): string | null {
-  for (const value of candidates) {
-    const trimmed = value?.trim();
-    if (trimmed) {
-      return trimmed;
-    }
-  }
-  return null;
-}
-
-function resolveRequiredAuth(
-  mode: "token" | "password",
-  values: { token?: string; password?: string },
-): ResolveAuthResult {
-  if (mode === "token") {
-    return values.token
-      ? { token: values.token, label: "token" }
-      : { error: "Gateway auth is set to token, but no token is configured." };
-  }
-  return values.password
-    ? { password: values.password, label: "password" }
-    : { error: "Gateway auth is set to password, but no password is configured." };
 }
 
 async function resolveGatewayUrl(api: OpenClawPluginApi): Promise<ResolveUrlResult> {
@@ -248,7 +260,7 @@ async function resolveGatewayUrl(api: OpenClawPluginApi): Promise<ResolveUrlResu
 
   const tailscaleMode = cfg.gateway?.tailscale?.mode ?? "off";
   if (tailscaleMode === "serve" || tailscaleMode === "funnel") {
-    const host = await resolveTailnetHost();
+    const host = await resolveTailnetHost(api);
     if (!host) {
       return { error: "Tailscale Serve is enabled, but MagicDNS could not be resolved." };
     }
@@ -263,16 +275,29 @@ async function resolveGatewayUrl(api: OpenClawPluginApi): Promise<ResolveUrlResu
     }
   }
 
-  const bindResult = resolveGatewayBindUrl({
-    bind: cfg.gateway?.bind,
-    customBindHost: cfg.gateway?.customBindHost,
-    scheme,
-    port,
-    pickTailnetHost: pickTailnetIPv4,
-    pickLanHost: pickLanIPv4,
-  });
-  if (bindResult) {
-    return bindResult;
+  const bind = cfg.gateway?.bind ?? "loopback";
+  if (bind === "custom") {
+    const host = cfg.gateway?.customBindHost?.trim();
+    if (host) {
+      return { url: `${scheme}://${host}:${port}`, source: "gateway.bind=custom" };
+    }
+    return { error: "gateway.bind=custom requires gateway.customBindHost." };
+  }
+
+  if (bind === "tailnet") {
+    const host = pickTailnetIPv4();
+    if (host) {
+      return { url: `${scheme}://${host}:${port}`, source: "gateway.bind=tailnet" };
+    }
+    return { error: "gateway.bind=tailnet set, but no tailnet IP was found." };
+  }
+
+  if (bind === "lan") {
+    const host = pickLanIPv4();
+    if (host) {
+      return { url: `${scheme}://${host}:${port}`, source: "gateway.bind=lan" };
+    }
+    return { error: "gateway.bind=lan set, but no private LAN IP was found." };
   }
 
   return {

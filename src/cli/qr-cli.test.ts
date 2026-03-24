@@ -47,21 +47,6 @@ function createRemoteQrConfig(params?: { withTailscale?: boolean }) {
 }
 
 describe("registerQrCli", () => {
-  function createProgram() {
-    const program = new Command();
-    registerQrCli(program);
-    return program;
-  }
-
-  async function runQr(args: string[]) {
-    const program = createProgram();
-    await program.parseAsync(["qr", ...args], { from: "user" });
-  }
-
-  async function expectQrExit(args: string[]) {
-    await expect(runQr(args)).rejects.toThrow("exit");
-  }
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv("OPENCLAW_GATEWAY_TOKEN", "");
@@ -83,7 +68,10 @@ describe("registerQrCli", () => {
       },
     });
 
-    await runQr(["--setup-code-only"]);
+    const program = new Command();
+    registerQrCli(program);
+
+    await program.parseAsync(["qr", "--setup-code-only"], { from: "user" });
 
     const expected = encodePairingSetupCode({
       url: "ws://gateway.local:18789",
@@ -102,7 +90,10 @@ describe("registerQrCli", () => {
       },
     });
 
-    await runQr([]);
+    const program = new Command();
+    registerQrCli(program);
+
+    await program.parseAsync(["qr"], { from: "user" });
 
     expect(qrGenerate).toHaveBeenCalledTimes(1);
     const output = runtime.log.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
@@ -120,7 +111,12 @@ describe("registerQrCli", () => {
       },
     });
 
-    await runQr(["--setup-code-only", "--token", "override-token"]);
+    const program = new Command();
+    registerQrCli(program);
+
+    await program.parseAsync(["qr", "--setup-code-only", "--token", "override-token"], {
+      from: "user",
+    });
 
     const expected = encodePairingSetupCode({
       url: "ws://gateway.local:18789",
@@ -137,7 +133,10 @@ describe("registerQrCli", () => {
       },
     });
 
-    await expectQrExit([]);
+    const program = new Command();
+    registerQrCli(program);
+
+    await expect(program.parseAsync(["qr"], { from: "user" })).rejects.toThrow("exit");
 
     const output = runtime.error.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
     expect(output).toContain("only bound to loopback");
@@ -145,7 +144,10 @@ describe("registerQrCli", () => {
 
   it("uses gateway.remote.url when --remote is set (ignores device-pair publicUrl)", async () => {
     loadConfig.mockReturnValue(createRemoteQrConfig());
-    await runQr(["--setup-code-only", "--remote"]);
+
+    const program = new Command();
+    registerQrCli(program);
+    await program.parseAsync(["qr", "--setup-code-only", "--remote"], { from: "user" });
 
     const expected = encodePairingSetupCode({
       url: "wss://remote.example.com:444",
@@ -154,18 +156,12 @@ describe("registerQrCli", () => {
     expect(runtime.log).toHaveBeenCalledWith(expected);
   });
 
-  it.each([
-    { name: "without tailscale configured", withTailscale: false },
-    { name: "when tailscale is configured", withTailscale: true },
-  ])("reports gateway.remote.url as source in --remote json output ($name)", async (testCase) => {
-    loadConfig.mockReturnValue(createRemoteQrConfig({ withTailscale: testCase.withTailscale }));
-    runCommandWithTimeout.mockResolvedValue({
-      code: 0,
-      stdout: '{"Self":{"DNSName":"ts-host.tailnet.ts.net."}}',
-      stderr: "",
-    });
+  it("reports gateway.remote.url as source in --remote json output", async () => {
+    loadConfig.mockReturnValue(createRemoteQrConfig());
 
-    await runQr(["--json", "--remote"]);
+    const program = new Command();
+    registerQrCli(program);
+    await program.parseAsync(["qr", "--json", "--remote"], { from: "user" });
 
     const payload = JSON.parse(String(runtime.log.mock.calls.at(-1)?.[0] ?? "{}")) as {
       setupCode?: string;
@@ -176,7 +172,6 @@ describe("registerQrCli", () => {
     expect(payload.gatewayUrl).toBe("wss://remote.example.com:444");
     expect(payload.auth).toBe("token");
     expect(payload.urlSource).toBe("gateway.remote.url");
-    expect(runCommandWithTimeout).not.toHaveBeenCalled();
   });
 
   it("errors when --remote is set but no remote URL is configured", async () => {
@@ -188,8 +183,33 @@ describe("registerQrCli", () => {
       },
     });
 
-    await expectQrExit(["--remote"]);
+    const program = new Command();
+    registerQrCli(program);
+
+    await expect(program.parseAsync(["qr", "--remote"], { from: "user" })).rejects.toThrow("exit");
+
     const output = runtime.error.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
     expect(output).toContain("qr --remote requires");
+  });
+
+  it("prefers gateway.remote.url over tailscale when --remote is set", async () => {
+    loadConfig.mockReturnValue(createRemoteQrConfig({ withTailscale: true }));
+    runCommandWithTimeout.mockResolvedValue({
+      code: 0,
+      stdout: '{"Self":{"DNSName":"ts-host.tailnet.ts.net."}}',
+      stderr: "",
+    });
+
+    const program = new Command();
+    registerQrCli(program);
+    await program.parseAsync(["qr", "--json", "--remote"], { from: "user" });
+
+    const payload = JSON.parse(String(runtime.log.mock.calls.at(-1)?.[0] ?? "{}")) as {
+      gatewayUrl?: string;
+      urlSource?: string;
+    };
+    expect(payload.gatewayUrl).toBe("wss://remote.example.com:444");
+    expect(payload.urlSource).toBe("gateway.remote.url");
+    expect(runCommandWithTimeout).not.toHaveBeenCalled();
   });
 });

@@ -28,10 +28,6 @@ type LastToolError = {
   mutatingAction?: boolean;
   actionFingerprint?: string;
 };
-type ToolErrorWarningPolicy = {
-  showWarning: boolean;
-  includeDetails: boolean;
-};
 
 const RECOVERABLE_TOOL_ERROR_KEYWORDS = [
   "required",
@@ -48,43 +44,24 @@ function isRecoverableToolError(error: string | undefined): boolean {
   return RECOVERABLE_TOOL_ERROR_KEYWORDS.some((keyword) => errorLower.includes(keyword));
 }
 
-function isVerboseToolDetailEnabled(level?: VerboseLevel): boolean {
-  return level === "on" || level === "full";
-}
-
-function resolveToolErrorWarningPolicy(params: {
+function shouldShowToolErrorWarning(params: {
   lastToolError: LastToolError;
   hasUserFacingReply: boolean;
   suppressToolErrors: boolean;
   suppressToolErrorWarnings?: boolean;
-  verboseLevel?: VerboseLevel;
-}): ToolErrorWarningPolicy {
-  const includeDetails = isVerboseToolDetailEnabled(params.verboseLevel);
+}): boolean {
   if (params.suppressToolErrorWarnings) {
-    return { showWarning: false, includeDetails };
-  }
-  const normalizedToolName = params.lastToolError.toolName.trim().toLowerCase();
-  if ((normalizedToolName === "exec" || normalizedToolName === "bash") && !includeDetails) {
-    return { showWarning: false, includeDetails };
-  }
-  // sessions_send timeouts and errors are transient inter-session communication
-  // issues — the message may still have been delivered. Suppress warnings to
-  // prevent raw error text from leaking into the chat surface (#23989).
-  if (normalizedToolName === "sessions_send") {
-    return { showWarning: false, includeDetails };
+    return false;
   }
   const isMutatingToolError =
     params.lastToolError.mutatingAction ?? isLikelyMutatingToolName(params.lastToolError.toolName);
   if (isMutatingToolError) {
-    return { showWarning: true, includeDetails };
+    return true;
   }
   if (params.suppressToolErrors) {
-    return { showWarning: false, includeDetails };
+    return false;
   }
-  return {
-    showWarning: !params.hasUserFacingReply && !isRecoverableToolError(params.lastToolError.error),
-    includeDetails,
-  };
+  return !params.hasUserFacingReply && !isRecoverableToolError(params.lastToolError.error);
 }
 
 export function buildEmbeddedRunPayloads(params: {
@@ -95,20 +72,17 @@ export function buildEmbeddedRunPayloads(params: {
   config?: OpenClawConfig;
   sessionKey: string;
   provider?: string;
-  model?: string;
   verboseLevel?: VerboseLevel;
   reasoningLevel?: ReasoningLevel;
   toolResultFormat?: ToolResultFormat;
   suppressToolErrorWarnings?: boolean;
   inlineToolResultsAllowed: boolean;
-  didSendViaMessagingTool?: boolean;
 }): Array<{
   text?: string;
   mediaUrl?: string;
   mediaUrls?: string[];
   replyToId?: string;
   isError?: boolean;
-  isReasoning?: boolean;
   audioAsVoice?: boolean;
   replyToTag?: boolean;
   replyToCurrent?: boolean;
@@ -117,7 +91,6 @@ export function buildEmbeddedRunPayloads(params: {
     text: string;
     media?: string[];
     isError?: boolean;
-    isReasoning?: boolean;
     audioAsVoice?: boolean;
     replyToId?: string;
     replyToTag?: boolean;
@@ -131,7 +104,6 @@ export function buildEmbeddedRunPayloads(params: {
         cfg: params.config,
         sessionKey: params.sessionKey,
         provider: params.provider,
-        model: params.model,
       })
     : undefined;
   const rawErrorMessage = lastAssistantErrored
@@ -189,7 +161,7 @@ export function buildEmbeddedRunPayloads(params: {
       ? formatReasoningMessage(extractAssistantThinking(params.lastAssistant))
       : "";
   if (reasoningText) {
-    replyItems.push({ text: reasoningText, isReasoning: true });
+    replyItems.push({ text: reasoningText });
   }
 
   const fallbackAnswerText = params.lastAssistant ? extractAssistantText(params.lastAssistant) : "";
@@ -276,26 +248,22 @@ export function buildEmbeddedRunPayloads(params: {
   }
 
   if (params.lastToolError) {
-    const warningPolicy = resolveToolErrorWarningPolicy({
+    const shouldShowToolError = shouldShowToolErrorWarning({
       lastToolError: params.lastToolError,
       hasUserFacingReply: hasUserFacingAssistantReply,
       suppressToolErrors: Boolean(params.config?.messages?.suppressToolErrors),
       suppressToolErrorWarnings: params.suppressToolErrorWarnings,
-      verboseLevel: params.verboseLevel,
     });
 
     // Always surface mutating tool failures so we do not silently confirm actions that did not happen.
     // Otherwise, keep the previous behavior and only surface non-recoverable failures when no reply exists.
-    if (warningPolicy.showWarning) {
+    if (shouldShowToolError) {
       const toolSummary = formatToolAggregate(
         params.lastToolError.toolName,
         params.lastToolError.meta ? [params.lastToolError.meta] : undefined,
         { markdown: useMarkdown },
       );
-      const errorSuffix =
-        warningPolicy.includeDetails && params.lastToolError.error
-          ? `: ${params.lastToolError.error}`
-          : "";
+      const errorSuffix = params.lastToolError.error ? `: ${params.lastToolError.error}` : "";
       const warningText = `⚠️ ${toolSummary} failed${errorSuffix}`;
       const normalizedWarning = normalizeTextForComparison(warningText);
       const duplicateWarning = normalizedWarning

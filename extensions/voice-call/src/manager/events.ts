@@ -92,11 +92,10 @@ function createInboundCall(params: {
 }
 
 export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
-  const dedupeKey = event.dedupeKey || event.id;
-  if (ctx.processedEventIds.has(dedupeKey)) {
+  if (ctx.processedEventIds.has(event.id)) {
     return;
   }
-  ctx.processedEventIds.add(dedupeKey);
+  ctx.processedEventIds.add(event.id);
 
   let call = findCall({
     activeCalls: ctx.activeCalls,
@@ -159,7 +158,7 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
     }
   }
 
-  call.processedEventIds.push(dedupeKey);
+  call.processedEventIds.push(event.id);
 
   switch (event.type) {
     case "call.initiated":
@@ -193,20 +192,8 @@ export function processEvent(ctx: EventContext, event: NormalizedEvent): void {
 
     case "call.speech":
       if (event.isFinal) {
-        const hadWaiter = ctx.transcriptWaiters.has(call.callId);
-        const resolved = resolveTranscriptWaiter(
-          ctx,
-          call.callId,
-          event.transcript,
-          event.turnToken,
-        );
-        if (hadWaiter && !resolved) {
-          console.warn(
-            `[voice-call] Ignoring speech event with mismatched turn token for ${call.callId}`,
-          );
-          break;
-        }
         addTranscriptEntry(call, "user", event.transcript);
+        resolveTranscriptWaiter(ctx, call.callId, event.transcript);
       }
       transitionState(call, "listening");
       break;

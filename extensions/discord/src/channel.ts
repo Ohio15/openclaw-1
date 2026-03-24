@@ -1,7 +1,6 @@
 import {
   applyAccountNameToChannelSection,
   buildChannelConfigSchema,
-  buildTokenChannelStatusSummary,
   collectDiscordAuditChannelIds,
   collectDiscordStatusIssues,
   DEFAULT_ACCOUNT_ID,
@@ -23,8 +22,6 @@ import {
   resolveDefaultDiscordAccountId,
   resolveDiscordGroupRequireMention,
   resolveDiscordGroupToolPolicy,
-  resolveOpenProviderRuntimeGroupPolicy,
-  resolveDefaultGroupPolicy,
   setAccountEnabledInConfigSection,
   type ChannelMessageActionAdapter,
   type ChannelPlugin,
@@ -113,8 +110,6 @@ export const discordPlugin: ChannelPlugin<ResolvedDiscordAccount> = {
         .map((entry) => String(entry).trim())
         .filter(Boolean)
         .map((entry) => entry.toLowerCase()),
-    resolveDefaultTo: ({ cfg, accountId }) =>
-      resolveDiscordAccount({ cfg, accountId }).config.defaultTo?.trim() || undefined,
   },
   security: {
     resolveDmPolicy: ({ cfg, accountId, account }) => {
@@ -133,12 +128,8 @@ export const discordPlugin: ChannelPlugin<ResolvedDiscordAccount> = {
     },
     collectWarnings: ({ account, cfg }) => {
       const warnings: string[] = [];
-      const defaultGroupPolicy = resolveDefaultGroupPolicy(cfg);
-      const { groupPolicy } = resolveOpenProviderRuntimeGroupPolicy({
-        providerConfigPresent: cfg.channels?.discord !== undefined,
-        groupPolicy: account.config.groupPolicy,
-        defaultGroupPolicy,
-      });
+      const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
+      const groupPolicy = account.config.groupPolicy ?? defaultGroupPolicy ?? "open";
       const guildEntries = account.config.guilds ?? {};
       const guildsConfigured = Object.keys(guildEntries).length > 0;
       const channelAllowlistConfigured = guildsConfigured;
@@ -312,21 +303,11 @@ export const discordPlugin: ChannelPlugin<ResolvedDiscordAccount> = {
       });
       return { channel: "discord", ...result };
     },
-    sendMedia: async ({
-      to,
-      text,
-      mediaUrl,
-      mediaLocalRoots,
-      accountId,
-      deps,
-      replyToId,
-      silent,
-    }) => {
+    sendMedia: async ({ to, text, mediaUrl, accountId, deps, replyToId, silent }) => {
       const send = deps?.sendDiscord ?? getDiscordRuntime().channel.discord.sendMessageDiscord;
       const result = await send(to, text, {
         verbose: false,
         mediaUrl,
-        mediaLocalRoots,
         replyTo: replyToId ?? undefined,
         accountId: accountId ?? undefined,
         silent: silent ?? undefined,
@@ -348,8 +329,16 @@ export const discordPlugin: ChannelPlugin<ResolvedDiscordAccount> = {
       lastError: null,
     },
     collectStatusIssues: collectDiscordStatusIssues,
-    buildChannelSummary: ({ snapshot }) =>
-      buildTokenChannelStatusSummary(snapshot, { includeMode: false }),
+    buildChannelSummary: ({ snapshot }) => ({
+      configured: snapshot.configured ?? false,
+      tokenSource: snapshot.tokenSource ?? "none",
+      running: snapshot.running ?? false,
+      lastStartAt: snapshot.lastStartAt ?? null,
+      lastStopAt: snapshot.lastStopAt ?? null,
+      lastError: snapshot.lastError ?? null,
+      probe: snapshot.probe,
+      lastProbeAt: snapshot.lastProbeAt ?? null,
+    }),
     probeAccount: async ({ account, timeoutMs }) =>
       getDiscordRuntime().channel.discord.probeDiscord(account.token, timeoutMs, {
         includeApplication: true,

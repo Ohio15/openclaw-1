@@ -62,7 +62,7 @@ flowchart TD
     openclaw status
     openclaw gateway status
     openclaw channels status --probe
-    openclaw pairing list --channel <channel> [--account <id>]
+    openclaw pairing list <channel>
     openclaw logs --follow
     ```
 

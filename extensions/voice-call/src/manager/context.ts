@@ -6,7 +6,6 @@ export type TranscriptWaiter = {
   resolve: (text: string) => void;
   reject: (err: Error) => void;
   timeout: NodeJS.Timeout;
-  turnToken?: string;
 };
 
 export type CallManagerRuntimeState = {

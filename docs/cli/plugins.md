@@ -40,7 +40,6 @@ the plugin from loading and fail config validation.
 
 ```bash
 openclaw plugins install <path-or-spec>
-openclaw plugins install <npm-spec> --pin
 ```
 
 Security note: treat plugin installs like running code. Prefer pinned versions.
@@ -55,9 +54,6 @@ Use `--link` to avoid copying a local directory (adds to `plugins.load.paths`):
 ```bash
 openclaw plugins install -l ./my-plugin
 ```
-
-Use `--pin` on npm installs to save the resolved exact spec (`name@version`) in
-`plugins.installs` while keeping the default behavior unpinned.
 
 ### Uninstall
 
@@ -86,7 +82,3 @@ openclaw plugins update <id> --dry-run
 ```
 
 Updates only apply to plugins installed from npm (tracked in `plugins.installs`).
-
-When a stored integrity hash exists and the fetched artifact hash changes,
-OpenClaw prints a warning and asks for confirmation before proceeding. Use
-global `--yes` to bypass prompts in CI/non-interactive runs.

@@ -4,6 +4,7 @@ import {
   type MessagePayloadObject,
   type RequestClient,
 } from "@buape/carbon";
+import type { APIChannel } from "discord-api-types/v10";
 import { ChannelType, Routes } from "discord-api-types/v10";
 import { loadConfig } from "../config/config.js";
 import { recordChannelActivity } from "../infra/channel-activity.js";
@@ -21,8 +22,6 @@ import {
   createDiscordClient,
   parseAndResolveRecipient,
   resolveChannelId,
-  resolveDiscordChannelType,
-  toDiscordFileBlob,
   stripUndefinedFields,
   SUPPRESS_NOTIFICATIONS_FLAG,
 } from "./send.shared.js";
@@ -64,7 +63,13 @@ export async function sendDiscordComponentMessage(
   const recipient = await parseAndResolveRecipient(to, opts.accountId);
   const { channelId } = await resolveChannelId(rest, recipient, request);
 
-  const channelType = await resolveDiscordChannelType(rest, channelId);
+  let channelType: number | undefined;
+  try {
+    const channel = (await rest.get(Routes.channel(channelId))) as APIChannel | undefined;
+    channelType = channel?.type;
+  } catch {
+    channelType = undefined;
+  }
 
   if (channelType && DISCORD_FORUM_LIKE_TYPES.has(channelType)) {
     throw new Error("Discord components are not supported in forum-style channels");
@@ -102,7 +107,14 @@ export async function sendDiscordComponentMessage(
         `Component file block expects attachment "${expectedAttachmentName}", but the uploaded file is "${fileName}". Update components.blocks[].file or provide a matching filename.`,
       );
     }
-    const fileData = toDiscordFileBlob(media.buffer);
+    let fileData: Blob;
+    if (media.buffer instanceof Blob) {
+      fileData = media.buffer;
+    } else {
+      const arrayBuffer = new ArrayBuffer(media.buffer.byteLength);
+      new Uint8Array(arrayBuffer).set(media.buffer);
+      fileData = new Blob([arrayBuffer]);
+    }
     files = [{ data: fileData, name: fileName }];
   } else if (expectedAttachmentName) {
     throw new Error(

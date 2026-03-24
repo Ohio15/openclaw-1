@@ -36,35 +36,6 @@ const WORKSPACE_STATE_VERSION = 1;
 const workspaceTemplateCache = new Map<string, Promise<string>>();
 let gitAvailabilityPromise: Promise<boolean> | null = null;
 
-// File content cache with mtime invalidation to avoid redundant reads
-const workspaceFileCache = new Map<string, { content: string; mtimeMs: number }>();
-
-/**
- * Read file with caching based on mtime. Returns cached content if file
- * hasn't changed, otherwise reads from disk and updates cache.
- */
-async function readFileWithCache(filePath: string): Promise<string> {
-  try {
-    const stats = await fs.stat(filePath);
-    const mtimeMs = stats.mtimeMs;
-    const cached = workspaceFileCache.get(filePath);
-
-    // Return cached content if mtime matches
-    if (cached && cached.mtimeMs === mtimeMs) {
-      return cached.content;
-    }
-
-    // Read from disk and update cache
-    const content = await fs.readFile(filePath, "utf-8");
-    workspaceFileCache.set(filePath, { content, mtimeMs });
-    return content;
-  } catch (error) {
-    // Remove from cache if file doesn't exist or is unreadable
-    workspaceFileCache.delete(filePath);
-    throw error;
-  }
-}
-
 function stripFrontMatter(content: string): string {
   if (!content.startsWith("---")) {
     return content;
@@ -480,7 +451,7 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
   const result: WorkspaceBootstrapFile[] = [];
   for (const entry of entries) {
     try {
-      const content = await readFileWithCache(entry.filePath);
+      const content = await fs.readFile(entry.filePath, "utf-8");
       result.push({
         name: entry.name,
         path: entry.filePath,
@@ -494,13 +465,7 @@ export async function loadWorkspaceBootstrapFiles(dir: string): Promise<Workspac
   return result;
 }
 
-const MINIMAL_BOOTSTRAP_ALLOWLIST = new Set([
-  DEFAULT_AGENTS_FILENAME,
-  DEFAULT_TOOLS_FILENAME,
-  DEFAULT_SOUL_FILENAME,
-  DEFAULT_IDENTITY_FILENAME,
-  DEFAULT_USER_FILENAME,
-]);
+const MINIMAL_BOOTSTRAP_ALLOWLIST = new Set([DEFAULT_AGENTS_FILENAME, DEFAULT_TOOLS_FILENAME]);
 
 export function filterBootstrapFilesForSession(
   files: WorkspaceBootstrapFile[],
@@ -566,7 +531,7 @@ export async function loadExtraBootstrapFiles(
       if (!VALID_BOOTSTRAP_NAMES.has(baseName)) {
         continue;
       }
-      const content = await readFileWithCache(realFilePath);
+      const content = await fs.readFile(realFilePath, "utf-8");
       result.push({
         name: baseName as WorkspaceBootstrapFileName,
         path: filePath,

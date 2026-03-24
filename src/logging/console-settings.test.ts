@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./config.js", () => ({
   readLoggingConfig: () => undefined,
@@ -27,13 +27,6 @@ type ConsoleSnapshot = {
 
 let originalIsTty: boolean | undefined;
 let snapshot: ConsoleSnapshot;
-let logging: typeof import("../logging.js");
-let state: typeof import("./state.js");
-
-beforeAll(async () => {
-  logging = await import("../logging.js");
-  state = await import("./state.js");
-});
 
 beforeEach(() => {
   loadConfigCalls = 0;
@@ -49,7 +42,7 @@ beforeEach(() => {
   Object.defineProperty(process.stdout, "isTTY", { value: false, configurable: true });
 });
 
-afterEach(() => {
+afterEach(async () => {
   console.log = snapshot.log;
   console.info = snapshot.info;
   console.warn = snapshot.warn;
@@ -57,11 +50,14 @@ afterEach(() => {
   console.debug = snapshot.debug;
   console.trace = snapshot.trace;
   Object.defineProperty(process.stdout, "isTTY", { value: originalIsTty, configurable: true });
+  const logging = await import("../logging.js");
   logging.setConsoleConfigLoaderForTests();
   vi.restoreAllMocks();
 });
 
-function loadLogging() {
+async function loadLogging() {
+  const logging = await import("../logging.js");
+  const state = await import("./state.js");
   state.loggingState.cachedConsoleSettings = null;
   logging.setConsoleConfigLoaderForTests(() => {
     loadConfigCalls += 1;
@@ -75,8 +71,8 @@ function loadLogging() {
 }
 
 describe("getConsoleSettings", () => {
-  it("does not recurse when loadConfig logs during resolution", () => {
-    const { logging } = loadLogging();
+  it("does not recurse when loadConfig logs during resolution", async () => {
+    const { logging } = await loadLogging();
     logging.setConsoleTimestampPrefix(true);
     logging.enableConsoleCapture();
     const { getConsoleSettings } = logging;
@@ -84,8 +80,8 @@ describe("getConsoleSettings", () => {
     expect(loadConfigCalls).toBe(1);
   });
 
-  it("skips config fallback during re-entrant resolution", () => {
-    const { logging, state } = loadLogging();
+  it("skips config fallback during re-entrant resolution", async () => {
+    const { logging, state } = await loadLogging();
     state.loggingState.resolvingConsoleSettings = true;
     logging.setConsoleTimestampPrefix(true);
     logging.enableConsoleCapture();

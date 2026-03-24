@@ -21,7 +21,6 @@ import { createReplyDispatcherWithTyping } from "../../auto-reply/reply/reply-di
 import { resolveControlCommandGate } from "../../channels/command-gating.js";
 import { logInboundDrop, logTypingFailure } from "../../channels/logging.js";
 import { resolveMentionGatingWithBypass } from "../../channels/mention-gating.js";
-import { normalizeSignalMessagingTarget } from "../../channels/plugins/normalize/signal.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
 import { recordInboundSession } from "../../channels/session.js";
 import { createTypingCallbacks } from "../../channels/typing.js";
@@ -127,10 +126,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
           }),
       });
     }
-    const signalToRaw = entry.isGroup
-      ? `group:${entry.groupId}`
-      : `signal:${entry.senderRecipient}`;
-    const signalTo = normalizeSignalMessagingTarget(signalToRaw) ?? signalToRaw;
+    const signalTo = entry.isGroup ? `group:${entry.groupId}` : `signal:${entry.senderRecipient}`;
     const inboundHistory =
       entry.isGroup && historyKey && deps.historyLimit > 0
         ? (deps.groupHistories.get(historyKey) ?? []).map((historyEntry) => ({
@@ -222,7 +218,6 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     const { dispatcher, replyOptions, markDispatchIdle } = createReplyDispatcherWithTyping({
       ...prefixOptions,
       humanDelay: resolveHumanDelayConfig(deps.cfg, route.agentId),
-      typingCallbacks,
       deliver: async (payload) => {
         await deps.deliverReplies({
           replies: [payload],
@@ -238,6 +233,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       onError: (err, info) => {
         deps.runtime.error?.(danger(`signal ${info.kind} reply failed: ${String(err)}`));
       },
+      onReplyStart: typingCallbacks.onReplyStart,
     });
 
     const { queuedFinal } = await dispatchInboundMessage({
@@ -441,10 +437,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     const groupId = dataMessage.groupInfo?.groupId ?? undefined;
     const groupName = dataMessage.groupInfo?.groupName ?? undefined;
     const isGroup = Boolean(groupId);
-    const storeAllowFrom =
-      deps.dmPolicy === "allowlist"
-        ? []
-        : await readChannelAllowFromStore("signal").catch(() => []);
+    const storeAllowFrom = await readChannelAllowFromStore("signal").catch(() => []);
     const effectiveDmAllow = [...deps.allowFrom, ...storeAllowFrom];
     const effectiveGroupAllow = [...deps.groupAllowFrom, ...storeAllowFrom];
     const dmAllowed =

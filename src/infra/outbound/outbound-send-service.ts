@@ -3,7 +3,6 @@ import { dispatchChannelMessageAction } from "../../channels/plugins/message-act
 import type { ChannelId, ChannelThreadingToolContext } from "../../channels/plugins/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { appendAssistantMessageToSessionTranscript } from "../../config/sessions.js";
-import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
 import type { GatewayClientMode, GatewayClientName } from "../../utils/message-channel.js";
 import { throwIfAborted } from "./abort.js";
 import type { OutboundSendDeps } from "./deliver.js";
@@ -41,46 +40,6 @@ export type OutboundSendContext = {
   silent?: boolean;
 };
 
-type PluginHandledResult = {
-  handledBy: "plugin";
-  payload: unknown;
-  toolResult: AgentToolResult<unknown>;
-};
-
-async function tryHandleWithPluginAction(params: {
-  ctx: OutboundSendContext;
-  action: "send" | "poll";
-  onHandled?: () => Promise<void> | void;
-}): Promise<PluginHandledResult | null> {
-  if (params.ctx.dryRun) {
-    return null;
-  }
-  const mediaLocalRoots = getAgentScopedMediaLocalRoots(
-    params.ctx.cfg,
-    params.ctx.agentId ?? params.ctx.mirror?.agentId,
-  );
-  const handled = await dispatchChannelMessageAction({
-    channel: params.ctx.channel,
-    action: params.action,
-    cfg: params.ctx.cfg,
-    params: params.ctx.params,
-    mediaLocalRoots,
-    accountId: params.ctx.accountId ?? undefined,
-    gateway: params.ctx.gateway,
-    toolContext: params.ctx.toolContext,
-    dryRun: params.ctx.dryRun,
-  });
-  if (!handled) {
-    return null;
-  }
-  await params.onHandled?.();
-  return {
-    handledBy: "plugin",
-    payload: extractToolPayload(handled),
-    toolResult: handled,
-  };
-}
-
 export async function executeSendAction(params: {
   ctx: OutboundSendContext;
   to: string;
@@ -98,28 +57,37 @@ export async function executeSendAction(params: {
   sendResult?: MessageSendResult;
 }> {
   throwIfAborted(params.ctx.abortSignal);
-  const pluginHandled = await tryHandleWithPluginAction({
-    ctx: params.ctx,
-    action: "send",
-    onHandled: async () => {
-      if (!params.ctx.mirror) {
-        return;
+  if (!params.ctx.dryRun) {
+    const handled = await dispatchChannelMessageAction({
+      channel: params.ctx.channel,
+      action: "send",
+      cfg: params.ctx.cfg,
+      params: params.ctx.params,
+      accountId: params.ctx.accountId ?? undefined,
+      gateway: params.ctx.gateway,
+      toolContext: params.ctx.toolContext,
+      dryRun: params.ctx.dryRun,
+    });
+    if (handled) {
+      if (params.ctx.mirror) {
+        const mirrorText = params.ctx.mirror.text ?? params.message;
+        const mirrorMediaUrls =
+          params.ctx.mirror.mediaUrls ??
+          params.mediaUrls ??
+          (params.mediaUrl ? [params.mediaUrl] : undefined);
+        await appendAssistantMessageToSessionTranscript({
+          agentId: params.ctx.mirror.agentId,
+          sessionKey: params.ctx.mirror.sessionKey,
+          text: mirrorText,
+          mediaUrls: mirrorMediaUrls,
+        });
       }
-      const mirrorText = params.ctx.mirror.text ?? params.message;
-      const mirrorMediaUrls =
-        params.ctx.mirror.mediaUrls ??
-        params.mediaUrls ??
-        (params.mediaUrl ? [params.mediaUrl] : undefined);
-      await appendAssistantMessageToSessionTranscript({
-        agentId: params.ctx.mirror.agentId,
-        sessionKey: params.ctx.mirror.sessionKey,
-        text: mirrorText,
-        mediaUrls: mirrorMediaUrls,
-      });
-    },
-  });
-  if (pluginHandled) {
-    return pluginHandled;
+      return {
+        handledBy: "plugin",
+        payload: extractToolPayload(handled),
+        toolResult: handled,
+      };
+    }
   }
 
   throwIfAborted(params.ctx.abortSignal);
@@ -167,12 +135,24 @@ export async function executePollAction(params: {
   toolResult?: AgentToolResult<unknown>;
   pollResult?: MessagePollResult;
 }> {
-  const pluginHandled = await tryHandleWithPluginAction({
-    ctx: params.ctx,
-    action: "poll",
-  });
-  if (pluginHandled) {
-    return pluginHandled;
+  if (!params.ctx.dryRun) {
+    const handled = await dispatchChannelMessageAction({
+      channel: params.ctx.channel,
+      action: "poll",
+      cfg: params.ctx.cfg,
+      params: params.ctx.params,
+      accountId: params.ctx.accountId ?? undefined,
+      gateway: params.ctx.gateway,
+      toolContext: params.ctx.toolContext,
+      dryRun: params.ctx.dryRun,
+    });
+    if (handled) {
+      return {
+        handledBy: "plugin",
+        payload: extractToolPayload(handled),
+        toolResult: handled,
+      };
+    }
   }
 
   const result: MessagePollResult = await sendPoll({

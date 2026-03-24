@@ -26,8 +26,6 @@ export type WebChannelStatus = {
 export type WebMonitorTuning = {
   reconnect?: Partial<ReconnectPolicy>;
   heartbeatSeconds?: number;
-  messageTimeoutMs?: number;
-  watchdogCheckMs?: number;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   statusSink?: (status: WebChannelStatus) => void;
   /** WhatsApp account id. Default: "default". */

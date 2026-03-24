@@ -16,7 +16,6 @@ vi.mock("./graph-upload.js", async () => {
   };
 });
 
-import { resolvePreferredOpenClawTmpDir } from "../../../src/infra/tmp-openclaw-dir.js";
 import {
   type MSTeamsAdapter,
   renderReplyPayloadsToMessages,
@@ -48,28 +47,6 @@ const runtimeStub = {
     },
   },
 } as unknown as PluginRuntime;
-
-const createNoopAdapter = (): MSTeamsAdapter => ({
-  continueConversation: async () => {},
-  process: async () => {},
-});
-
-const createRecordedSendActivity = (
-  sink: string[],
-  failFirstWithStatusCode?: number,
-): ((activity: unknown) => Promise<{ id: string }>) => {
-  let attempts = 0;
-  return async (activity: unknown) => {
-    const { text } = activity as { text?: string };
-    const content = text ?? "";
-    sink.push(content);
-    attempts += 1;
-    if (failFirstWithStatusCode !== undefined && attempts === 1) {
-      throw Object.assign(new Error("send failed"), { statusCode: failFirstWithStatusCode });
-    }
-    return { id: `id:${content}` };
-  };
-};
 
 describe("msteams messenger", () => {
   beforeEach(() => {
@@ -139,9 +116,17 @@ describe("msteams messenger", () => {
     it("sends thread messages via the provided context", async () => {
       const sent: string[] = [];
       const ctx = {
-        sendActivity: createRecordedSendActivity(sent),
+        sendActivity: async (activity: unknown) => {
+          const { text } = activity as { text?: string };
+          sent.push(text ?? "");
+          return { id: `id:${text ?? ""}` };
+        },
       };
-      const adapter = createNoopAdapter();
+
+      const adapter: MSTeamsAdapter = {
+        continueConversation: async () => {},
+        process: async () => {},
+      };
 
       const ids = await sendMSTeamsMessages({
         replyStyle: "thread",
@@ -163,7 +148,11 @@ describe("msteams messenger", () => {
         continueConversation: async (_appId, reference, logic) => {
           seen.reference = reference;
           await logic({
-            sendActivity: createRecordedSendActivity(seen.texts),
+            sendActivity: async (activity: unknown) => {
+              const { text } = activity as { text?: string };
+              seen.texts.push(text ?? "");
+              return { id: `id:${text ?? ""}` };
+            },
           });
         },
         process: async () => {},
@@ -189,7 +178,7 @@ describe("msteams messenger", () => {
     });
 
     it("preserves parsed mentions when appending OneDrive fallback file links", async () => {
-      const tmpDir = await mkdtemp(path.join(resolvePreferredOpenClawTmpDir(), "msteams-mention-"));
+      const tmpDir = await mkdtemp(path.join(os.tmpdir(), "msteams-mention-"));
       const localFile = path.join(tmpDir, "note.txt");
       await writeFile(localFile, "hello");
 
@@ -202,7 +191,10 @@ describe("msteams messenger", () => {
           },
         };
 
-        const adapter = createNoopAdapter();
+        const adapter: MSTeamsAdapter = {
+          continueConversation: async () => {},
+          process: async () => {},
+        };
 
         const ids = await sendMSTeamsMessages({
           replyStyle: "thread",
@@ -249,9 +241,20 @@ describe("msteams messenger", () => {
       const retryEvents: Array<{ nextAttempt: number; delayMs: number }> = [];
 
       const ctx = {
-        sendActivity: createRecordedSendActivity(attempts, 429),
+        sendActivity: async (activity: unknown) => {
+          const { text } = activity as { text?: string };
+          attempts.push(text ?? "");
+          if (attempts.length === 1) {
+            throw Object.assign(new Error("throttled"), { statusCode: 429 });
+          }
+          return { id: `id:${text ?? ""}` };
+        },
       };
-      const adapter = createNoopAdapter();
+
+      const adapter: MSTeamsAdapter = {
+        continueConversation: async () => {},
+        process: async () => {},
+      };
 
       const ids = await sendMSTeamsMessages({
         replyStyle: "thread",
@@ -276,7 +279,10 @@ describe("msteams messenger", () => {
         },
       };
 
-      const adapter = createNoopAdapter();
+      const adapter: MSTeamsAdapter = {
+        continueConversation: async () => {},
+        process: async () => {},
+      };
 
       await expect(
         sendMSTeamsMessages({
@@ -296,7 +302,18 @@ describe("msteams messenger", () => {
 
       const adapter: MSTeamsAdapter = {
         continueConversation: async (_appId, _reference, logic) => {
-          await logic({ sendActivity: createRecordedSendActivity(attempts, 503) });
+          await logic({
+            sendActivity: async (activity: unknown) => {
+              const { text } = activity as { text?: string };
+              attempts.push(text ?? "");
+              if (attempts.length === 1) {
+                throw Object.assign(new Error("server error"), {
+                  statusCode: 503,
+                });
+              }
+              return { id: `id:${text ?? ""}` };
+            },
+          });
         },
         process: async () => {},
       };

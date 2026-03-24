@@ -15,14 +15,6 @@ const getLoggerInfo = vi.fn();
 const asString = (value: unknown, fallback: string) =>
   typeof value === "string" && value.trim() ? value : fallback;
 
-function enableAdvertiserUnitMode(hostname = "test-host") {
-  // Allow advertiser to run in unit tests.
-  delete process.env.VITEST;
-  process.env.NODE_ENV = "development";
-  vi.spyOn(os, "hostname").mockReturnValue(hostname);
-  process.env.OPENCLAW_MDNS_HOSTNAME = hostname;
-}
-
 function mockCiaoService(params?: {
   advertise?: ReturnType<typeof vi.fn>;
   destroy?: ReturnType<typeof vi.fn>;
@@ -103,24 +95,29 @@ describe("gateway bonjour advertiser", () => {
       process.env[key] = value;
     }
 
-    createService.mockClear();
-    shutdown.mockClear();
-    registerUnhandledRejectionHandler.mockClear();
-    logWarn.mockClear();
-    logDebug.mockClear();
+    createService.mockReset();
+    shutdown.mockReset();
+    registerUnhandledRejectionHandler.mockReset();
+    logWarn.mockReset();
+    logDebug.mockReset();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
   it("does not block on advertise and publishes expected txt keys", async () => {
-    enableAdvertiserUnitMode();
+    // Allow advertiser to run in unit tests.
+    delete process.env.VITEST;
+    process.env.NODE_ENV = "development";
+
+    vi.spyOn(os, "hostname").mockReturnValue("test-host");
+    process.env.OPENCLAW_MDNS_HOSTNAME = "test-host";
+    process.env.OPENCLAW_MDNS_HOSTNAME = "test-host";
 
     const destroy = vi.fn().mockResolvedValue(undefined);
-    let resolveAdvertise = () => {};
     const advertise = vi.fn().mockImplementation(
       async () =>
         await new Promise<void>((resolve) => {
-          resolveAdvertise = resolve;
+          setTimeout(resolve, 250);
         }),
     );
     mockCiaoService({ advertise, destroy });
@@ -150,8 +147,6 @@ describe("gateway bonjour advertiser", () => {
 
     // We don't await `advertise()`, but it should still be called for each service.
     expect(advertise).toHaveBeenCalledTimes(1);
-    resolveAdvertise();
-    await Promise.resolve();
 
     await started.stop();
     expect(destroy).toHaveBeenCalledTimes(1);
@@ -159,7 +154,11 @@ describe("gateway bonjour advertiser", () => {
   });
 
   it("omits cliPath and sshPort in minimal mode", async () => {
-    enableAdvertiserUnitMode();
+    // Allow advertiser to run in unit tests.
+    delete process.env.VITEST;
+    process.env.NODE_ENV = "development";
+
+    vi.spyOn(os, "hostname").mockReturnValue("test-host");
 
     const destroy = vi.fn().mockResolvedValue(undefined);
     const advertise = vi.fn().mockResolvedValue(undefined);
@@ -180,7 +179,12 @@ describe("gateway bonjour advertiser", () => {
   });
 
   it("attaches conflict listeners for services", async () => {
-    enableAdvertiserUnitMode();
+    // Allow advertiser to run in unit tests.
+    delete process.env.VITEST;
+    process.env.NODE_ENV = "development";
+
+    vi.spyOn(os, "hostname").mockReturnValue("test-host");
+    process.env.OPENCLAW_MDNS_HOSTNAME = "test-host";
 
     const destroy = vi.fn().mockResolvedValue(undefined);
     const advertise = vi.fn().mockResolvedValue(undefined);
@@ -203,7 +207,12 @@ describe("gateway bonjour advertiser", () => {
   });
 
   it("cleans up unhandled rejection handler after shutdown", async () => {
-    enableAdvertiserUnitMode();
+    // Allow advertiser to run in unit tests.
+    delete process.env.VITEST;
+    process.env.NODE_ENV = "development";
+
+    vi.spyOn(os, "hostname").mockReturnValue("test-host");
+    process.env.OPENCLAW_MDNS_HOSTNAME = "test-host";
 
     const destroy = vi.fn().mockResolvedValue(undefined);
     const advertise = vi.fn().mockResolvedValue(undefined);
@@ -231,8 +240,13 @@ describe("gateway bonjour advertiser", () => {
   });
 
   it("logs advertise failures and retries via watchdog", async () => {
-    enableAdvertiserUnitMode();
+    // Allow advertiser to run in unit tests.
+    delete process.env.VITEST;
+    process.env.NODE_ENV = "development";
+
     vi.useFakeTimers();
+    vi.spyOn(os, "hostname").mockReturnValue("test-host");
+    process.env.OPENCLAW_MDNS_HOSTNAME = "test-host";
 
     const destroy = vi.fn().mockResolvedValue(undefined);
     const advertise = vi
@@ -259,12 +273,17 @@ describe("gateway bonjour advertiser", () => {
 
     await started.stop();
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(120_000);
     expect(advertise).toHaveBeenCalledTimes(2);
   });
 
   it("handles advertise throwing synchronously", async () => {
-    enableAdvertiserUnitMode();
+    // Allow advertiser to run in unit tests.
+    delete process.env.VITEST;
+    process.env.NODE_ENV = "development";
+
+    vi.spyOn(os, "hostname").mockReturnValue("test-host");
+    process.env.OPENCLAW_MDNS_HOSTNAME = "test-host";
 
     const destroy = vi.fn().mockResolvedValue(undefined);
     const advertise = vi.fn(() => {

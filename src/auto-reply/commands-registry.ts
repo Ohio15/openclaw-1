@@ -1,7 +1,6 @@
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { resolveConfiguredModelRef } from "../agents/model-selection.js";
 import type { SkillCommandSpec } from "../agents/skills.js";
-import { isCommandFlagEnabled } from "../config/commands.js";
 import type { OpenClawConfig } from "../config/types.js";
 import { escapeRegExp } from "../utils.js";
 import { getChatCommands, getNativeCommandSurfaces } from "./commands-registry.data.js";
@@ -97,13 +96,13 @@ export function listChatCommands(params?: {
 
 export function isCommandEnabled(cfg: OpenClawConfig, commandKey: string): boolean {
   if (commandKey === "config") {
-    return isCommandFlagEnabled(cfg, "config");
+    return cfg.commands?.config === true;
   }
   if (commandKey === "debug") {
-    return isCommandFlagEnabled(cfg, "debug");
+    return cfg.commands?.debug === true;
   }
   if (commandKey === "bash") {
-    return isCommandFlagEnabled(cfg, "bash");
+    return cfg.commands?.bash === true;
   }
   return true;
 }
@@ -138,39 +137,32 @@ function resolveNativeName(command: ChatCommandDefinition, provider?: string): s
   return command.nativeName;
 }
 
-function toNativeCommandSpec(command: ChatCommandDefinition, provider?: string): NativeCommandSpec {
-  return {
-    name: resolveNativeName(command, provider) ?? command.key,
-    description: command.description,
-    acceptsArgs: Boolean(command.acceptsArgs),
-    args: command.args,
-  };
-}
-
-function listNativeSpecsFromCommands(
-  commands: ChatCommandDefinition[],
-  provider?: string,
-): NativeCommandSpec[] {
-  return commands
-    .filter((command) => command.scope !== "text" && command.nativeName)
-    .map((command) => toNativeCommandSpec(command, provider));
-}
-
 export function listNativeCommandSpecs(params?: {
   skillCommands?: SkillCommandSpec[];
   provider?: string;
 }): NativeCommandSpec[] {
-  return listNativeSpecsFromCommands(
-    listChatCommands({ skillCommands: params?.skillCommands }),
-    params?.provider,
-  );
+  return listChatCommands({ skillCommands: params?.skillCommands })
+    .filter((command) => command.scope !== "text" && command.nativeName)
+    .map((command) => ({
+      name: resolveNativeName(command, params?.provider) ?? command.key,
+      description: command.description,
+      acceptsArgs: Boolean(command.acceptsArgs),
+      args: command.args,
+    }));
 }
 
 export function listNativeCommandSpecsForConfig(
   cfg: OpenClawConfig,
   params?: { skillCommands?: SkillCommandSpec[]; provider?: string },
 ): NativeCommandSpec[] {
-  return listNativeSpecsFromCommands(listChatCommandsForConfig(cfg, params), params?.provider);
+  return listChatCommandsForConfig(cfg, params)
+    .filter((command) => command.scope !== "text" && command.nativeName)
+    .map((command) => ({
+      name: resolveNativeName(command, params?.provider) ?? command.key,
+      description: command.description,
+      acceptsArgs: Boolean(command.acceptsArgs),
+      args: command.args,
+    }));
 }
 
 export function findCommandByNativeName(

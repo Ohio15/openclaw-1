@@ -1,6 +1,5 @@
 import { listChannelPlugins } from "../../channels/plugins/index.js";
 import { parseAbsoluteTimeMs } from "../../cron/parse.js";
-import { resolveCronStaggerMs } from "../../cron/stagger.js";
 import type { CronJob, CronSchedule } from "../../cron/types.js";
 import { formatDurationHuman } from "../../infra/format-time/format-duration.ts";
 import { defaultRuntime } from "../../runtime.js";
@@ -138,12 +137,7 @@ const formatSchedule = (schedule: CronSchedule) => {
   if (schedule.kind === "every") {
     return `every ${formatDurationHuman(schedule.everyMs)}`;
   }
-  const base = schedule.tz ? `cron ${schedule.expr} @ ${schedule.tz}` : `cron ${schedule.expr}`;
-  const staggerMs = resolveCronStaggerMs(schedule);
-  if (staggerMs <= 0) {
-    return `${base} (exact)`;
-  }
-  return `${base} (stagger ${formatDurationHuman(staggerMs)})`;
+  return schedule.tz ? `cron ${schedule.expr} @ ${schedule.tz}` : `cron ${schedule.expr}`;
 };
 
 const formatStatus = (job: CronJob) => {

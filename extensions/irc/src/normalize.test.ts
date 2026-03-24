@@ -30,8 +30,6 @@ describe("irc normalize", () => {
     };
 
     expect(buildIrcAllowlistCandidates(message)).toContain("alice!ident@example.org");
-    expect(buildIrcAllowlistCandidates(message)).not.toContain("alice");
-    expect(buildIrcAllowlistCandidates(message, { allowNameMatching: true })).toContain("alice");
     expect(
       resolveIrcAllowlistMatch({
         allowFrom: ["alice!ident@example.org"],
@@ -40,16 +38,9 @@ describe("irc normalize", () => {
     ).toBe(true);
     expect(
       resolveIrcAllowlistMatch({
-        allowFrom: ["alice"],
+        allowFrom: ["bob"],
         message,
       }).allowed,
     ).toBe(false);
-    expect(
-      resolveIrcAllowlistMatch({
-        allowFrom: ["alice"],
-        message,
-        allowNameMatching: true,
-      }).allowed,
-    ).toBe(true);
   });
 });

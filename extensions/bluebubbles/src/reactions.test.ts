@@ -1,10 +1,17 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { sendBlueBubblesReaction } from "./reactions.js";
 
-vi.mock("./accounts.js", async () => {
-  const { createBlueBubblesAccountsMockModule } = await import("./test-harness.js");
-  return createBlueBubblesAccountsMockModule();
-});
+vi.mock("./accounts.js", () => ({
+  resolveBlueBubblesAccount: vi.fn(({ cfg, accountId }) => {
+    const config = cfg?.channels?.bluebubbles ?? {};
+    return {
+      accountId: accountId ?? "default",
+      enabled: config.enabled !== false,
+      configured: Boolean(config.serverUrl && config.password),
+      config,
+    };
+  }),
+}));
 
 const mockFetch = vi.fn();
 
@@ -19,27 +26,6 @@ describe("reactions", () => {
   });
 
   describe("sendBlueBubblesReaction", () => {
-    async function expectRemovedReaction(emoji: string) {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        text: () => Promise.resolve(""),
-      });
-
-      await sendBlueBubblesReaction({
-        chatGuid: "chat-123",
-        messageGuid: "msg-123",
-        emoji,
-        remove: true,
-        opts: {
-          serverUrl: "http://localhost:1234",
-          password: "test",
-        },
-      });
-
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.reaction).toBe("-love");
-    }
-
     it("throws when chatGuid is empty", async () => {
       await expect(
         sendBlueBubblesReaction({
@@ -229,11 +215,45 @@ describe("reactions", () => {
     });
 
     it("sends reaction removal with dash prefix", async () => {
-      await expectRemovedReaction("love");
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(""),
+      });
+
+      await sendBlueBubblesReaction({
+        chatGuid: "chat-123",
+        messageGuid: "msg-123",
+        emoji: "love",
+        remove: true,
+        opts: {
+          serverUrl: "http://localhost:1234",
+          password: "test",
+        },
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.reaction).toBe("-love");
     });
 
     it("strips leading dash from emoji when remove flag is set", async () => {
-      await expectRemovedReaction("-love");
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(""),
+      });
+
+      await sendBlueBubblesReaction({
+        chatGuid: "chat-123",
+        messageGuid: "msg-123",
+        emoji: "-love",
+        remove: true,
+        opts: {
+          serverUrl: "http://localhost:1234",
+          password: "test",
+        },
+      });
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.reaction).toBe("-love");
     });
 
     it("uses custom partIndex when provided", async () => {

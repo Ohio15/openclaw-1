@@ -96,7 +96,6 @@ export async function runCliAgent(params: {
   const { defaultAgentId, sessionAgentId } = resolveSessionAgentIds({
     sessionKey: params.sessionKey,
     config: params.config,
-    agentId: params.agentId,
   });
   const heartbeatPrompt =
     sessionAgentId === defaultAgentId

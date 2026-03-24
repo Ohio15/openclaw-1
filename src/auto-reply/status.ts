@@ -1,17 +1,11 @@
 import fs from "node:fs";
-import { resolveContextTokensForModel } from "../agents/context.js";
+import { lookupContextTokens } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { resolveModelAuthMode } from "../agents/model-auth.js";
-import {
-  buildModelAliasIndex,
-  resolveConfiguredModelRef,
-  resolveModelRefFromString,
-} from "../agents/model-selection.js";
+import { resolveConfiguredModelRef } from "../agents/model-selection.js";
 import { resolveSandboxRuntimeStatus } from "../agents/sandbox.js";
 import type { SkillCommandSpec } from "../agents/skills.js";
 import { derivePromptTokens, normalizeUsage, type UsageLike } from "../agents/usage.js";
-import { resolveChannelModelOverride } from "../channels/model-overrides.js";
-import { isCommandFlagEnabled } from "../config/commands.js";
 import type { OpenClawConfig } from "../config/config.js";
 import {
   resolveMainSessionKey,
@@ -46,8 +40,6 @@ import {
   type ChatCommandDefinition,
 } from "./commands-registry.js";
 import type { CommandCategory } from "./commands-registry.types.js";
-import { resolveActiveFallbackState } from "./fallback-state.js";
-import { formatProviderModelRef, resolveSelectedAndActiveModel } from "./model-runtime.js";
 import type { ElevatedLevel, ReasoningLevel, ThinkLevel, VerboseLevel } from "./thinking.js";
 
 type AgentDefaults = NonNullable<NonNullable<OpenClawConfig["agents"]>["defaults"]>;
@@ -72,7 +64,6 @@ type StatusArgs = {
   agentId?: string;
   sessionEntry?: SessionEntry;
   sessionKey?: string;
-  parentSessionKey?: string;
   sessionScope?: SessionScope;
   sessionStorePath?: string;
   groupActivation?: "mention" | "always";
@@ -81,7 +72,6 @@ type StatusArgs = {
   resolvedReasoning?: ReasoningLevel;
   resolvedElevated?: ElevatedLevel;
   modelAuth?: string;
-  activeModelAuth?: string;
   usageLine?: string;
   timeLine?: string;
   queue?: QueueStatus;
@@ -90,34 +80,6 @@ type StatusArgs = {
   includeTranscriptUsage?: boolean;
   now?: number;
 };
-
-type NormalizedAuthMode = "api-key" | "oauth" | "token" | "aws-sdk" | "mixed" | "unknown";
-
-function normalizeAuthMode(value?: string): NormalizedAuthMode | undefined {
-  const normalized = value?.trim().toLowerCase();
-  if (!normalized) {
-    return undefined;
-  }
-  if (normalized === "api-key" || normalized.startsWith("api-key ")) {
-    return "api-key";
-  }
-  if (normalized === "oauth" || normalized.startsWith("oauth ")) {
-    return "oauth";
-  }
-  if (normalized === "token" || normalized.startsWith("token ")) {
-    return "token";
-  }
-  if (normalized === "aws-sdk" || normalized.startsWith("aws-sdk ")) {
-    return "aws-sdk";
-  }
-  if (normalized === "mixed" || normalized.startsWith("mixed ")) {
-    return "mixed";
-  }
-  if (normalized === "unknown") {
-    return "unknown";
-  }
-  return undefined;
-}
 
 function resolveRuntimeLabel(
   args: Pick<StatusArgs, "config" | "agent" | "sessionKey" | "sessionScope">,
@@ -243,20 +205,7 @@ const readUsageFromSessionLog = (
   }
 
   try {
-    // Read the tail only; we only need the most recent usage entries.
-    const TAIL_BYTES = 8192;
-    const stat = fs.statSync(logPath);
-    const offset = Math.max(0, stat.size - TAIL_BYTES);
-    const buf = Buffer.alloc(Math.min(TAIL_BYTES, stat.size));
-    const fd = fs.openSync(logPath, "r");
-    try {
-      fs.readSync(fd, buf, 0, buf.length, offset);
-    } finally {
-      fs.closeSync(fd);
-    }
-    const tail = buf.toString("utf-8");
-    const lines = (offset > 0 ? tail.slice(tail.indexOf("\n") + 1) : tail).split(/\n+/);
-
+    const lines = fs.readFileSync(logPath, "utf-8").split(/\n+/);
     let input = 0;
     let output = 0;
     let promptTokens = 0;
@@ -283,7 +232,7 @@ const readUsageFromSessionLog = (
         }
         model = parsed.message?.model ?? parsed.model ?? model;
       } catch {
-        // ignore bad lines (including a truncated first tail line)
+        // ignore bad lines
       }
     }
 
@@ -310,36 +259,6 @@ const formatUsagePair = (input?: number | null, output?: number | null) => {
   const inputLabel = typeof input === "number" ? formatTokenCount(input) : "?";
   const outputLabel = typeof output === "number" ? formatTokenCount(output) : "?";
   return `🧮 Tokens: ${inputLabel} in / ${outputLabel} out`;
-};
-
-const formatCacheLine = (
-  input?: number | null,
-  cacheRead?: number | null,
-  cacheWrite?: number | null,
-) => {
-  if (!cacheRead && !cacheWrite) {
-    return null;
-  }
-  if (
-    (typeof cacheRead !== "number" || cacheRead <= 0) &&
-    (typeof cacheWrite !== "number" || cacheWrite <= 0)
-  ) {
-    return null;
-  }
-
-  const cachedLabel = typeof cacheRead === "number" ? formatTokenCount(cacheRead) : "0";
-  const newLabel = typeof cacheWrite === "number" ? formatTokenCount(cacheWrite) : "0";
-
-  const totalInput =
-    (typeof cacheRead === "number" ? cacheRead : 0) +
-    (typeof cacheWrite === "number" ? cacheWrite : 0) +
-    (typeof input === "number" ? input : 0);
-  const hitRate =
-    totalInput > 0 && typeof cacheRead === "number"
-      ? Math.round((cacheRead / totalInput) * 100)
-      : 0;
-
-  return `🗄️ Cache: ${hitRate}% hit · ${cachedLabel} cached, ${newLabel} new`;
 };
 
 const formatMediaUnderstandingLine = (decisions?: ReadonlyArray<MediaUnderstandingDecision>) => {
@@ -411,54 +330,25 @@ const formatVoiceModeLine = (
 export function buildStatusMessage(args: StatusArgs): string {
   const now = args.now ?? Date.now();
   const entry = args.sessionEntry;
-  const selectionConfig = {
-    agents: {
-      defaults: args.agent ?? {},
-    },
-  } as OpenClawConfig;
-  const contextConfig = args.config
-    ? ({
-        ...args.config,
-        agents: {
-          ...args.config.agents,
-          defaults: {
-            ...args.config.agents?.defaults,
-            ...args.agent,
-          },
-        },
-      } as OpenClawConfig)
-    : ({
-        agents: {
-          defaults: args.agent ?? {},
-        },
-      } as OpenClawConfig);
   const resolved = resolveConfiguredModelRef({
-    cfg: selectionConfig,
+    cfg: {
+      agents: {
+        defaults: args.agent ?? {},
+      },
+    } as OpenClawConfig,
     defaultProvider: DEFAULT_PROVIDER,
     defaultModel: DEFAULT_MODEL,
   });
-  const selectedProvider = entry?.providerOverride ?? resolved.provider ?? DEFAULT_PROVIDER;
-  const selectedModel = entry?.modelOverride ?? resolved.model ?? DEFAULT_MODEL;
-  const modelRefs = resolveSelectedAndActiveModel({
-    selectedProvider,
-    selectedModel,
-    sessionEntry: entry,
-  });
-  let activeProvider = modelRefs.active.provider;
-  let activeModel = modelRefs.active.model;
+  const provider = entry?.providerOverride ?? resolved.provider ?? DEFAULT_PROVIDER;
+  let model = entry?.modelOverride ?? resolved.model ?? DEFAULT_MODEL;
   let contextTokens =
-    resolveContextTokensForModel({
-      cfg: contextConfig,
-      provider: activeProvider,
-      model: activeModel,
-      contextTokensOverride: entry?.contextTokens ?? args.agent?.contextTokens,
-      fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
-    }) ?? DEFAULT_CONTEXT_TOKENS;
+    entry?.contextTokens ??
+    args.agent?.contextTokens ??
+    lookupContextTokens(model) ??
+    DEFAULT_CONTEXT_TOKENS;
 
   let inputTokens = entry?.inputTokens;
   let outputTokens = entry?.outputTokens;
-  let cacheRead = entry?.cacheRead;
-  let cacheWrite = entry?.cacheWrite;
   let totalTokens = entry?.totalTokens ?? (entry?.inputTokens ?? 0) + (entry?.outputTokens ?? 0);
 
   // Prefer prompt-size tokens from the session transcript when it looks larger
@@ -476,26 +366,11 @@ export function buildStatusMessage(args: StatusArgs): string {
       if (!totalTokens || totalTokens === 0 || candidate > totalTokens) {
         totalTokens = candidate;
       }
-      if (!entry?.model && logUsage.model) {
-        const slashIndex = logUsage.model.indexOf("/");
-        if (slashIndex > 0) {
-          const provider = logUsage.model.slice(0, slashIndex).trim();
-          const model = logUsage.model.slice(slashIndex + 1).trim();
-          if (provider && model) {
-            activeProvider = provider;
-            activeModel = model;
-          }
-        } else {
-          activeModel = logUsage.model;
-        }
+      if (!model) {
+        model = logUsage.model ?? model;
       }
       if (!contextTokens && logUsage.model) {
-        contextTokens =
-          resolveContextTokensForModel({
-            cfg: contextConfig,
-            model: logUsage.model,
-            fallbackContextTokens: contextTokens ?? undefined,
-          }) ?? contextTokens;
+        contextTokens = lookupContextTokens(logUsage.model) ?? contextTokens;
       }
       if (!inputTokens || inputTokens === 0) {
         inputTokens = logUsage.input;
@@ -565,31 +440,14 @@ export function buildStatusMessage(args: StatusArgs): string {
   ];
   const activationLine = activationParts.filter(Boolean).join(" · ");
 
-  const selectedAuthMode =
-    normalizeAuthMode(args.modelAuth) ?? resolveModelAuthMode(selectedProvider, args.config);
-  const selectedAuthLabelValue =
-    args.modelAuth ??
-    (selectedAuthMode && selectedAuthMode !== "unknown" ? selectedAuthMode : undefined);
-  const activeAuthMode =
-    normalizeAuthMode(args.activeModelAuth) ?? resolveModelAuthMode(activeProvider, args.config);
-  const activeAuthLabelValue =
-    args.activeModelAuth ??
-    (activeAuthMode && activeAuthMode !== "unknown" ? activeAuthMode : undefined);
-  const selectedModelLabel = modelRefs.selected.label || "unknown";
-  const activeModelLabel = formatProviderModelRef(activeProvider, activeModel) || "unknown";
-  const fallbackState = resolveActiveFallbackState({
-    selectedModelRef: selectedModelLabel,
-    activeModelRef: activeModelLabel,
-    state: entry,
-  });
-  const effectiveCostAuthMode = fallbackState.active
-    ? activeAuthMode
-    : (selectedAuthMode ?? activeAuthMode);
-  const showCost = effectiveCostAuthMode === "api-key" || effectiveCostAuthMode === "mixed";
+  const authMode = resolveModelAuthMode(provider, args.config);
+  const authLabelValue =
+    args.modelAuth ?? (authMode && authMode !== "unknown" ? authMode : undefined);
+  const showCost = authLabelValue === "api-key" || authLabelValue === "mixed";
   const costConfig = showCost
     ? resolveModelCostConfig({
-        provider: activeProvider,
-        model: activeModel,
+        provider,
+        model,
         config: args.config,
       })
     : undefined;
@@ -606,57 +464,12 @@ export function buildStatusMessage(args: StatusArgs): string {
       : undefined;
   const costLabel = showCost && hasUsage ? formatUsd(cost) : undefined;
 
-  const selectedAuthLabel = selectedAuthLabelValue ? ` · 🔑 ${selectedAuthLabelValue}` : "";
-  const channelModelNote = (() => {
-    if (!args.config || !entry) {
-      return undefined;
-    }
-    if (entry.modelOverride?.trim() || entry.providerOverride?.trim()) {
-      return undefined;
-    }
-    const channelOverride = resolveChannelModelOverride({
-      cfg: args.config,
-      channel: entry.channel ?? entry.origin?.provider,
-      groupId: entry.groupId,
-      groupChannel: entry.groupChannel,
-      groupSubject: entry.subject,
-      parentSessionKey: args.parentSessionKey,
-    });
-    if (!channelOverride) {
-      return undefined;
-    }
-    const aliasIndex = buildModelAliasIndex({
-      cfg: args.config,
-      defaultProvider: DEFAULT_PROVIDER,
-    });
-    const resolvedOverride = resolveModelRefFromString({
-      raw: channelOverride.model,
-      defaultProvider: DEFAULT_PROVIDER,
-      aliasIndex,
-    });
-    if (!resolvedOverride) {
-      return undefined;
-    }
-    if (
-      resolvedOverride.ref.provider !== selectedProvider ||
-      resolvedOverride.ref.model !== selectedModel
-    ) {
-      return undefined;
-    }
-    return "channel override";
-  })();
-  const modelNote = channelModelNote ? ` · ${channelModelNote}` : "";
-  const modelLine = `🧠 Model: ${selectedModelLabel}${selectedAuthLabel}${modelNote}`;
-  const showFallbackAuth = activeAuthLabelValue && activeAuthLabelValue !== selectedAuthLabelValue;
-  const fallbackLine = fallbackState.active
-    ? `↪️ Fallback: ${activeModelLabel}${
-        showFallbackAuth ? ` · 🔑 ${activeAuthLabelValue}` : ""
-      } (${fallbackState.reason ?? "selected model unavailable"})`
-    : null;
+  const modelLabel = model ? `${provider}/${model}` : "unknown";
+  const authLabel = authLabelValue ? ` · 🔑 ${authLabelValue}` : "";
+  const modelLine = `🧠 Model: ${modelLabel}${authLabel}`;
   const commit = resolveCommitHash();
   const versionLine = `🦞 OpenClaw ${VERSION}${commit ? ` (${commit})` : ""}`;
   const usagePair = formatUsagePair(inputTokens, outputTokens);
-  const cacheLine = formatCacheLine(inputTokens, cacheRead, cacheWrite);
   const costLine = costLabel ? `💵 Cost: ${costLabel}` : null;
   const usageCostLine =
     usagePair && costLine ? `${usagePair} · ${costLine}` : (usagePair ?? costLine);
@@ -667,9 +480,7 @@ export function buildStatusMessage(args: StatusArgs): string {
     versionLine,
     args.timeLine,
     modelLine,
-    fallbackLine,
     usageCostLine,
-    cacheLine,
     `📚 ${contextLine}`,
     mediaLine,
     args.usageLine,
@@ -727,10 +538,10 @@ export function buildHelpMessage(cfg?: OpenClawConfig): string {
   lines.push("");
 
   const optionParts = ["/think <level>", "/model <id>", "/verbose on|off"];
-  if (isCommandFlagEnabled(cfg, "config")) {
+  if (cfg?.commands?.config === true) {
     optionParts.push("/config");
   }
-  if (isCommandFlagEnabled(cfg, "debug")) {
+  if (cfg?.commands?.debug === true) {
     optionParts.push("/debug");
   }
   lines.push("Options");

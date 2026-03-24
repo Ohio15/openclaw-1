@@ -131,12 +131,8 @@ export async function resolveDiscordThreadParentInfo(params: {
   channelInfo: import("./message-utils.js").DiscordChannelInfo | null;
 }): Promise<DiscordThreadParentInfo> {
   const { threadChannel, channelInfo, client } = params;
-  let parentId =
+  const parentId =
     threadChannel.parentId ?? threadChannel.parent?.id ?? channelInfo?.parentId ?? undefined;
-  if (!parentId && threadChannel.id) {
-    const threadInfo = await resolveDiscordChannelInfo(client, threadChannel.id);
-    parentId = threadInfo?.parentId ?? undefined;
-  }
   if (!parentId) {
     return {};
   }

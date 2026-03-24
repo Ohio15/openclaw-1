@@ -126,7 +126,6 @@ When validation fails:
 
     - `agents.defaults.models` defines the model catalog and acts as the allowlist for `/model`.
     - Model refs use `provider/model` format (e.g. `anthropic/claude-opus-4-6`).
-    - `agents.defaults.imageMaxDimensionPx` controls transcript/tool image downscaling (default `1200`); lower values usually reduce vision-token usage on screenshot-heavy runs.
     - See [Models CLI](/concepts/models) for switching models in chat and [Model Failover](/concepts/model-failover) for auth rotation and fallback behavior.
     - For custom/self-hosted providers, see [Custom providers](/gateway/configuration-reference#custom-providers-and-base-urls) in the reference.
 
@@ -182,10 +181,6 @@ When validation fails:
     {
       session: {
         dmScope: "per-channel-peer",  // recommended for multi-user
-        threadBindings: {
-          enabled: true,
-          ttlHours: 24,
-        },
         reset: {
           mode: "daily",
           atHour: 4,
@@ -196,7 +191,6 @@ When validation fails:
     ```
 
     - `dmScope`: `main` (shared) | `per-peer` | `per-channel-peer` | `per-account-channel-peer`
-    - `threadBindings`: global defaults for thread-bound session routing (Discord supports `/focus`, `/unfocus`, `/agents`, and `/session ttl`).
     - See [Session Management](/concepts/session) for scoping, identity links, and send policy.
     - See [full reference](/gateway/configuration-reference#session) for all fields.
 
@@ -239,7 +233,7 @@ When validation fails:
     ```
 
     - `every`: duration string (`30m`, `2h`). Set `0m` to disable.
-    - `target`: `last` | `whatsapp` | `telegram` | `discord` | `none` (DM-style `user:<id>` heartbeat delivery is blocked)
+    - `target`: `last` | `whatsapp` | `telegram` | `discord` | `none`
     - See [Heartbeat](/gateway/heartbeat) for the full guide.
 
   </Accordion>
@@ -251,17 +245,11 @@ When validation fails:
         enabled: true,
         maxConcurrentRuns: 2,
         sessionRetention: "24h",
-        runLog: {
-          maxBytes: "2mb",
-          keepLines: 2000,
-        },
       },
     }
     ```
 
-    - `sessionRetention`: prune completed isolated run sessions from `sessions.json` (default `24h`; set `false` to disable).
-    - `runLog`: prune `cron/runs/<jobId>.jsonl` by size and retained lines.
-    - See [Cron jobs](/automation/cron-jobs) for feature overview and CLI examples.
+    See [Cron jobs](/automation/cron-jobs) for the feature overview and CLI examples.
 
   </Accordion>
 
@@ -381,10 +369,6 @@ Most fields hot-apply without downtime. In `hybrid` mode, restart-required chang
 
 ## Config RPC (programmatic updates)
 
-<Note>
-Control-plane write RPCs (`config.apply`, `config.patch`, `update.run`) are rate-limited to **3 requests per 60 seconds** per `deviceId+clientIp`. When limited, the RPC returns `UNAVAILABLE` with `retryAfterMs`.
-</Note>
-
 <AccordionGroup>
   <Accordion title="config.apply (full replace)">
     Validates + writes the full config and restarts the Gateway in one step.
@@ -400,8 +384,6 @@ Control-plane write RPCs (`config.apply`, `config.patch`, `update.run`) are rate
     - `sessionKey` (optional) — session key for the post-restart wake-up ping
     - `note` (optional) — note for the restart sentinel
     - `restartDelayMs` (optional) — delay before restart (default 2000)
-
-    Restart requests are coalesced while one is already pending/in-flight, and a 30-second cooldown applies between restart cycles.
 
     ```bash
     openclaw gateway call config.get --params '{}'  # capture payload.hash
@@ -426,8 +408,6 @@ Control-plane write RPCs (`config.apply`, `config.patch`, `update.run`) are rate
     - `raw` (string) — JSON5 with just the keys to change
     - `baseHash` (required) — config hash from `config.get`
     - `sessionKey`, `note`, `restartDelayMs` — same as `config.apply`
-
-    Restart behavior matches `config.apply`: coalesced pending restarts plus a 30-second cooldown between restart cycles.
 
     ```bash
     openclaw gateway call config.patch --params '{

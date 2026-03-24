@@ -60,9 +60,7 @@ When you switch channels with `openclaw update`, OpenClaw also syncs plugin sour
 
 ## Tagging best practices
 
-- Tag releases you want git checkouts to land on (`vYYYY.M.D` for stable, `vYYYY.M.D-beta.N` for beta).
-- `vYYYY.M.D.beta.N` is also recognized for compatibility, but prefer `-beta.N`.
-- Legacy `vYYYY.M.D-<patch>` tags are still recognized as stable (non-beta).
+- Tag releases you want git checkouts to land on (`vYYYY.M.D` or `vYYYY.M.D-<patch>`).
 - Keep tags immutable: never move or reuse a tag.
 - npm dist-tags remain the source of truth for npm installs:
   - `latest` → stable

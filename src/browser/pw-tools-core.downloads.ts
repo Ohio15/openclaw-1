@@ -102,42 +102,6 @@ function createPageDownloadWaiter(page: Page, timeoutMs: number) {
   };
 }
 
-type DownloadPayload = {
-  url?: () => string;
-  suggestedFilename?: () => string;
-  saveAs?: (outPath: string) => Promise<void>;
-};
-
-async function saveDownloadPayload(download: DownloadPayload, outPath: string) {
-  const suggested = download.suggestedFilename?.() || "download.bin";
-  const resolvedOutPath = outPath?.trim() || buildTempDownloadPath(suggested);
-  await fs.mkdir(path.dirname(resolvedOutPath), { recursive: true });
-  await download.saveAs?.(resolvedOutPath);
-  return {
-    url: download.url?.() || "",
-    suggestedFilename: suggested,
-    path: path.resolve(resolvedOutPath),
-  };
-}
-
-async function awaitDownloadPayload(params: {
-  waiter: ReturnType<typeof createPageDownloadWaiter>;
-  state: ReturnType<typeof ensurePageState>;
-  armId: number;
-  outPath?: string;
-}) {
-  try {
-    const download = (await params.waiter.promise) as DownloadPayload;
-    if (params.state.armIdDownload !== params.armId) {
-      throw new Error("Download was superseded by another waiter");
-    }
-    return await saveDownloadPayload(download, params.outPath ?? "");
-  } catch (err) {
-    params.waiter.cancel();
-    throw err;
-  }
-}
-
 export async function armFileUploadViaPlaywright(opts: {
   cdpUrl: string;
   targetId?: string;
@@ -236,7 +200,28 @@ export async function waitForDownloadViaPlaywright(opts: {
   const armId = state.armIdDownload;
 
   const waiter = createPageDownloadWaiter(page, timeout);
-  return await awaitDownloadPayload({ waiter, state, armId, outPath: opts.path });
+  try {
+    const download = (await waiter.promise) as {
+      url?: () => string;
+      suggestedFilename?: () => string;
+      saveAs?: (outPath: string) => Promise<void>;
+    };
+    if (state.armIdDownload !== armId) {
+      throw new Error("Download was superseded by another waiter");
+    }
+    const suggested = download.suggestedFilename?.() || "download.bin";
+    const outPath = opts.path?.trim() || buildTempDownloadPath(suggested);
+    await fs.mkdir(path.dirname(outPath), { recursive: true });
+    await download.saveAs?.(outPath);
+    return {
+      url: download.url?.() || "",
+      suggestedFilename: suggested,
+      path: path.resolve(outPath),
+    };
+  } catch (err) {
+    waiter.cancel();
+    throw err;
+  }
 }
 
 export async function downloadViaPlaywright(opts: {
@@ -272,7 +257,23 @@ export async function downloadViaPlaywright(opts: {
     } catch (err) {
       throw toAIFriendlyError(err, ref);
     }
-    return await awaitDownloadPayload({ waiter, state, armId, outPath });
+
+    const download = (await waiter.promise) as {
+      url?: () => string;
+      suggestedFilename?: () => string;
+      saveAs?: (outPath: string) => Promise<void>;
+    };
+    if (state.armIdDownload !== armId) {
+      throw new Error("Download was superseded by another waiter");
+    }
+    const suggested = download.suggestedFilename?.() || "download.bin";
+    await fs.mkdir(path.dirname(outPath), { recursive: true });
+    await download.saveAs?.(outPath);
+    return {
+      url: download.url?.() || "",
+      suggestedFilename: suggested,
+      path: path.resolve(outPath),
+    };
   } catch (err) {
     waiter.cancel();
     throw err;

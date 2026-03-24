@@ -1,10 +1,6 @@
 ---
 title: CI Pipeline
 description: How the OpenClaw CI pipeline works
-summary: "CI job graph, scope gates, and local command equivalents"
-read_when:
-  - You need to understand why a CI job did or did not run
-  - You are debugging failing GitHub Actions checks
 ---
 
 # CI Pipeline
@@ -38,11 +34,12 @@ Jobs are ordered so cheap checks fail before expensive ones run:
 
 ## Runners
 
-| Runner                           | Jobs                                       |
-| -------------------------------- | ------------------------------------------ |
-| `blacksmith-16vcpu-ubuntu-2404`  | Most Linux jobs, including scope detection |
-| `blacksmith-16vcpu-windows-2025` | `checks-windows`                           |
-| `macos-latest`                   | `macos`, `ios`                             |
+| Runner                          | Jobs                          |
+| ------------------------------- | ----------------------------- |
+| `blacksmith-4vcpu-ubuntu-2404`  | Most Linux jobs               |
+| `blacksmith-4vcpu-windows-2025` | `checks-windows`              |
+| `macos-latest`                  | `macos`, `ios`                |
+| `ubuntu-latest`                 | Scope detection (lightweight) |
 
 ## Local Equivalents
 

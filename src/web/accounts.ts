@@ -4,7 +4,6 @@ import { createAccountListHelpers } from "../channels/plugins/account-helpers.js
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveOAuthDir } from "../config/paths.js";
 import type { DmPolicy, GroupPolicy, WhatsAppAccountConfig } from "../config/types.js";
-import { resolveAccountEntry } from "../routing/account-lookup.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
 import { hasWebCredsSync } from "./auth-store.js";
@@ -69,7 +68,12 @@ function resolveAccountConfig(
   cfg: OpenClawConfig,
   accountId: string,
 ): WhatsAppAccountConfig | undefined {
-  return resolveAccountEntry(cfg.channels?.whatsapp?.accounts, accountId);
+  const accounts = cfg.channels?.whatsapp?.accounts;
+  if (!accounts || typeof accounts !== "object") {
+    return undefined;
+  }
+  const entry = accounts[accountId] as WhatsAppAccountConfig | undefined;
+  return entry;
 }
 
 function resolveDefaultAuthDir(accountId: string): string {

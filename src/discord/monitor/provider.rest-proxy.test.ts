@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveDiscordRestFetch } from "./rest-fetch.js";
 
 const { undiciFetchMock, proxyAgentSpy } = vi.hoisted(() => ({
   undiciFetchMock: vi.fn(),
@@ -30,9 +29,11 @@ describe("resolveDiscordRestFetch", () => {
       error: vi.fn(),
       exit: vi.fn(),
     } as const;
-    undiciFetchMock.mockClear().mockResolvedValue(new Response("ok", { status: 200 }));
-    proxyAgentSpy.mockClear();
-    const fetcher = resolveDiscordRestFetch("http://proxy.test:8080", runtime);
+    undiciFetchMock.mockReset().mockResolvedValue(new Response("ok", { status: 200 }));
+    proxyAgentSpy.mockReset();
+
+    const { __testing } = await import("./provider.js");
+    const fetcher = __testing.resolveDiscordRestFetch("http://proxy.test:8080", runtime);
 
     await fetcher("https://discord.com/api/v10/oauth2/applications/@me");
 
@@ -53,7 +54,9 @@ describe("resolveDiscordRestFetch", () => {
       error: vi.fn(),
       exit: vi.fn(),
     } as const;
-    const fetcher = resolveDiscordRestFetch("bad-proxy", runtime);
+    const { __testing } = await import("./provider.js");
+
+    const fetcher = __testing.resolveDiscordRestFetch("bad-proxy", runtime);
 
     expect(fetcher).toBe(fetch);
     expect(runtime.error).toHaveBeenCalled();

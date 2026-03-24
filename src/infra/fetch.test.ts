@@ -2,10 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { withFetchPreconnect } from "../test-utils/fetch-mock.js";
 import { resolveFetch, wrapFetchWithAbortSignal } from "./fetch.js";
 
-async function waitForMicrotaskTurn(): Promise<void> {
-  await new Promise<void>((resolve) => queueMicrotask(resolve));
-}
-
 function createForeignSignalHarness() {
   let abortHandler: (() => void) | null = null;
   const removeEventListener = vi.fn((event: string, handler: () => void) => {
@@ -29,18 +25,6 @@ function createForeignSignalHarness() {
     removeEventListener,
     triggerAbort: () => abortHandler?.(),
   };
-}
-
-function createThrowingCleanupSignalHarness(cleanupError: Error) {
-  const removeEventListener = vi.fn(() => {
-    throw cleanupError;
-  });
-  const fakeSignal = {
-    aborted: false,
-    addEventListener: (_event: string, _handler: () => void) => {},
-    removeEventListener,
-  } as unknown as AbortSignal;
-  return { fakeSignal, removeEventListener };
 }
 
 describe("wrapFetchWithAbortSignal", () => {
@@ -102,13 +86,28 @@ describe("wrapFetchWithAbortSignal", () => {
     try {
       await expect(wrapped("https://example.com", { signal: fakeSignal })).rejects.toBe(fetchError);
       await Promise.resolve();
-      await waitForMicrotaskTurn();
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(unhandled).toEqual([]);
       expect(removeEventListener).toHaveBeenCalledOnce();
     } finally {
       process.off("unhandledRejection", onUnhandled);
     }
+  });
+
+  it("cleans up listener and rethrows when fetch throws synchronously", () => {
+    const syncError = new TypeError("sync fetch failure");
+    const fetchImpl = withFetchPreconnect(
+      vi.fn(() => {
+        throw syncError;
+      }),
+    );
+    const wrapped = wrapFetchWithAbortSignal(fetchImpl);
+
+    const { fakeSignal, removeEventListener } = createForeignSignalHarness();
+
+    expect(() => wrapped("https://example.com", { signal: fakeSignal })).toThrow(syncError);
+    expect(removeEventListener).toHaveBeenCalledOnce();
   });
 
   it("preserves original rejection when listener cleanup throws", async () => {
@@ -119,23 +118,23 @@ describe("wrapFetchWithAbortSignal", () => {
     );
     const wrapped = wrapFetchWithAbortSignal(fetchImpl);
 
-    const { fakeSignal, removeEventListener } = createThrowingCleanupSignalHarness(cleanupError);
+    const removeEventListener = vi.fn(() => {
+      throw cleanupError;
+    });
+
+    const fakeSignal = {
+      aborted: false,
+      addEventListener: (_event: string, _handler: () => void) => {},
+      removeEventListener,
+    } as unknown as AbortSignal;
 
     await expect(wrapped("https://example.com", { signal: fakeSignal })).rejects.toBe(fetchError);
     expect(removeEventListener).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    {
-      name: "cleans up listener and rethrows when fetch throws synchronously",
-      makeSignalHarness: () => createForeignSignalHarness(),
-    },
-    {
-      name: "preserves original sync throw when listener cleanup throws",
-      makeSignalHarness: () => createThrowingCleanupSignalHarness(new TypeError("cleanup failed")),
-    },
-  ])("$name", ({ makeSignalHarness }) => {
+  it("preserves original sync throw when listener cleanup throws", () => {
     const syncError = new TypeError("sync fetch failure");
+    const cleanupError = new TypeError("cleanup failed");
     const fetchImpl = withFetchPreconnect(
       vi.fn(() => {
         throw syncError;
@@ -143,7 +142,15 @@ describe("wrapFetchWithAbortSignal", () => {
     );
     const wrapped = wrapFetchWithAbortSignal(fetchImpl);
 
-    const { fakeSignal, removeEventListener } = makeSignalHarness();
+    const removeEventListener = vi.fn(() => {
+      throw cleanupError;
+    });
+
+    const fakeSignal = {
+      aborted: false,
+      addEventListener: (_event: string, _handler: () => void) => {},
+      removeEventListener,
+    } as unknown as AbortSignal;
 
     expect(() => wrapped("https://example.com", { signal: fakeSignal })).toThrow(syncError);
     expect(removeEventListener).toHaveBeenCalledOnce();

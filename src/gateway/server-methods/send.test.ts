@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { resolveOutboundTarget } from "../../infra/outbound/targets.js";
 import { sendHandlers } from "./send.js";
 import type { GatewayRequestContext } from "./types.js";
 
@@ -7,9 +6,6 @@ const mocks = vi.hoisted(() => ({
   deliverOutboundPayloads: vi.fn(),
   appendAssistantMessageToSessionTranscript: vi.fn(async () => ({ ok: true, sessionFile: "x" })),
   recordSessionMetaFromInbound: vi.fn(async () => ({ ok: true })),
-  resolveOutboundTarget: vi.fn(() => ({ ok: true, to: "resolved" })),
-  resolveMessageChannelSelection: vi.fn(),
-  sendPoll: vi.fn(async () => ({ messageId: "poll-1" })),
 }));
 
 vi.mock("../../config/config.js", async () => {
@@ -22,16 +18,12 @@ vi.mock("../../config/config.js", async () => {
 });
 
 vi.mock("../../channels/plugins/index.js", () => ({
-  getChannelPlugin: () => ({ outbound: { sendPoll: mocks.sendPoll } }),
+  getChannelPlugin: () => ({ outbound: {} }),
   normalizeChannelId: (value: string) => (value === "webchat" ? null : value),
 }));
 
 vi.mock("../../infra/outbound/targets.js", () => ({
-  resolveOutboundTarget: mocks.resolveOutboundTarget,
-}));
-
-vi.mock("../../infra/outbound/channel-selection.js", () => ({
-  resolveMessageChannelSelection: mocks.resolveMessageChannelSelection,
+  resolveOutboundTarget: () => ({ ok: true, to: "resolved" }),
 }));
 
 vi.mock("../../infra/outbound/deliver.js", () => ({
@@ -67,36 +59,13 @@ async function runSend(params: Record<string, unknown>) {
   return { respond };
 }
 
-async function runPoll(params: Record<string, unknown>) {
-  const respond = vi.fn();
-  await sendHandlers.poll({
-    params: params as never,
-    respond,
-    context: makeContext(),
-    req: { type: "req", id: "1", method: "poll" },
-    client: null,
-    isWebchatConnect: () => false,
-  });
-  return { respond };
-}
-
-function mockDeliverySuccess(messageId: string) {
-  mocks.deliverOutboundPayloads.mockResolvedValue([{ messageId, channel: "slack" }]);
-}
-
 describe("gateway send mirroring", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.resolveOutboundTarget.mockReturnValue({ ok: true, to: "resolved" });
-    mocks.resolveMessageChannelSelection.mockResolvedValue({
-      channel: "slack",
-      configured: ["slack"],
-    });
-    mocks.sendPoll.mockResolvedValue({ messageId: "poll-1" });
   });
 
   it("accepts media-only sends without message", async () => {
-    mockDeliverySuccess("m-media");
+    mocks.deliverOutboundPayloads.mockResolvedValue([{ messageId: "m-media", channel: "slack" }]);
 
     const { respond } = await runSend({
       to: "channel:C1",
@@ -161,81 +130,6 @@ describe("gateway send mirroring", () => {
     );
   });
 
-  it("auto-picks the single configured channel for send", async () => {
-    mockDeliverySuccess("m-single-send");
-
-    const { respond } = await runSend({
-      to: "x",
-      message: "hi",
-      idempotencyKey: "idem-missing-channel",
-    });
-
-    expect(mocks.resolveMessageChannelSelection).toHaveBeenCalled();
-    expect(mocks.deliverOutboundPayloads).toHaveBeenCalled();
-    expect(respond).toHaveBeenCalledWith(
-      true,
-      expect.objectContaining({ messageId: "m-single-send" }),
-      undefined,
-      expect.objectContaining({ channel: "slack" }),
-    );
-  });
-
-  it("returns invalid request when send channel selection is ambiguous", async () => {
-    mocks.resolveMessageChannelSelection.mockRejectedValueOnce(
-      new Error("Channel is required when multiple channels are configured: telegram, slack"),
-    );
-
-    const { respond } = await runSend({
-      to: "x",
-      message: "hi",
-      idempotencyKey: "idem-missing-channel-ambiguous",
-    });
-
-    expect(mocks.deliverOutboundPayloads).not.toHaveBeenCalled();
-    expect(respond).toHaveBeenCalledWith(
-      false,
-      undefined,
-      expect.objectContaining({
-        message: expect.stringContaining("Channel is required"),
-      }),
-    );
-  });
-
-  it("auto-picks the single configured channel for poll", async () => {
-    const { respond } = await runPoll({
-      to: "x",
-      question: "Q?",
-      options: ["A", "B"],
-      idempotencyKey: "idem-poll-missing-channel",
-    });
-
-    expect(mocks.resolveMessageChannelSelection).toHaveBeenCalled();
-    expect(respond).toHaveBeenCalledWith(true, expect.any(Object), undefined, {
-      channel: "slack",
-    });
-  });
-
-  it("returns invalid request when poll channel selection is ambiguous", async () => {
-    mocks.resolveMessageChannelSelection.mockRejectedValueOnce(
-      new Error("Channel is required when multiple channels are configured: telegram, slack"),
-    );
-
-    const { respond } = await runPoll({
-      to: "x",
-      question: "Q?",
-      options: ["A", "B"],
-      idempotencyKey: "idem-poll-missing-channel-ambiguous",
-    });
-
-    expect(respond).toHaveBeenCalledWith(
-      false,
-      undefined,
-      expect.objectContaining({
-        message: expect.stringContaining("Channel is required"),
-      }),
-    );
-  });
-
   it("does not mirror when delivery returns no results", async () => {
     mocks.deliverOutboundPayloads.mockResolvedValue([]);
 
@@ -257,7 +151,7 @@ describe("gateway send mirroring", () => {
   });
 
   it("mirrors media filenames when delivery succeeds", async () => {
-    mockDeliverySuccess("m1");
+    mocks.deliverOutboundPayloads.mockResolvedValue([{ messageId: "m1", channel: "slack" }]);
 
     await runSend({
       to: "channel:C1",
@@ -280,7 +174,7 @@ describe("gateway send mirroring", () => {
   });
 
   it("mirrors MEDIA tags as attachments", async () => {
-    mockDeliverySuccess("m2");
+    mocks.deliverOutboundPayloads.mockResolvedValue([{ messageId: "m2", channel: "slack" }]);
 
     await runSend({
       to: "channel:C1",
@@ -302,7 +196,7 @@ describe("gateway send mirroring", () => {
   });
 
   it("lowercases provided session keys for mirroring", async () => {
-    mockDeliverySuccess("m-lower");
+    mocks.deliverOutboundPayloads.mockResolvedValue([{ messageId: "m-lower", channel: "slack" }]);
 
     await runSend({
       to: "channel:C1",
@@ -322,7 +216,7 @@ describe("gateway send mirroring", () => {
   });
 
   it("derives a target session key when none is provided", async () => {
-    mockDeliverySuccess("m3");
+    mocks.deliverOutboundPayloads.mockResolvedValue([{ messageId: "m3", channel: "slack" }]);
 
     await runSend({
       to: "channel:C1",
@@ -338,50 +232,6 @@ describe("gateway send mirroring", () => {
           sessionKey: "agent:main:slack:channel:resolved",
           agentId: "main",
         }),
-      }),
-    );
-  });
-
-  it("forwards threadId to outbound delivery when provided", async () => {
-    mockDeliverySuccess("m-thread");
-
-    await runSend({
-      to: "channel:C1",
-      message: "hi",
-      channel: "slack",
-      threadId: "1710000000.9999",
-      idempotencyKey: "idem-thread",
-    });
-
-    expect(mocks.deliverOutboundPayloads).toHaveBeenCalledWith(
-      expect.objectContaining({
-        threadId: "1710000000.9999",
-      }),
-    );
-  });
-
-  it("returns invalid request when outbound target resolution fails", async () => {
-    vi.mocked(resolveOutboundTarget).mockReturnValue({
-      ok: false,
-      error: new Error("target not found"),
-    });
-
-    const { respond } = await runSend({
-      to: "channel:C1",
-      message: "hi",
-      channel: "slack",
-      idempotencyKey: "idem-target-fail",
-    });
-
-    expect(mocks.deliverOutboundPayloads).not.toHaveBeenCalled();
-    expect(respond).toHaveBeenCalledWith(
-      false,
-      undefined,
-      expect.objectContaining({
-        message: expect.stringContaining("target not found"),
-      }),
-      expect.objectContaining({
-        channel: "slack",
       }),
     );
   });

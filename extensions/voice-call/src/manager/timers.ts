@@ -77,25 +77,16 @@ export function resolveTranscriptWaiter(
   ctx: TranscriptWaiterContext,
   callId: CallId,
   transcript: string,
-  turnToken?: string,
-): boolean {
+): void {
   const waiter = ctx.transcriptWaiters.get(callId);
   if (!waiter) {
-    return false;
-  }
-  if (waiter.turnToken && waiter.turnToken !== turnToken) {
-    return false;
+    return;
   }
   clearTranscriptWaiter(ctx, callId);
   waiter.resolve(transcript);
-  return true;
 }
 
-export function waitForFinalTranscript(
-  ctx: TimerContext,
-  callId: CallId,
-  turnToken?: string,
-): Promise<string> {
+export function waitForFinalTranscript(ctx: TimerContext, callId: CallId): Promise<string> {
   if (ctx.transcriptWaiters.has(callId)) {
     return Promise.reject(new Error("Already waiting for transcript"));
   }
@@ -107,6 +98,6 @@ export function waitForFinalTranscript(
       reject(new Error(`Timed out waiting for transcript after ${timeoutMs}ms`));
     }, timeoutMs);
 
-    ctx.transcriptWaiters.set(callId, { resolve, reject, timeout, turnToken });
+    ctx.transcriptWaiters.set(callId, { resolve, reject, timeout });
   });
 }

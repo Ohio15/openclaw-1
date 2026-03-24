@@ -245,39 +245,38 @@ type VerificationResult = {
   error?: unknown;
 };
 
-function resolveVerificationEndpoint(params: {
+async function requestOpenAiVerification(params: {
   baseUrl: string;
+  apiKey: string;
   modelId: string;
-  endpointPath: "chat/completions" | "messages";
-}) {
+}): Promise<VerificationResult> {
+  // Transform Azure URLs to include the deployment path
   const resolvedUrl = isAzureUrl(params.baseUrl)
     ? transformAzureUrl(params.baseUrl, params.modelId)
     : params.baseUrl;
   const endpointUrl = new URL(
-    params.endpointPath,
+    "chat/completions",
     resolvedUrl.endsWith("/") ? resolvedUrl : `${resolvedUrl}/`,
   );
+  // Azure requires api-version query parameter
   if (isAzureUrl(params.baseUrl)) {
     endpointUrl.searchParams.set("api-version", "2024-10-21");
   }
-  return endpointUrl.href;
-}
-
-async function requestVerification(params: {
-  endpoint: string;
-  headers: Record<string, string>;
-  body: Record<string, unknown>;
-}): Promise<VerificationResult> {
+  const endpoint = endpointUrl.href;
   try {
     const res = await fetchWithTimeout(
-      params.endpoint,
+      endpoint,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...params.headers,
+          ...buildOpenAiHeaders(params.apiKey),
         },
-        body: JSON.stringify(params.body),
+        body: JSON.stringify({
+          model: params.modelId,
+          messages: [{ role: "user", content: "Hi" }],
+          max_tokens: 5,
+        }),
       },
       VERIFY_TIMEOUT_MS,
     );
@@ -287,52 +286,45 @@ async function requestVerification(params: {
   }
 }
 
-async function requestOpenAiVerification(params: {
-  baseUrl: string;
-  apiKey: string;
-  modelId: string;
-}): Promise<VerificationResult> {
-  const endpoint = resolveVerificationEndpoint({
-    baseUrl: params.baseUrl,
-    modelId: params.modelId,
-    endpointPath: "chat/completions",
-  });
-  return await requestVerification({
-    endpoint,
-    headers: buildOpenAiHeaders(params.apiKey),
-    body: {
-      model: params.modelId,
-      messages: [{ role: "user", content: "Hi" }],
-      max_tokens: 1024,
-    },
-  });
-}
-
 async function requestAnthropicVerification(params: {
   baseUrl: string;
   apiKey: string;
   modelId: string;
 }): Promise<VerificationResult> {
-  // Use a base URL with /v1 injected for this raw fetch only. The rest of the app uses the
-  // Anthropic client, which appends /v1 itself; config should store the base URL
-  // without /v1 to avoid /v1/v1/messages at runtime. See docs/gateway/configuration-reference.md.
-  const baseUrlForRequest = /\/v1\/?$/.test(params.baseUrl.trim())
-    ? params.baseUrl.trim()
-    : params.baseUrl.trim().replace(/\/?$/, "") + "/v1";
-  const endpoint = resolveVerificationEndpoint({
-    baseUrl: baseUrlForRequest,
-    modelId: params.modelId,
-    endpointPath: "messages",
-  });
-  return await requestVerification({
-    endpoint,
-    headers: buildAnthropicHeaders(params.apiKey),
-    body: {
-      model: params.modelId,
-      max_tokens: 1024,
-      messages: [{ role: "user", content: "Hi" }],
-    },
-  });
+  // Transform Azure URLs to include the deployment path
+  const resolvedUrl = isAzureUrl(params.baseUrl)
+    ? transformAzureUrl(params.baseUrl, params.modelId)
+    : params.baseUrl;
+  const endpointUrl = new URL(
+    "messages",
+    resolvedUrl.endsWith("/") ? resolvedUrl : `${resolvedUrl}/`,
+  );
+  // Azure requires api-version query parameter
+  if (isAzureUrl(params.baseUrl)) {
+    endpointUrl.searchParams.set("api-version", "2024-10-21");
+  }
+  const endpoint = endpointUrl.href;
+  try {
+    const res = await fetchWithTimeout(
+      endpoint,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...buildAnthropicHeaders(params.apiKey),
+        },
+        body: JSON.stringify({
+          model: params.modelId,
+          max_tokens: 16,
+          messages: [{ role: "user", content: "Hi" }],
+        }),
+      },
+      VERIFY_TIMEOUT_MS,
+    );
+    return { ok: res.ok, status: res.status };
+  } catch (error) {
+    return { ok: false, error };
+  }
 }
 
 async function promptBaseUrlAndKey(params: {
@@ -381,26 +373,6 @@ async function promptCustomApiModelId(prompter: WizardPrompter): Promise<string>
       validate: (val) => (val.trim() ? undefined : "Model ID is required"),
     })
   ).trim();
-}
-
-async function applyCustomApiRetryChoice(params: {
-  prompter: WizardPrompter;
-  retryChoice: CustomApiRetryChoice;
-  current: { baseUrl: string; apiKey: string; modelId: string };
-}): Promise<{ baseUrl: string; apiKey: string; modelId: string }> {
-  let { baseUrl, apiKey, modelId } = params.current;
-  if (params.retryChoice === "baseUrl" || params.retryChoice === "both") {
-    const retryInput = await promptBaseUrlAndKey({
-      prompter: params.prompter,
-      initialBaseUrl: baseUrl,
-    });
-    baseUrl = retryInput.baseUrl;
-    apiKey = retryInput.apiKey;
-  }
-  if (params.retryChoice === "model" || params.retryChoice === "both") {
-    modelId = await promptCustomApiModelId(params.prompter);
-  }
-  return { baseUrl, apiKey, modelId };
 }
 
 function resolveProviderApi(
@@ -638,11 +610,17 @@ export async function promptCustomApiConfig(params: {
             "Endpoint detection",
           );
           const retryChoice = await promptCustomApiRetryChoice(prompter);
-          ({ baseUrl, apiKey, modelId } = await applyCustomApiRetryChoice({
-            prompter,
-            retryChoice,
-            current: { baseUrl, apiKey, modelId },
-          }));
+          if (retryChoice === "baseUrl" || retryChoice === "both") {
+            const retryInput = await promptBaseUrlAndKey({
+              prompter,
+              initialBaseUrl: baseUrl,
+            });
+            baseUrl = retryInput.baseUrl;
+            apiKey = retryInput.apiKey;
+          }
+          if (retryChoice === "model" || retryChoice === "both") {
+            modelId = await promptCustomApiModelId(prompter);
+          }
           continue;
         }
       }
@@ -667,11 +645,17 @@ export async function promptCustomApiConfig(params: {
       verifySpinner.stop(`Verification failed: ${formatVerificationError(result.error)}`);
     }
     const retryChoice = await promptCustomApiRetryChoice(prompter);
-    ({ baseUrl, apiKey, modelId } = await applyCustomApiRetryChoice({
-      prompter,
-      retryChoice,
-      current: { baseUrl, apiKey, modelId },
-    }));
+    if (retryChoice === "baseUrl" || retryChoice === "both") {
+      const retryInput = await promptBaseUrlAndKey({
+        prompter,
+        initialBaseUrl: baseUrl,
+      });
+      baseUrl = retryInput.baseUrl;
+      apiKey = retryInput.apiKey;
+    }
+    if (retryChoice === "model" || retryChoice === "both") {
+      modelId = await promptCustomApiModelId(prompter);
+    }
     if (compatibilityChoice === "unknown") {
       compatibility = null;
     }

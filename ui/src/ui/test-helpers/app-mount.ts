@@ -1,6 +1,5 @@
 import { afterEach, beforeEach } from "vitest";
-import "../app.ts";
-import type { OpenClawApp } from "../app.ts";
+import { OpenClawApp } from "../app.ts";
 
 export function mountApp(pathname: string) {
   window.history.replaceState({}, "", pathname);

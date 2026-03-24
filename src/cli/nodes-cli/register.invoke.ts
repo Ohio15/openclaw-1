@@ -253,7 +253,6 @@ export function registerNodesInvokeCommands(nodes: Command) {
                 id: approvalId,
                 command: rawCommand ?? argv.join(" "),
                 cwd: opts.cwd,
-                nodeId,
                 host: "node",
                 security: hostSecurity,
                 ask: hostAsk,

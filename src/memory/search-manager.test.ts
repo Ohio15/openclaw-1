@@ -1,53 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 
-function createManagerStatus(params: {
-  backend: "qmd" | "builtin";
-  provider: string;
-  model: string;
-  requestedProvider: string;
-  withMemorySourceCounts?: boolean;
-}) {
-  const base = {
-    backend: params.backend,
-    provider: params.provider,
-    model: params.model,
-    requestedProvider: params.requestedProvider,
+const mockPrimary = {
+  search: vi.fn(async () => []),
+  readFile: vi.fn(async () => ({ text: "", path: "MEMORY.md" })),
+  status: vi.fn(() => ({
+    backend: "qmd" as const,
+    provider: "qmd",
+    model: "qmd",
+    requestedProvider: "qmd",
     files: 0,
     chunks: 0,
     dirty: false,
     workspaceDir: "/tmp",
     dbPath: "/tmp/index.sqlite",
-  };
-  if (!params.withMemorySourceCounts) {
-    return base;
-  }
-  return {
-    ...base,
     sources: ["memory" as const],
     sourceCounts: [{ source: "memory" as const, files: 0, chunks: 0 }],
-  };
-}
-
-const qmdManagerStatus = createManagerStatus({
-  backend: "qmd",
-  provider: "qmd",
-  model: "qmd",
-  requestedProvider: "qmd",
-  withMemorySourceCounts: true,
-});
-
-const fallbackManagerStatus = createManagerStatus({
-  backend: "builtin",
-  provider: "openai",
-  model: "text-embedding-3-small",
-  requestedProvider: "openai",
-});
-
-const mockPrimary = {
-  search: vi.fn(async () => []),
-  readFile: vi.fn(async () => ({ text: "", path: "MEMORY.md" })),
-  status: vi.fn(() => qmdManagerStatus),
+  })),
   sync: vi.fn(async () => {}),
   probeEmbeddingAvailability: vi.fn(async () => ({ ok: true })),
   probeVectorAvailability: vi.fn(async () => true),
@@ -68,7 +37,17 @@ const fallbackSearch = vi.fn(async () => [
 const fallbackManager = {
   search: fallbackSearch,
   readFile: vi.fn(async () => ({ text: "", path: "MEMORY.md" })),
-  status: vi.fn(() => fallbackManagerStatus),
+  status: vi.fn(() => ({
+    backend: "builtin" as const,
+    provider: "openai",
+    model: "text-embedding-3-small",
+    requestedProvider: "openai",
+    files: 0,
+    chunks: 0,
+    dirty: false,
+    workspaceDir: "/tmp",
+    dbPath: "/tmp/index.sqlite",
+  })),
   sync: vi.fn(async () => {}),
   probeEmbeddingAvailability: vi.fn(async () => ({ ok: true })),
   probeVectorAvailability: vi.fn(async () => true),
@@ -134,7 +113,7 @@ beforeEach(() => {
   fallbackManager.probeEmbeddingAvailability.mockClear();
   fallbackManager.probeVectorAvailability.mockClear();
   fallbackManager.close.mockClear();
-  mockMemoryIndexGet.mockClear();
+  mockMemoryIndexGet.mockReset();
   mockMemoryIndexGet.mockResolvedValue(fallbackManager);
   createQmdManagerMock.mockClear();
 });

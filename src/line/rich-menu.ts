@@ -10,7 +10,6 @@ type RichMenuRequest = messagingApi.RichMenuRequest;
 type RichMenuResponse = messagingApi.RichMenuResponse;
 type RichMenuArea = messagingApi.RichMenuArea;
 type Action = messagingApi.Action;
-const USER_BATCH_SIZE = 500;
 
 export interface RichMenuSize {
   width: 2500;
@@ -65,14 +64,6 @@ function getBlobClient(opts: RichMenuOpts = {}): messagingApi.MessagingApiBlobCl
   return new messagingApi.MessagingApiBlobClient({
     channelAccessToken: token,
   });
-}
-
-function chunkUserIds(userIds: string[]): string[][] {
-  const batches: string[][] = [];
-  for (let i = 0; i < userIds.length; i += USER_BATCH_SIZE) {
-    batches.push(userIds.slice(i, i + USER_BATCH_SIZE));
-  }
-  return batches;
 }
 
 /**
@@ -196,7 +187,13 @@ export async function linkRichMenuToUsers(
 ): Promise<void> {
   const client = getClient(opts);
 
-  for (const batch of chunkUserIds(userIds)) {
+  // LINE allows max 500 users per request
+  const batches = [];
+  for (let i = 0; i < userIds.length; i += 500) {
+    batches.push(userIds.slice(i, i + 500));
+  }
+
+  for (const batch of batches) {
     await client.linkRichMenuIdToUsers({
       richMenuId,
       userIds: batch,
@@ -233,7 +230,13 @@ export async function unlinkRichMenuFromUsers(
 ): Promise<void> {
   const client = getClient(opts);
 
-  for (const batch of chunkUserIds(userIds)) {
+  // LINE allows max 500 users per request
+  const batches = [];
+  for (let i = 0; i < userIds.length; i += 500) {
+    batches.push(userIds.slice(i, i + 500));
+  }
+
+  for (const batch of batches) {
     await client.unlinkRichMenuIdFromUsers({
       userIds: batch,
     });

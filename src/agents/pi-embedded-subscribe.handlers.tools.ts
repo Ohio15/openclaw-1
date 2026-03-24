@@ -9,11 +9,10 @@ import type {
   ToolHandlerContext,
 } from "./pi-embedded-subscribe.handlers.types.js";
 import {
-  extractMessagingToolSend,
   extractToolErrorMessage,
   extractToolResultMediaPaths,
   extractToolResultText,
-  filterToolResultMediaUrls,
+  extractMessagingToolSend,
   isToolResultError,
   sanitizeToolResult,
 } from "./pi-embedded-subscribe.tools.js";
@@ -129,44 +128,6 @@ function collectMessagingMediaUrlsFromToolResult(result: unknown): string[] {
   return urls;
 }
 
-function emitToolResultOutput(params: {
-  ctx: ToolHandlerContext;
-  toolName: string;
-  meta?: string;
-  isToolError: boolean;
-  result: unknown;
-  sanitizedResult: unknown;
-}) {
-  const { ctx, toolName, meta, isToolError, result, sanitizedResult } = params;
-  if (!ctx.params.onToolResult) {
-    return;
-  }
-
-  if (ctx.shouldEmitToolOutput()) {
-    const outputText = extractToolResultText(sanitizedResult);
-    if (outputText) {
-      ctx.emitToolOutput(toolName, meta, outputText);
-    }
-    return;
-  }
-
-  if (isToolError) {
-    return;
-  }
-
-  // emitToolOutput() already handles MEDIA: directives when enabled; this path
-  // only sends raw media URLs for non-verbose delivery mode.
-  const mediaPaths = filterToolResultMediaUrls(toolName, extractToolResultMediaPaths(result));
-  if (mediaPaths.length === 0) {
-    return;
-  }
-  try {
-    void ctx.params.onToolResult({ mediaUrls: mediaPaths });
-  } catch {
-    // ignore delivery failures
-  }
-}
-
 export async function handleToolExecutionStart(
   ctx: ToolHandlerContext,
   evt: AgentEvent & { toolName: string; toolCallId: string; args: unknown },
@@ -174,7 +135,7 @@ export async function handleToolExecutionStart(
   // Flush pending block replies to preserve message boundaries before tool execution.
   ctx.flushBlockReplyBuffer();
   if (ctx.params.onBlockReplyFlush) {
-    await ctx.params.onBlockReplyFlush();
+    void ctx.params.onBlockReplyFlush();
   }
 
   const rawToolName = String(evt.toolName);
@@ -409,7 +370,26 @@ export async function handleToolExecutionEnd(
     `embedded run tool end: runId=${ctx.params.runId} tool=${toolName} toolCallId=${toolCallId}`,
   );
 
-  emitToolResultOutput({ ctx, toolName, meta, isToolError, result, sanitizedResult });
+  if (ctx.params.onToolResult && ctx.shouldEmitToolOutput()) {
+    const outputText = extractToolResultText(sanitizedResult);
+    if (outputText) {
+      ctx.emitToolOutput(toolName, meta, outputText);
+    }
+  }
+
+  // Deliver media from tool results when the verbose emitToolOutput path is off.
+  // When shouldEmitToolOutput() is true, emitToolOutput already delivers media
+  // via parseReplyDirectives (MEDIA: text extraction), so skip to avoid duplicates.
+  if (ctx.params.onToolResult && !isToolError && !ctx.shouldEmitToolOutput()) {
+    const mediaPaths = extractToolResultMediaPaths(result);
+    if (mediaPaths.length > 0) {
+      try {
+        void ctx.params.onToolResult({ mediaUrls: mediaPaths });
+      } catch {
+        // ignore delivery failures
+      }
+    }
+  }
 
   // Run after_tool_call plugin hook (fire-and-forget)
   const hookRunnerAfter = ctx.hookRunner ?? getGlobalHookRunner();

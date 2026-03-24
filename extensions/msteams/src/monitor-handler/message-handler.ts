@@ -5,8 +5,6 @@ import {
   logInboundDrop,
   recordPendingHistoryEntryIfEnabled,
   resolveControlCommandGate,
-  resolveDefaultGroupPolicy,
-  isDangerousNameMatchingEnabled,
   resolveMentionGating,
   formatAllowlistMatchMeta,
   type HistoryEntry,
@@ -126,18 +124,16 @@ export function createMSTeamsMessageHandler(deps: MSTeamsMessageHandlerDeps) {
 
     const senderName = from.name ?? from.id;
     const senderId = from.aadObjectId ?? from.id;
-    const dmPolicy = msteamsCfg?.dmPolicy ?? "pairing";
-    const storedAllowFrom =
-      dmPolicy === "allowlist"
-        ? []
-        : await core.channel.pairing.readAllowFromStore("msteams").catch(() => []);
+    const storedAllowFrom = await core.channel.pairing
+      .readAllowFromStore("msteams")
+      .catch(() => []);
     const useAccessGroups = cfg.commands?.useAccessGroups !== false;
 
     // Check DM policy for direct messages.
     const dmAllowFrom = msteamsCfg?.allowFrom ?? [];
-    const configuredDmAllowFrom = dmAllowFrom.map((v) => String(v));
-    const effectiveDmAllowFrom = [...configuredDmAllowFrom, ...storedAllowFrom];
+    const effectiveDmAllowFrom = [...dmAllowFrom.map((v) => String(v)), ...storedAllowFrom];
     if (isDirectMessage && msteamsCfg) {
+      const dmPolicy = msteamsCfg.dmPolicy ?? "pairing";
       const allowFrom = dmAllowFrom;
 
       if (dmPolicy === "disabled") {
@@ -147,12 +143,10 @@ export function createMSTeamsMessageHandler(deps: MSTeamsMessageHandlerDeps) {
 
       if (dmPolicy !== "open") {
         const effectiveAllowFrom = [...allowFrom.map((v) => String(v)), ...storedAllowFrom];
-        const allowNameMatching = isDangerousNameMatchingEnabled(msteamsCfg);
         const allowMatch = resolveMSTeamsAllowlistMatch({
           allowFrom: effectiveAllowFrom,
           senderId,
           senderName,
-          allowNameMatching,
         });
 
         if (!allowMatch.allowed) {
@@ -179,7 +173,7 @@ export function createMSTeamsMessageHandler(deps: MSTeamsMessageHandlerDeps) {
       }
     }
 
-    const defaultGroupPolicy = resolveDefaultGroupPolicy(cfg);
+    const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
     const groupPolicy =
       !isDirectMessage && msteamsCfg
         ? (msteamsCfg.groupPolicy ?? defaultGroupPolicy ?? "allowlist")
@@ -190,7 +184,9 @@ export function createMSTeamsMessageHandler(deps: MSTeamsMessageHandlerDeps) {
           (msteamsCfg.allowFrom && msteamsCfg.allowFrom.length > 0 ? msteamsCfg.allowFrom : []))
         : [];
     const effectiveGroupAllowFrom =
-      !isDirectMessage && msteamsCfg ? groupAllowFrom.map((v) => String(v)) : [];
+      !isDirectMessage && msteamsCfg
+        ? [...groupAllowFrom.map((v) => String(v)), ...storedAllowFrom]
+        : [];
     const teamId = activity.channelData?.team?.id;
     const teamName = activity.channelData?.team?.name;
     const channelName = activity.channelData?.channel?.name;
@@ -228,12 +224,10 @@ export function createMSTeamsMessageHandler(deps: MSTeamsMessageHandlerDeps) {
           return;
         }
         if (effectiveGroupAllowFrom.length > 0) {
-          const allowNameMatching = isDangerousNameMatchingEnabled(msteamsCfg);
           const allowMatch = resolveMSTeamsAllowlistMatch({
             allowFrom: effectiveGroupAllowFrom,
             senderId,
             senderName,
-            allowNameMatching,
           });
           if (!allowMatch.allowed) {
             log.debug?.("dropping group message (not in groupAllowFrom)", {
@@ -247,26 +241,23 @@ export function createMSTeamsMessageHandler(deps: MSTeamsMessageHandlerDeps) {
       }
     }
 
-    const commandDmAllowFrom = isDirectMessage ? effectiveDmAllowFrom : configuredDmAllowFrom;
     const ownerAllowedForCommands = isMSTeamsGroupAllowed({
       groupPolicy: "allowlist",
-      allowFrom: commandDmAllowFrom,
+      allowFrom: effectiveDmAllowFrom,
       senderId,
       senderName,
-      allowNameMatching: isDangerousNameMatchingEnabled(msteamsCfg),
     });
     const groupAllowedForCommands = isMSTeamsGroupAllowed({
       groupPolicy: "allowlist",
       allowFrom: effectiveGroupAllowFrom,
       senderId,
       senderName,
-      allowNameMatching: isDangerousNameMatchingEnabled(msteamsCfg),
     });
     const hasControlCommandInMessage = core.channel.text.hasControlCommand(text, cfg);
     const commandGate = resolveControlCommandGate({
       useAccessGroups,
       authorizers: [
-        { configured: commandDmAllowFrom.length > 0, allowed: ownerAllowedForCommands },
+        { configured: effectiveDmAllowFrom.length > 0, allowed: ownerAllowedForCommands },
         { configured: effectiveGroupAllowFrom.length > 0, allowed: groupAllowedForCommands },
       ],
       allowTextCommands: true,

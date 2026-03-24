@@ -1,5 +1,4 @@
 import { getMSTeamsRuntime } from "../runtime.js";
-import { downloadAndStoreMSTeamsRemoteMedia } from "./remote-media.js";
 import {
   extractInlineImageCandidates,
   inferPlaceholder,
@@ -7,10 +6,8 @@ import {
   isRecord,
   isUrlAllowed,
   normalizeContentType,
-  resolveRequestUrl,
   resolveAuthAllowedHosts,
   resolveAllowedHosts,
-  safeFetch,
 } from "./shared.js";
 import type {
   MSTeamsAccessTokenProvider,
@@ -89,22 +86,11 @@ async function fetchWithAuthFallback(params: {
   url: string;
   tokenProvider?: MSTeamsAccessTokenProvider;
   fetchFn?: typeof fetch;
-  requestInit?: RequestInit;
   allowHosts: string[];
   authAllowHosts: string[];
-  resolveFn?: (hostname: string) => Promise<{ address: string }>;
 }): Promise<Response> {
   const fetchFn = params.fetchFn ?? fetch;
-
-  // Use safeFetch for the initial attempt — redirect: "manual" with
-  // allowlist + DNS/IP validation on every hop (prevents SSRF via redirect).
-  const firstAttempt = await safeFetch({
-    url: params.url,
-    allowHosts: params.allowHosts,
-    fetchFn,
-    requestInit: params.requestInit,
-    resolveFn: params.resolveFn,
-  });
+  const firstAttempt = await fetchFn(params.url);
   if (firstAttempt.ok) {
     return firstAttempt;
   }
@@ -122,42 +108,31 @@ async function fetchWithAuthFallback(params: {
   for (const scope of scopes) {
     try {
       const token = await params.tokenProvider.getAccessToken(scope);
-      const authHeaders = new Headers(params.requestInit?.headers);
-      authHeaders.set("Authorization", `Bearer ${token}`);
-      const authAttempt = await safeFetch({
-        url: params.url,
-        allowHosts: params.allowHosts,
-        fetchFn,
-        requestInit: {
-          ...params.requestInit,
-          headers: authHeaders,
-        },
-        resolveFn: params.resolveFn,
+      const res = await fetchFn(params.url, {
+        headers: { Authorization: `Bearer ${token}` },
+        redirect: "manual",
       });
-      if (authAttempt.ok) {
-        return authAttempt;
+      if (res.ok) {
+        return res;
       }
-      if (authAttempt.status !== 401 && authAttempt.status !== 403) {
-        continue;
-      }
-
-      const finalUrl =
-        typeof authAttempt.url === "string" && authAttempt.url ? authAttempt.url : "";
-      if (!finalUrl || finalUrl === params.url || !isUrlAllowed(finalUrl, params.authAllowHosts)) {
-        continue;
-      }
-      const redirectedAuthAttempt = await safeFetch({
-        url: finalUrl,
-        allowHosts: params.allowHosts,
-        fetchFn,
-        requestInit: {
-          ...params.requestInit,
-          headers: authHeaders,
-        },
-        resolveFn: params.resolveFn,
-      });
-      if (redirectedAuthAttempt.ok) {
-        return redirectedAuthAttempt;
+      const redirectUrl = readRedirectUrl(params.url, res);
+      if (redirectUrl && isUrlAllowed(redirectUrl, params.allowHosts)) {
+        const redirectRes = await fetchFn(redirectUrl);
+        if (redirectRes.ok) {
+          return redirectRes;
+        }
+        if (
+          (redirectRes.status === 401 || redirectRes.status === 403) &&
+          isUrlAllowed(redirectUrl, params.authAllowHosts)
+        ) {
+          const redirectAuthRes = await fetchFn(redirectUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+            redirect: "manual",
+          });
+          if (redirectAuthRes.ok) {
+            return redirectAuthRes;
+          }
+        }
       }
     } catch {
       // Try the next scope.
@@ -165,6 +140,21 @@ async function fetchWithAuthFallback(params: {
   }
 
   return firstAttempt;
+}
+
+function readRedirectUrl(baseUrl: string, res: Response): string | null {
+  if (![301, 302, 303, 307, 308].includes(res.status)) {
+    return null;
+  }
+  const location = res.headers.get("location");
+  if (!location) {
+    return null;
+  }
+  try {
+    return new URL(location, baseUrl).toString();
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -180,8 +170,6 @@ export async function downloadMSTeamsAttachments(params: {
   fetchFn?: typeof fetch;
   /** When true, embeds original filename in stored path for later extraction. */
   preserveFilenames?: boolean;
-  /** Override DNS resolver for testing (anti-SSRF IP validation). */
-  resolveFn?: (hostname: string) => Promise<{ address: string }>;
 }): Promise<MSTeamsInboundMedia[]> {
   const list = Array.isArray(params.attachments) ? params.attachments : [];
   if (list.length === 0) {
@@ -250,25 +238,38 @@ export async function downloadMSTeamsAttachments(params: {
       continue;
     }
     try {
-      const media = await downloadAndStoreMSTeamsRemoteMedia({
+      const res = await fetchWithAuthFallback({
         url: candidate.url,
-        filePathHint: candidate.fileHint ?? candidate.url,
-        maxBytes: params.maxBytes,
-        contentTypeHint: candidate.contentTypeHint,
-        placeholder: candidate.placeholder,
-        preserveFilenames: params.preserveFilenames,
-        fetchImpl: (input, init) =>
-          fetchWithAuthFallback({
-            url: resolveRequestUrl(input),
-            tokenProvider: params.tokenProvider,
-            fetchFn: params.fetchFn,
-            requestInit: init,
-            allowHosts,
-            authAllowHosts,
-            resolveFn: params.resolveFn,
-          }),
+        tokenProvider: params.tokenProvider,
+        fetchFn: params.fetchFn,
+        allowHosts,
+        authAllowHosts,
       });
-      out.push(media);
+      if (!res.ok) {
+        continue;
+      }
+      const buffer = Buffer.from(await res.arrayBuffer());
+      if (buffer.byteLength > params.maxBytes) {
+        continue;
+      }
+      const mime = await getMSTeamsRuntime().media.detectMime({
+        buffer,
+        headerMime: res.headers.get("content-type"),
+        filePath: candidate.fileHint ?? candidate.url,
+      });
+      const originalFilename = params.preserveFilenames ? candidate.fileHint : undefined;
+      const saved = await getMSTeamsRuntime().channel.media.saveMediaBuffer(
+        buffer,
+        mime ?? candidate.contentTypeHint,
+        "inbound",
+        params.maxBytes,
+        originalFilename,
+      );
+      out.push({
+        path: saved.path,
+        contentType: saved.contentType,
+        placeholder: candidate.placeholder,
+      });
     } catch {
       // Ignore download failures and continue with next candidate.
     }

@@ -67,8 +67,6 @@ final class DeepLinkHandler {
         switch route {
         case let .agent(link):
             await self.handleAgent(link: link, originalURL: url)
-        case .gateway:
-            break
         }
     }
 

@@ -11,18 +11,10 @@ import {
   buildLaunchAgentPlist as buildLaunchAgentPlistImpl,
   readLaunchAgentProgramArgumentsFromFile,
 } from "./launchd-plist.js";
-import { formatLine, toPosixPath, writeFormattedLines } from "./output.js";
+import { formatLine, toPosixPath } from "./output.js";
 import { resolveGatewayStateDir, resolveHomeDir } from "./paths.js";
 import { parseKeyValueOutput } from "./runtime-parse.js";
 import type { GatewayServiceRuntime } from "./service-runtime.js";
-import type {
-  GatewayServiceCommandConfig,
-  GatewayServiceControlArgs,
-  GatewayServiceEnv,
-  GatewayServiceEnvArgs,
-  GatewayServiceInstallArgs,
-  GatewayServiceManageArgs,
-} from "./service-types.js";
 
 function resolveLaunchAgentLabel(args?: { env?: Record<string, string | undefined> }): string {
   const envLabel = args?.env?.OPENCLAW_LAUNCHD_LABEL?.trim();
@@ -40,12 +32,12 @@ function resolveLaunchAgentPlistPathForLabel(
   return path.posix.join(home, "Library", "LaunchAgents", `${label}.plist`);
 }
 
-export function resolveLaunchAgentPlistPath(env: GatewayServiceEnv): string {
+export function resolveLaunchAgentPlistPath(env: Record<string, string | undefined>): string {
   const label = resolveLaunchAgentLabel({ env });
   return resolveLaunchAgentPlistPathForLabel(env, label);
 }
 
-export function resolveGatewayLogPaths(env: GatewayServiceEnv): {
+export function resolveGatewayLogPaths(env: Record<string, string | undefined>): {
   logDir: string;
   stdoutPath: string;
   stderrPath: string;
@@ -61,8 +53,13 @@ export function resolveGatewayLogPaths(env: GatewayServiceEnv): {
 }
 
 export async function readLaunchAgentProgramArguments(
-  env: GatewayServiceEnv,
-): Promise<GatewayServiceCommandConfig | null> {
+  env: Record<string, string | undefined>,
+): Promise<{
+  programArguments: string[];
+  workingDirectory?: string;
+  environment?: Record<string, string>;
+  sourcePath?: string;
+} | null> {
   const plistPath = resolveLaunchAgentPlistPath(env);
   return readLaunchAgentProgramArgumentsFromFile(plistPath);
 }
@@ -146,14 +143,18 @@ export function parseLaunchctlPrint(output: string): LaunchctlPrintInfo {
   return info;
 }
 
-export async function isLaunchAgentLoaded(args: GatewayServiceEnvArgs): Promise<boolean> {
+export async function isLaunchAgentLoaded(args: {
+  env?: Record<string, string | undefined>;
+}): Promise<boolean> {
   const domain = resolveGuiDomain();
   const label = resolveLaunchAgentLabel({ env: args.env });
   const res = await execLaunchctl(["print", `${domain}/${label}`]);
   return res.code === 0;
 }
 
-export async function isLaunchAgentListed(args: GatewayServiceEnvArgs): Promise<boolean> {
+export async function isLaunchAgentListed(args: {
+  env?: Record<string, string | undefined>;
+}): Promise<boolean> {
   const label = resolveLaunchAgentLabel({ env: args.env });
   const res = await execLaunchctl(["list"]);
   if (res.code !== 0) {
@@ -162,7 +163,9 @@ export async function isLaunchAgentListed(args: GatewayServiceEnvArgs): Promise<
   return res.stdout.split(/\r?\n/).some((line) => line.trim().split(/\s+/).at(-1) === label);
 }
 
-export async function launchAgentPlistExists(env: GatewayServiceEnv): Promise<boolean> {
+export async function launchAgentPlistExists(
+  env: Record<string, string | undefined>,
+): Promise<boolean> {
   try {
     const plistPath = resolveLaunchAgentPlistPath(env);
     await fs.access(plistPath);
@@ -224,7 +227,9 @@ export type LegacyLaunchAgent = {
   exists: boolean;
 };
 
-export async function findLegacyLaunchAgents(env: GatewayServiceEnv): Promise<LegacyLaunchAgent[]> {
+export async function findLegacyLaunchAgents(
+  env: Record<string, string | undefined>,
+): Promise<LegacyLaunchAgent[]> {
   const domain = resolveGuiDomain();
   const results: LegacyLaunchAgent[] = [];
   for (const label of resolveLegacyGatewayLaunchAgentLabels(env.OPENCLAW_PROFILE)) {
@@ -248,7 +253,10 @@ export async function findLegacyLaunchAgents(env: GatewayServiceEnv): Promise<Le
 export async function uninstallLegacyLaunchAgents({
   env,
   stdout,
-}: GatewayServiceManageArgs): Promise<LegacyLaunchAgent[]> {
+}: {
+  env: Record<string, string | undefined>;
+  stdout: NodeJS.WritableStream;
+}): Promise<LegacyLaunchAgent[]> {
   const domain = resolveGuiDomain();
   const agents = await findLegacyLaunchAgents(env);
   if (agents.length === 0) {
@@ -288,7 +296,10 @@ export async function uninstallLegacyLaunchAgents({
 export async function uninstallLaunchAgent({
   env,
   stdout,
-}: GatewayServiceManageArgs): Promise<void> {
+}: {
+  env: Record<string, string | undefined>;
+  stdout: NodeJS.WritableStream;
+}): Promise<void> {
   const domain = resolveGuiDomain();
   const label = resolveLaunchAgentLabel({ env });
   const plistPath = resolveLaunchAgentPlistPath(env);
@@ -323,15 +334,13 @@ function isLaunchctlNotLoaded(res: { stdout: string; stderr: string; code: numbe
   );
 }
 
-function isUnsupportedGuiDomain(detail: string): boolean {
-  const normalized = detail.toLowerCase();
-  return (
-    normalized.includes("domain does not support specified action") ||
-    normalized.includes("bootstrap failed: 125")
-  );
-}
-
-export async function stopLaunchAgent({ stdout, env }: GatewayServiceControlArgs): Promise<void> {
+export async function stopLaunchAgent({
+  stdout,
+  env,
+}: {
+  stdout: NodeJS.WritableStream;
+  env?: Record<string, string | undefined>;
+}): Promise<void> {
   const domain = resolveGuiDomain();
   const label = resolveLaunchAgentLabel({ env });
   const res = await execLaunchctl(["bootout", `${domain}/${label}`]);
@@ -348,7 +357,14 @@ export async function installLaunchAgent({
   workingDirectory,
   environment,
   description,
-}: GatewayServiceInstallArgs): Promise<{ plistPath: string }> {
+}: {
+  env: Record<string, string | undefined>;
+  stdout: NodeJS.WritableStream;
+  programArguments: string[];
+  workingDirectory?: string;
+  environment?: Record<string, string | undefined>;
+  description?: string;
+}): Promise<{ plistPath: string }> {
   const { logDir, stdoutPath, stderrPath } = resolveGatewayLogPaths(env);
   await fs.mkdir(logDir, { recursive: true });
 
@@ -386,38 +402,24 @@ export async function installLaunchAgent({
   await execLaunchctl(["enable", `${domain}/${label}`]);
   const boot = await execLaunchctl(["bootstrap", domain, plistPath]);
   if (boot.code !== 0) {
-    const detail = (boot.stderr || boot.stdout).trim();
-    if (isUnsupportedGuiDomain(detail)) {
-      throw new Error(
-        [
-          `launchctl bootstrap failed: ${detail}`,
-          `LaunchAgent install requires a logged-in macOS GUI session for this user (${domain}).`,
-          "This usually means you are running from SSH/headless context or as the wrong user (including sudo).",
-          "Fix: sign in to the macOS desktop as the target user and rerun `openclaw gateway install --force`.",
-          "Headless deployments should use a dedicated logged-in user session or a custom LaunchDaemon (not shipped): https://docs.openclaw.ai/gateway",
-        ].join("\n"),
-      );
-    }
-    throw new Error(`launchctl bootstrap failed: ${detail}`);
+    throw new Error(`launchctl bootstrap failed: ${boot.stderr || boot.stdout}`.trim());
   }
   await execLaunchctl(["kickstart", "-k", `${domain}/${label}`]);
 
   // Ensure we don't end up writing to a clack spinner line (wizards show progress without a newline).
-  writeFormattedLines(
-    stdout,
-    [
-      { label: "Installed LaunchAgent", value: plistPath },
-      { label: "Logs", value: stdoutPath },
-    ],
-    { leadingBlankLine: true },
-  );
+  stdout.write("\n");
+  stdout.write(`${formatLine("Installed LaunchAgent", plistPath)}\n`);
+  stdout.write(`${formatLine("Logs", stdoutPath)}\n`);
   return { plistPath };
 }
 
 export async function restartLaunchAgent({
   stdout,
   env,
-}: GatewayServiceControlArgs): Promise<void> {
+}: {
+  stdout: NodeJS.WritableStream;
+  env?: Record<string, string | undefined>;
+}): Promise<void> {
   const domain = resolveGuiDomain();
   const label = resolveLaunchAgentLabel({ env });
   const res = await execLaunchctl(["kickstart", "-k", `${domain}/${label}`]);

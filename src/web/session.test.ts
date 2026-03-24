@@ -9,18 +9,6 @@ const { createWaSocket, formatError, logWebSelfId, waitForWaConnection } =
   await import("./session.js");
 const useMultiFileAuthStateMock = vi.mocked(baileys.useMultiFileAuthState);
 
-async function flushCredsUpdate() {
-  await new Promise<void>((resolve) => setImmediate(resolve));
-}
-
-async function emitCredsUpdateAndReadSaveCreds() {
-  const sock = getLastSocket();
-  const saveCreds = (await useMultiFileAuthStateMock.mock.results[0]?.value)?.saveCreds;
-  sock.ev.emit("creds.update", {});
-  await flushCredsUpdate();
-  return saveCreds;
-}
-
 function mockCredsJsonSpies(readContents: string) {
   const credsSuffix = path.join(".openclaw", "credentials", "whatsapp", "default", "creds.json");
   const copySpy = vi.spyOn(fsSync, "copyFileSync").mockImplementation(() => {});
@@ -81,7 +69,7 @@ describe("web session", () => {
     const saveCreds = (await useMultiFileAuthStateMock.mock.results[0]?.value)?.saveCreds;
     // trigger creds.update listener
     sock.ev.emit("creds.update", {});
-    await flushCredsUpdate();
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(saveCreds).toHaveBeenCalled();
   });
 
@@ -157,7 +145,11 @@ describe("web session", () => {
     const creds = mockCredsJsonSpies("{");
 
     await createWaSocket(false, false);
-    const saveCreds = await emitCredsUpdateAndReadSaveCreds();
+    const sock = getLastSocket();
+    const saveCreds = (await useMultiFileAuthStateMock.mock.results[0]?.value)?.saveCreds;
+
+    sock.ev.emit("creds.update", {});
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(creds.copySpy).not.toHaveBeenCalled();
     expect(saveCreds).toHaveBeenCalled();
@@ -190,14 +182,14 @@ describe("web session", () => {
     sock.ev.emit("creds.update", {});
     sock.ev.emit("creds.update", {});
 
-    await flushCredsUpdate();
+    await new Promise<void>((resolve) => setImmediate(resolve));
     expect(inFlight).toBe(1);
 
     (release as (() => void) | null)?.();
 
     // let both queued saves complete
-    await flushCredsUpdate();
-    await flushCredsUpdate();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(saveCreds).toHaveBeenCalledTimes(2);
     expect(maxInFlight).toBe(1);
@@ -215,7 +207,11 @@ describe("web session", () => {
     );
 
     await createWaSocket(false, false);
-    const saveCreds = await emitCredsUpdateAndReadSaveCreds();
+    const sock = getLastSocket();
+    const saveCreds = (await useMultiFileAuthStateMock.mock.results[0]?.value)?.saveCreds;
+
+    sock.ev.emit("creds.update", {});
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(creds.copySpy).toHaveBeenCalledTimes(1);
     const args = creds.copySpy.mock.calls[0] ?? [];

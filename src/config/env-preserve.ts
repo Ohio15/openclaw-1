@@ -1,5 +1,3 @@
-import { isPlainObject } from "../infra/plain-object.js";
-
 /**
  * Preserves `${VAR}` environment variable references during config write-back.
  *
@@ -17,6 +15,15 @@ import { isPlainObject } from "../infra/plain-object.js";
  */
 
 const ENV_VAR_PATTERN = /\$\{[A-Z_][A-Z0-9_]*\}/;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.prototype.toString.call(value) === "[object Object]"
+  );
+}
 
 /**
  * Check if a string contains any `${VAR}` env var references.

@@ -53,47 +53,25 @@ vi.mock("../../deps.js", () => ({
 
 const { createMessageCliHelpers } = await import("./helpers.js");
 
-const baseSendOptions = {
-  channel: "discord",
-  target: "123",
-  message: "hi",
-};
-
-function createRunMessageAction() {
-  const fakeCommand = { help: vi.fn() } as never;
-  return createMessageCliHelpers(fakeCommand, "discord").runMessageAction;
-}
-
-async function runSendAction(opts: Record<string, unknown> = {}) {
-  const runMessageAction = createRunMessageAction();
-  await expect(runMessageAction("send", { ...baseSendOptions, ...opts })).rejects.toThrow("exit");
-}
-
-function expectNoAccountFieldInPassedOptions() {
-  const passedOpts = (
-    messageCommandMock.mock.calls as unknown as Array<[Record<string, unknown>]>
-  )?.[0]?.[0];
-  expect(passedOpts).toBeTruthy();
-  if (!passedOpts) {
-    throw new Error("expected message command call");
-  }
-  expect(passedOpts).not.toHaveProperty("account");
-}
-
 describe("runMessageAction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    messageCommandMock.mockClear().mockResolvedValue(undefined);
-    hasHooksMock.mockClear().mockReturnValue(false);
-    runGatewayStopMock.mockClear().mockResolvedValue(undefined);
+    messageCommandMock.mockReset().mockResolvedValue(undefined);
+    hasHooksMock.mockReset().mockReturnValue(false);
+    runGatewayStopMock.mockReset().mockResolvedValue(undefined);
     runGlobalGatewayStopSafelyMock.mockClear();
-    exitMock.mockClear().mockImplementation((): never => {
+    exitMock.mockReset().mockImplementation((): never => {
       throw new Error("exit");
     });
   });
 
   it("calls exit(0) after successful message delivery", async () => {
-    await runSendAction();
+    const fakeCommand = { help: vi.fn() } as never;
+    const { runMessageAction } = createMessageCliHelpers(fakeCommand, "discord");
+
+    await expect(
+      runMessageAction("send", { channel: "discord", target: "123", message: "hi" }),
+    ).rejects.toThrow("exit");
 
     expect(exitMock).toHaveBeenCalledOnce();
     expect(exitMock).toHaveBeenCalledWith(0);
@@ -101,7 +79,12 @@ describe("runMessageAction", () => {
 
   it("runs gateway_stop hooks before exit when registered", async () => {
     hasHooksMock.mockReturnValueOnce(true);
-    await runSendAction();
+    const fakeCommand = { help: vi.fn() } as never;
+    const { runMessageAction } = createMessageCliHelpers(fakeCommand, "discord");
+
+    await expect(
+      runMessageAction("send", { channel: "discord", target: "123", message: "hi" }),
+    ).rejects.toThrow("exit");
 
     expect(runGatewayStopMock).toHaveBeenCalledWith({ reason: "cli message action complete" }, {});
     expect(exitMock).toHaveBeenCalledWith(0);
@@ -109,7 +92,12 @@ describe("runMessageAction", () => {
 
   it("calls exit(1) when message delivery fails", async () => {
     messageCommandMock.mockRejectedValueOnce(new Error("send failed"));
-    await runSendAction();
+    const fakeCommand = { help: vi.fn() } as never;
+    const { runMessageAction } = createMessageCliHelpers(fakeCommand, "discord");
+
+    await expect(
+      runMessageAction("send", { channel: "discord", target: "123", message: "hi" }),
+    ).rejects.toThrow("exit");
 
     expect(errorMock).toHaveBeenCalledWith("Error: send failed");
     expect(exitMock).toHaveBeenCalledOnce();
@@ -119,7 +107,12 @@ describe("runMessageAction", () => {
   it("runs gateway_stop hooks on failure before exit(1)", async () => {
     hasHooksMock.mockReturnValueOnce(true);
     messageCommandMock.mockRejectedValueOnce(new Error("send failed"));
-    await runSendAction();
+    const fakeCommand = { help: vi.fn() } as never;
+    const { runMessageAction } = createMessageCliHelpers(fakeCommand, "discord");
+
+    await expect(
+      runMessageAction("send", { channel: "discord", target: "123", message: "hi" }),
+    ).rejects.toThrow("exit");
 
     expect(runGatewayStopMock).toHaveBeenCalledWith({ reason: "cli message action complete" }, {});
     expect(exitMock).toHaveBeenCalledWith(1);
@@ -128,7 +121,12 @@ describe("runMessageAction", () => {
   it("logs gateway_stop failure and still exits with success code", async () => {
     hasHooksMock.mockReturnValueOnce(true);
     runGatewayStopMock.mockRejectedValueOnce(new Error("hook failed"));
-    await runSendAction();
+    const fakeCommand = { help: vi.fn() } as never;
+    const { runMessageAction } = createMessageCliHelpers(fakeCommand, "discord");
+
+    await expect(
+      runMessageAction("send", { channel: "discord", target: "123", message: "hi" }),
+    ).rejects.toThrow("exit");
 
     expect(errorMock).toHaveBeenCalledWith("gateway_stop hook failed: Error: hook failed");
     expect(exitMock).toHaveBeenCalledWith(0);
@@ -138,7 +136,12 @@ describe("runMessageAction", () => {
     hasHooksMock.mockReturnValueOnce(true);
     messageCommandMock.mockRejectedValueOnce(new Error("send failed"));
     runGatewayStopMock.mockRejectedValueOnce(new Error("hook failed"));
-    await runSendAction();
+    const fakeCommand = { help: vi.fn() } as never;
+    const { runMessageAction } = createMessageCliHelpers(fakeCommand, "discord");
+
+    await expect(
+      runMessageAction("send", { channel: "discord", target: "123", message: "hi" }),
+    ).rejects.toThrow("exit");
 
     expect(errorMock).toHaveBeenNthCalledWith(1, "Error: send failed");
     expect(errorMock).toHaveBeenNthCalledWith(2, "gateway_stop hook failed: Error: hook failed");
@@ -147,7 +150,12 @@ describe("runMessageAction", () => {
 
   it("does not call exit(0) when the action throws", async () => {
     messageCommandMock.mockRejectedValueOnce(new Error("boom"));
-    await runSendAction();
+    const fakeCommand = { help: vi.fn() } as never;
+    const { runMessageAction } = createMessageCliHelpers(fakeCommand, "discord");
+
+    await expect(
+      runMessageAction("send", { channel: "discord", target: "123", message: "hi" }),
+    ).rejects.toThrow("exit");
 
     // exit should only be called once with code 1, never with 0
     expect(exitMock).toHaveBeenCalledOnce();
@@ -156,9 +164,13 @@ describe("runMessageAction", () => {
 
   it("does not call exit(0) if the error path returns", async () => {
     messageCommandMock.mockRejectedValueOnce(new Error("boom"));
-    exitMock.mockClear().mockImplementation(() => undefined as never);
-    const runMessageAction = createRunMessageAction();
-    await expect(runMessageAction("send", baseSendOptions)).resolves.toBeUndefined();
+    exitMock.mockReset().mockImplementation(() => undefined as never);
+    const fakeCommand = { help: vi.fn() } as never;
+    const { runMessageAction } = createMessageCliHelpers(fakeCommand, "discord");
+
+    await expect(
+      runMessageAction("send", { channel: "discord", target: "123", message: "hi" }),
+    ).resolves.toBeUndefined();
 
     expect(errorMock).toHaveBeenCalledWith("Error: boom");
     expect(exitMock).toHaveBeenCalledOnce();
@@ -191,31 +203,13 @@ describe("runMessageAction", () => {
       expect.anything(),
     );
     // account key should be stripped in favor of accountId
-    expectNoAccountFieldInPassedOptions();
-  });
-
-  it("strips non-string account values instead of passing accountId", async () => {
-    const runMessageAction = createRunMessageAction();
-
-    await expect(
-      runMessageAction("send", {
-        channel: "discord",
-        target: "789",
-        account: 42,
-        message: "hi",
-      }),
-    ).rejects.toThrow("exit");
-
-    expect(messageCommandMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: "send",
-        channel: "discord",
-        target: "789",
-        accountId: undefined,
-      }),
-      expect.anything(),
-      expect.anything(),
-    );
-    expectNoAccountFieldInPassedOptions();
+    const passedOpts = (
+      messageCommandMock.mock.calls as unknown as Array<[Record<string, unknown>]>
+    )?.[0]?.[0];
+    expect(passedOpts).toBeTruthy();
+    if (!passedOpts) {
+      throw new Error("expected message command call");
+    }
+    expect(passedOpts).not.toHaveProperty("account");
   });
 });

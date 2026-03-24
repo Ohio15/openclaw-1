@@ -3,23 +3,18 @@ import {
   startLogsPolling,
   stopLogsPolling,
   startDebugPolling,
-  startSecurityPolling,
   stopDebugPolling,
+  startSecurityPolling,
   stopSecurityPolling,
 } from "./app-polling.ts";
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
 import type { OpenClawApp } from "./app.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
-import { loadAgents, loadToolsCatalog } from "./controllers/agents.ts";
+import { loadAgents } from "./controllers/agents.ts";
 import { loadChannels } from "./controllers/channels.ts";
 import { loadConfig, loadConfigSchema } from "./controllers/config.ts";
-import {
-  loadCronJobs,
-  loadCronModelSuggestions,
-  loadCronRuns,
-  loadCronStatus,
-} from "./controllers/cron.ts";
+import { loadCronJobs, loadCronStatus } from "./controllers/cron.ts";
 import { loadSecurityAudit } from "./controllers/security.ts";
 import { loadDebug } from "./controllers/debug.ts";
 import { loadDevices } from "./controllers/devices.ts";
@@ -212,7 +207,6 @@ export async function refreshActiveTab(host: SettingsHost) {
   }
   if (host.tab === "agents") {
     await loadAgents(host as unknown as OpenClawApp);
-    await loadToolsCatalog(host as unknown as OpenClawApp);
     await loadConfig(host as unknown as OpenClawApp);
     const agentIds = host.agentsList?.agents?.map((entry) => entry.id) ?? [];
     if (agentIds.length > 0) {
@@ -232,6 +226,11 @@ export async function refreshActiveTab(host: SettingsHost) {
         void loadCron(host);
       }
     }
+  }
+  if (host.tab === "security") {
+    await loadConfig(host as unknown as OpenClawApp);
+    await loadSecurityAudit(host as unknown as OpenClawApp);
+    await loadSessions(host as unknown as OpenClawApp);
   }
   if (host.tab === "nodes") {
     await loadNodes(host as unknown as OpenClawApp);
@@ -253,11 +252,6 @@ export async function refreshActiveTab(host: SettingsHost) {
   if (host.tab === "debug") {
     await loadDebug(host as unknown as OpenClawApp);
     host.eventLog = host.eventLogBuffer;
-  }
-  if (host.tab === "security") {
-    await loadConfig(host as unknown as OpenClawApp);
-    await loadSecurityAudit(host as unknown as OpenClawApp);
-    await loadSessions(host as unknown as OpenClawApp);
   }
   if (host.tab === "logs") {
     host.logsAtBottom = true;
@@ -445,18 +439,9 @@ export async function loadChannelsTab(host: SettingsHost) {
 }
 
 export async function loadCron(host: SettingsHost) {
-  const cronHost = host as unknown as OpenClawApp;
   await Promise.all([
     loadChannels(host as unknown as OpenClawApp, false),
-    loadCronStatus(cronHost),
-    loadCronJobs(cronHost),
-    loadCronModelSuggestions(cronHost),
+    loadCronStatus(host as unknown as OpenClawApp),
+    loadCronJobs(host as unknown as OpenClawApp),
   ]);
-  if (cronHost.cronRunsScope === "all") {
-    await loadCronRuns(cronHost, null);
-    return;
-  }
-  if (cronHost.cronRunsJobId) {
-    await loadCronRuns(cronHost, cronHost.cronRunsJobId);
-  }
 }

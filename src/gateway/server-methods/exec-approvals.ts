@@ -86,15 +86,6 @@ function toExecApprovalsPayload(snapshot: ExecApprovalsSnapshot) {
   };
 }
 
-function resolveNodeIdOrRespond(nodeId: string, respond: RespondFn): string | null {
-  const id = nodeId.trim();
-  if (!id) {
-    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId required"));
-    return null;
-  }
-  return id;
-}
-
 export const execApprovalsHandlers: GatewayRequestHandlers = {
   "exec.approvals.get": ({ params, respond }) => {
     if (!assertValidParams(params, validateExecApprovalsGetParams, "exec.approvals.get", respond)) {
@@ -140,8 +131,9 @@ export const execApprovalsHandlers: GatewayRequestHandlers = {
       return;
     }
     const { nodeId } = params as { nodeId: string };
-    const id = resolveNodeIdOrRespond(nodeId, respond);
+    const id = nodeId.trim();
     if (!id) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId required"));
       return;
     }
     await respondUnavailableOnThrow(respond, async () => {
@@ -173,8 +165,9 @@ export const execApprovalsHandlers: GatewayRequestHandlers = {
       file: ExecApprovalsFile;
       baseHash?: string;
     };
-    const id = resolveNodeIdOrRespond(nodeId, respond);
+    const id = nodeId.trim();
     if (!id) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "nodeId required"));
       return;
     }
     await respondUnavailableOnThrow(respond, async () => {

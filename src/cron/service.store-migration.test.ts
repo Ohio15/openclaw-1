@@ -2,30 +2,18 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { CronService } from "./service.js";
-import { setupCronServiceSuite } from "./service.test-harness.js";
+import {
+  createCronStoreHarness,
+  createNoopLogger,
+  installCronTestHooks,
+} from "./service.test-harness.js";
 
-const { logger: noopLogger, makeStorePath } = setupCronServiceSuite({
-  prefix: "openclaw-cron-",
+const noopLogger = createNoopLogger();
+const { makeStorePath } = createCronStoreHarness({ prefix: "openclaw-cron-" });
+installCronTestHooks({
+  logger: noopLogger,
   baseTimeIso: "2026-02-06T17:00:00.000Z",
 });
-
-function createStartedCron(storePath: string) {
-  const cron = new CronService({
-    storePath,
-    cronEnabled: true,
-    log: noopLogger,
-    enqueueSystemEvent: vi.fn(),
-    requestHeartbeatNow: vi.fn(),
-    runIsolatedAgentJob: vi.fn(async () => ({ status: "ok" as const, summary: "ok" })),
-  });
-  return {
-    cron,
-    start: async () => {
-      await cron.start();
-      return cron;
-    },
-  };
-}
 
 describe("CronService store migrations", () => {
   it("migrates legacy top-level agentTurn fields and initializes missing state", async () => {
@@ -64,7 +52,16 @@ describe("CronService store migrations", () => {
       "utf-8",
     );
 
-    const cron = await createStartedCron(store.storePath).start();
+    const cron = new CronService({
+      storePath: store.storePath,
+      cronEnabled: true,
+      log: noopLogger,
+      enqueueSystemEvent: vi.fn(),
+      requestHeartbeatNow: vi.fn(),
+      runIsolatedAgentJob: vi.fn(async () => ({ status: "ok" as const, summary: "ok" })),
+    });
+
+    await cron.start();
 
     const status = await cron.status();
     expect(status.enabled).toBe(true);
@@ -135,7 +132,16 @@ describe("CronService store migrations", () => {
       "utf-8",
     );
 
-    const cron = await createStartedCron(store.storePath).start();
+    const cron = new CronService({
+      storePath: store.storePath,
+      cronEnabled: true,
+      log: noopLogger,
+      enqueueSystemEvent: vi.fn(),
+      requestHeartbeatNow: vi.fn(),
+      runIsolatedAgentJob: vi.fn(async () => ({ status: "ok" as const, summary: "ok" })),
+    });
+
+    await cron.start();
 
     const jobs = await cron.list({ includeDisabled: true });
     const job = jobs.find((entry) => entry.id === "legacy-agentturn-no-timeout");

@@ -1,7 +1,6 @@
 import {
   approveDevicePairing,
   listDevicePairing,
-  removePairedDevice,
   type DeviceAuthToken,
   rejectDevicePairing,
   revokeDeviceToken,
@@ -14,7 +13,6 @@ import {
   formatValidationErrors,
   validateDevicePairApproveParams,
   validateDevicePairListParams,
-  validateDevicePairRemoveParams,
   validateDevicePairRejectParams,
   validateDeviceTokenRevokeParams,
   validateDeviceTokenRotateParams,
@@ -24,7 +22,7 @@ import type { GatewayRequestHandlers } from "./types.js";
 function redactPairedDevice(
   device: { tokens?: Record<string, DeviceAuthToken> } & Record<string, unknown>,
 ) {
-  const { tokens, approvedScopes: _approvedScopes, ...rest } = device;
+  const { tokens, ...rest } = device;
   return {
     ...rest,
     tokens: summarizeDeviceTokens(tokens),
@@ -122,29 +120,6 @@ export const deviceHandlers: GatewayRequestHandlers = {
       { dropIfSlow: true },
     );
     respond(true, rejected, undefined);
-  },
-  "device.pair.remove": async ({ params, respond, context }) => {
-    if (!validateDevicePairRemoveParams(params)) {
-      respond(
-        false,
-        undefined,
-        errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `invalid device.pair.remove params: ${formatValidationErrors(
-            validateDevicePairRemoveParams.errors,
-          )}`,
-        ),
-      );
-      return;
-    }
-    const { deviceId } = params as { deviceId: string };
-    const removed = await removePairedDevice(deviceId);
-    if (!removed) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown deviceId"));
-      return;
-    }
-    context.logGateway.info(`device pairing removed device=${removed.deviceId}`);
-    respond(true, removed, undefined);
   },
   "device.token.rotate": async ({ params, respond, context }) => {
     if (!validateDeviceTokenRotateParams(params)) {

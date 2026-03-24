@@ -112,31 +112,6 @@ export const FeishuGroupSchema = z
   })
   .strict();
 
-const FeishuSharedConfigShape = {
-  webhookHost: z.string().optional(),
-  webhookPort: z.number().int().positive().optional(),
-  capabilities: z.array(z.string()).optional(),
-  markdown: MarkdownConfigSchema,
-  configWrites: z.boolean().optional(),
-  dmPolicy: DmPolicySchema.optional(),
-  allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
-  groupPolicy: GroupPolicySchema.optional(),
-  groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
-  requireMention: z.boolean().optional(),
-  groups: z.record(z.string(), FeishuGroupSchema.optional()).optional(),
-  historyLimit: z.number().int().min(0).optional(),
-  dmHistoryLimit: z.number().int().min(0).optional(),
-  dms: z.record(z.string(), DmConfigSchema).optional(),
-  textChunkLimit: z.number().int().positive().optional(),
-  chunkMode: z.enum(["length", "newline"]).optional(),
-  blockStreamingCoalesce: BlockStreamingCoalesceSchema,
-  mediaMaxMb: z.number().positive().optional(),
-  heartbeat: ChannelHeartbeatVisibilitySchema,
-  renderMode: RenderModeSchema,
-  streaming: StreamingModeSchema,
-  tools: FeishuToolsConfigSchema,
-};
-
 /**
  * Per-account configuration.
  * All fields are optional - missing fields inherit from top-level config.
@@ -152,7 +127,27 @@ export const FeishuAccountConfigSchema = z
     domain: FeishuDomainSchema.optional(),
     connectionMode: FeishuConnectionModeSchema.optional(),
     webhookPath: z.string().optional(),
-    ...FeishuSharedConfigShape,
+    webhookPort: z.number().int().positive().optional(),
+    capabilities: z.array(z.string()).optional(),
+    markdown: MarkdownConfigSchema,
+    configWrites: z.boolean().optional(),
+    dmPolicy: DmPolicySchema.optional(),
+    allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
+    groupPolicy: GroupPolicySchema.optional(),
+    groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
+    requireMention: z.boolean().optional(),
+    groups: z.record(z.string(), FeishuGroupSchema.optional()).optional(),
+    historyLimit: z.number().int().min(0).optional(),
+    dmHistoryLimit: z.number().int().min(0).optional(),
+    dms: z.record(z.string(), DmConfigSchema).optional(),
+    textChunkLimit: z.number().int().positive().optional(),
+    chunkMode: z.enum(["length", "newline"]).optional(),
+    blockStreamingCoalesce: BlockStreamingCoalesceSchema,
+    mediaMaxMb: z.number().positive().optional(),
+    heartbeat: ChannelHeartbeatVisibilitySchema,
+    renderMode: RenderModeSchema,
+    streaming: StreamingModeSchema, // Enable streaming card mode (default: true)
+    tools: FeishuToolsConfigSchema,
   })
   .strict();
 
@@ -167,11 +162,28 @@ export const FeishuConfigSchema = z
     domain: FeishuDomainSchema.optional().default("feishu"),
     connectionMode: FeishuConnectionModeSchema.optional().default("websocket"),
     webhookPath: z.string().optional().default("/feishu/events"),
-    ...FeishuSharedConfigShape,
+    webhookPort: z.number().int().positive().optional(),
+    capabilities: z.array(z.string()).optional(),
+    markdown: MarkdownConfigSchema,
+    configWrites: z.boolean().optional(),
     dmPolicy: DmPolicySchema.optional().default("pairing"),
+    allowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     groupPolicy: GroupPolicySchema.optional().default("allowlist"),
+    groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     requireMention: z.boolean().optional().default(true),
+    groups: z.record(z.string(), FeishuGroupSchema.optional()).optional(),
     topicSessionMode: TopicSessionModeSchema,
+    historyLimit: z.number().int().min(0).optional(),
+    dmHistoryLimit: z.number().int().min(0).optional(),
+    dms: z.record(z.string(), DmConfigSchema).optional(),
+    textChunkLimit: z.number().int().positive().optional(),
+    chunkMode: z.enum(["length", "newline"]).optional(),
+    blockStreamingCoalesce: BlockStreamingCoalesceSchema,
+    mediaMaxMb: z.number().positive().optional(),
+    heartbeat: ChannelHeartbeatVisibilitySchema,
+    renderMode: RenderModeSchema, // raw = plain text (default), card = interactive card with markdown
+    streaming: StreamingModeSchema, // Enable streaming card mode (default: true)
+    tools: FeishuToolsConfigSchema,
     // Dynamic agent creation for DM users
     dynamicAgentCreation: DynamicAgentCreationSchema,
     // Multi-account configuration
@@ -179,38 +191,6 @@ export const FeishuConfigSchema = z
   })
   .strict()
   .superRefine((value, ctx) => {
-    const defaultConnectionMode = value.connectionMode ?? "websocket";
-    const defaultVerificationToken = value.verificationToken?.trim();
-    if (defaultConnectionMode === "webhook" && !defaultVerificationToken) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["verificationToken"],
-        message:
-          'channels.feishu.connectionMode="webhook" requires channels.feishu.verificationToken',
-      });
-    }
-
-    for (const [accountId, account] of Object.entries(value.accounts ?? {})) {
-      if (!account) {
-        continue;
-      }
-      const accountConnectionMode = account.connectionMode ?? defaultConnectionMode;
-      if (accountConnectionMode !== "webhook") {
-        continue;
-      }
-      const accountVerificationToken =
-        account.verificationToken?.trim() || defaultVerificationToken;
-      if (!accountVerificationToken) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["accounts", accountId, "verificationToken"],
-          message:
-            `channels.feishu.accounts.${accountId}.connectionMode="webhook" requires ` +
-            "a verificationToken (account-level or top-level)",
-        });
-      }
-    }
-
     if (value.dmPolicy === "open") {
       const allowFrom = value.allowFrom ?? [];
       const hasWildcard = allowFrom.some((entry) => String(entry).trim() === "*");

@@ -15,10 +15,7 @@ vi.mock("./index.js", () => {
             }
             const onAbort = () => reject(signal?.reason ?? new Error("aborted"));
             signal?.addEventListener("abort", onAbort, { once: true });
-            queueMicrotask(() => {
-              signal?.removeEventListener("abort", onAbort);
-              resolve();
-            });
+            setTimeout(resolve, 50);
           });
           res.json({ ok: true });
         },

@@ -56,9 +56,6 @@ export async function handleDiscordMessagingAction(
   action: string,
   params: Record<string, unknown>,
   isActionEnabled: ActionGate<DiscordActionConfig>,
-  options?: {
-    mediaLocalRoots?: readonly string[];
-  },
 ): Promise<AgentToolResult<unknown>> {
   const resolveChannelId = () =>
     resolveDiscordChannelId(
@@ -311,7 +308,6 @@ export async function handleDiscordMessagingAction(
       const result = await sendMessageDiscord(to, content ?? "", {
         ...(accountId ? { accountId } : {}),
         mediaUrl,
-        mediaLocalRoots: options?.mediaLocalRoots,
         replyTo,
         components,
         embeds,
@@ -420,7 +416,6 @@ export async function handleDiscordMessagingAction(
       const result = await sendMessageDiscord(`channel:${channelId}`, content, {
         ...(accountId ? { accountId } : {}),
         mediaUrl,
-        mediaLocalRoots: options?.mediaLocalRoots,
         replyTo,
       });
       return jsonResult({ ok: true, result });

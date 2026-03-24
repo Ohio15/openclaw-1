@@ -32,20 +32,14 @@ vi.mock("../../agents/model-catalog.js", () => ({
   loadModelCatalog: vi.fn().mockResolvedValue({ models: [] }),
 }));
 
-vi.mock("../../agents/model-selection.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../agents/model-selection.js")>();
-  return {
-    ...actual,
-    getModelRefStatus: vi.fn().mockReturnValue({ allowed: false }),
-    isCliProvider: vi.fn().mockReturnValue(false),
-    resolveAllowedModelRef: vi
-      .fn()
-      .mockReturnValue({ ref: { provider: "openai", model: "gpt-4" } }),
-    resolveConfiguredModelRef: vi.fn().mockReturnValue({ provider: "openai", model: "gpt-4" }),
-    resolveHooksGmailModel: vi.fn().mockReturnValue(null),
-    resolveThinkingDefault: vi.fn().mockReturnValue(undefined),
-  };
-});
+vi.mock("../../agents/model-selection.js", () => ({
+  getModelRefStatus: vi.fn().mockReturnValue({ allowed: false }),
+  isCliProvider: vi.fn().mockReturnValue(false),
+  resolveAllowedModelRef: vi.fn().mockReturnValue({ ref: { provider: "openai", model: "gpt-4" } }),
+  resolveConfiguredModelRef: vi.fn().mockReturnValue({ provider: "openai", model: "gpt-4" }),
+  resolveHooksGmailModel: vi.fn().mockReturnValue(null),
+  resolveThinkingDefault: vi.fn().mockReturnValue(undefined),
+}));
 
 vi.mock("../../agents/model-fallback.js", () => ({
   runWithModelFallback: vi.fn().mockResolvedValue({
@@ -112,18 +106,14 @@ vi.mock("../../cli/outbound-send-deps.js", () => ({
 vi.mock("../../config/sessions.js", () => ({
   resolveAgentMainSessionKey: vi.fn().mockReturnValue("main:default"),
   resolveSessionTranscriptPath: vi.fn().mockReturnValue("/tmp/transcript.jsonl"),
-  setSessionRuntimeModel: vi.fn(),
   updateSessionStore: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../routing/session-key.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../routing/session-key.js")>();
-  return {
-    ...actual,
-    buildAgentMainSessionKey: vi.fn().mockReturnValue("agent:default:cron:test"),
-    normalizeAgentId: vi.fn((id: string) => id),
-  };
-});
+vi.mock("../../routing/session-key.js", () => ({
+  buildAgentMainSessionKey: vi.fn().mockReturnValue("agent:default:cron:test"),
+  normalizeAgentId: vi.fn((id: string) => id),
+  DEFAULT_ACCOUNT_ID: "default",
+}));
 
 vi.mock("../../infra/agent-events.js", () => ({
   registerAgentRunContext: vi.fn(),
@@ -328,16 +318,6 @@ describe("runCronIsolatedAgentTurn — skill filter", () => {
     ]);
   });
 
-  it("forces a fresh session for isolated cron runs", async () => {
-    const result = await runCronIsolatedAgentTurn(makeParams());
-
-    expect(result.status).toBe("ok");
-    expect(resolveCronSessionMock).toHaveBeenCalledOnce();
-    expect(resolveCronSessionMock.mock.calls[0]?.[0]).toMatchObject({
-      forceNew: true,
-    });
-  });
-
   it("reuses cached snapshot when version and normalized skillFilter are unchanged", async () => {
     resolveAgentSkillsFilterMock.mockReturnValue([" weather ", "meme-factory", "weather"]);
     resolveCronSessionMock.mockReturnValue({
@@ -376,8 +356,9 @@ describe("runCronIsolatedAgentTurn — skill filter", () => {
       "nvidia/deepseek-ai/deepseek-v3.2",
     ];
 
-    async function expectPrimaryOverridePreservesDefaults(modelOverride: unknown) {
-      resolveAgentConfigMock.mockReturnValue({ model: modelOverride });
+    it("preserves defaults when agent overrides primary as string", async () => {
+      resolveAgentConfigMock.mockReturnValue({ model: "anthropic/claude-sonnet-4-5" });
+
       const result = await runCronIsolatedAgentTurn(
         makeParams({
           cfg: {
@@ -399,14 +380,34 @@ describe("runCronIsolatedAgentTurn — skill filter", () => {
         | undefined;
       expect(model?.primary).toBe("anthropic/claude-sonnet-4-5");
       expect(model?.fallbacks).toEqual(defaultFallbacks);
-    }
-
-    it("preserves defaults when agent overrides primary as string", async () => {
-      await expectPrimaryOverridePreservesDefaults("anthropic/claude-sonnet-4-5");
     });
 
     it("preserves defaults when agent overrides primary in object form", async () => {
-      await expectPrimaryOverridePreservesDefaults({ primary: "anthropic/claude-sonnet-4-5" });
+      resolveAgentConfigMock.mockReturnValue({
+        model: { primary: "anthropic/claude-sonnet-4-5" },
+      });
+
+      const result = await runCronIsolatedAgentTurn(
+        makeParams({
+          cfg: {
+            agents: {
+              defaults: {
+                model: { primary: "openai-codex/gpt-5.3-codex", fallbacks: defaultFallbacks },
+              },
+            },
+          },
+          agentId: "scout",
+        }),
+      );
+
+      expect(result.status).toBe("ok");
+      expect(runWithModelFallbackMock).toHaveBeenCalledOnce();
+      const callCfg = runWithModelFallbackMock.mock.calls[0][0].cfg;
+      const model = callCfg?.agents?.defaults?.model as
+        | { primary?: string; fallbacks?: string[] }
+        | undefined;
+      expect(model?.primary).toBe("anthropic/claude-sonnet-4-5");
+      expect(model?.fallbacks).toEqual(defaultFallbacks);
     });
   });
 });

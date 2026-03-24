@@ -1,4 +1,4 @@
-import { isBlockedHostnameOrIp } from "openclaw/plugin-sdk";
+import { isBlockedHostname, isPrivateIpAddress } from "openclaw/plugin-sdk";
 
 export type UrbitBaseUrlValidation =
   | { ok: true; baseUrl: string; hostname: string }
@@ -53,5 +53,5 @@ export function isBlockedUrbitHostname(hostname: string): boolean {
   if (!normalized) {
     return false;
   }
-  return isBlockedHostnameOrIp(normalized);
+  return isBlockedHostname(normalized) || isPrivateIpAddress(normalized);
 }

@@ -1,5 +1,4 @@
 import crypto from "node:crypto";
-import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import {
   browserAct,
   browserArmDialog,
@@ -22,7 +21,7 @@ import {
 } from "../../browser/client.js";
 import { resolveBrowserConfig } from "../../browser/config.js";
 import { DEFAULT_AI_SNAPSHOT_MAX_CHARS } from "../../browser/constants.js";
-import { DEFAULT_UPLOAD_DIR, resolveExistingPathsWithinRoot } from "../../browser/paths.js";
+import { DEFAULT_UPLOAD_DIR, resolvePathsWithinRoot } from "../../browser/paths.js";
 import { applyBrowserProxyPaths, persistBrowserProxyFiles } from "../../browser/proxy-files.js";
 import { loadConfig } from "../../config/config.js";
 import { wrapExternalContent } from "../../security/external-content.js";
@@ -53,30 +52,6 @@ function wrapBrowserExternalJson(params: {
       },
     },
   };
-}
-
-function formatTabsToolResult(tabs: unknown[]): AgentToolResult<unknown> {
-  const wrapped = wrapBrowserExternalJson({
-    kind: "tabs",
-    payload: { tabs },
-    includeWarning: false,
-  });
-  const content: AgentToolResult<unknown>["content"] = [
-    { type: "text", text: wrapped.wrappedText },
-  ];
-  return {
-    content,
-    details: { ...wrapped.safeDetails, tabCount: tabs.length },
-  };
-}
-
-function readOptionalTargetAndTimeout(params: Record<string, unknown>) {
-  const targetId = typeof params.targetId === "string" ? params.targetId.trim() : undefined;
-  const timeoutMs =
-    typeof params.timeoutMs === "number" && Number.isFinite(params.timeoutMs)
-      ? params.timeoutMs
-      : undefined;
-  return { targetId, timeoutMs };
 }
 
 type BrowserProxyFile = {
@@ -384,11 +359,27 @@ export function createBrowserTool(opts?: {
               profile,
             });
             const tabs = (result as { tabs?: unknown[] }).tabs ?? [];
-            return formatTabsToolResult(tabs);
+            const wrapped = wrapBrowserExternalJson({
+              kind: "tabs",
+              payload: { tabs },
+              includeWarning: false,
+            });
+            return {
+              content: [{ type: "text", text: wrapped.wrappedText }],
+              details: { ...wrapped.safeDetails, tabCount: tabs.length },
+            };
           }
           {
             const tabs = await browserTabs(baseUrl, { profile });
-            return formatTabsToolResult(tabs);
+            const wrapped = wrapBrowserExternalJson({
+              kind: "tabs",
+              payload: { tabs },
+              includeWarning: false,
+            });
+            return {
+              content: [{ type: "text", text: wrapped.wrappedText }],
+              details: { ...wrapped.safeDetails, tabCount: tabs.length },
+            };
           }
         case "open": {
           const targetUrl = readStringParam(params, "targetUrl", {
@@ -559,7 +550,7 @@ export function createBrowserTool(opts?: {
               });
             }
             return {
-              content: [{ type: "text" as const, text: wrappedSnapshot }],
+              content: [{ type: "text", text: wrappedSnapshot }],
               details: safeDetails,
             };
           }
@@ -569,7 +560,7 @@ export function createBrowserTool(opts?: {
               payload: snapshot,
             });
             return {
-              content: [{ type: "text" as const, text: wrapped.wrappedText }],
+              content: [{ type: "text", text: wrapped.wrappedText }],
               details: {
                 ...wrapped.safeDetails,
                 format: "aria",
@@ -664,7 +655,7 @@ export function createBrowserTool(opts?: {
               includeWarning: false,
             });
             return {
-              content: [{ type: "text" as const, text: wrapped.wrappedText }],
+              content: [{ type: "text", text: wrapped.wrappedText }],
               details: {
                 ...wrapped.safeDetails,
                 targetId: typeof result.targetId === "string" ? result.targetId : undefined,
@@ -680,7 +671,7 @@ export function createBrowserTool(opts?: {
               includeWarning: false,
             });
             return {
-              content: [{ type: "text" as const, text: wrapped.wrappedText }],
+              content: [{ type: "text", text: wrapped.wrappedText }],
               details: {
                 ...wrapped.safeDetails,
                 targetId: result.targetId,
@@ -700,7 +691,7 @@ export function createBrowserTool(opts?: {
               })) as Awaited<ReturnType<typeof browserPdfSave>>)
             : await browserPdfSave(baseUrl, { targetId, profile });
           return {
-            content: [{ type: "text" as const, text: `FILE:${result.path}` }],
+            content: [{ type: "text", text: `FILE:${result.path}` }],
             details: result,
           };
         }
@@ -709,7 +700,7 @@ export function createBrowserTool(opts?: {
           if (paths.length === 0) {
             throw new Error("paths required");
           }
-          const uploadPathsResult = await resolveExistingPathsWithinRoot({
+          const uploadPathsResult = resolvePathsWithinRoot({
             rootDir: DEFAULT_UPLOAD_DIR,
             requestedPaths: paths,
             scopeLabel: `uploads directory (${DEFAULT_UPLOAD_DIR})`,
@@ -721,7 +712,11 @@ export function createBrowserTool(opts?: {
           const ref = readStringParam(params, "ref");
           const inputRef = readStringParam(params, "inputRef");
           const element = readStringParam(params, "element");
-          const { targetId, timeoutMs } = readOptionalTargetAndTimeout(params);
+          const targetId = typeof params.targetId === "string" ? params.targetId.trim() : undefined;
+          const timeoutMs =
+            typeof params.timeoutMs === "number" && Number.isFinite(params.timeoutMs)
+              ? params.timeoutMs
+              : undefined;
           if (proxyRequest) {
             const result = await proxyRequest({
               method: "POST",
@@ -753,7 +748,11 @@ export function createBrowserTool(opts?: {
         case "dialog": {
           const accept = Boolean(params.accept);
           const promptText = typeof params.promptText === "string" ? params.promptText : undefined;
-          const { targetId, timeoutMs } = readOptionalTargetAndTimeout(params);
+          const targetId = typeof params.targetId === "string" ? params.targetId.trim() : undefined;
+          const timeoutMs =
+            typeof params.timeoutMs === "number" && Number.isFinite(params.timeoutMs)
+              ? params.timeoutMs
+              : undefined;
           if (proxyRequest) {
             const result = await proxyRequest({
               method: "POST",

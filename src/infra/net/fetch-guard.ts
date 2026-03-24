@@ -32,26 +32,9 @@ export type GuardedFetchResult = {
 };
 
 const DEFAULT_MAX_REDIRECTS = 3;
-const CROSS_ORIGIN_REDIRECT_SENSITIVE_HEADERS = [
-  "authorization",
-  "proxy-authorization",
-  "cookie",
-  "cookie2",
-];
 
 function isRedirectStatus(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
-}
-
-function stripSensitiveHeadersForCrossOriginRedirect(init?: RequestInit): RequestInit | undefined {
-  if (!init?.headers) {
-    return init;
-  }
-  const headers = new Headers(init.headers);
-  for (const header of CROSS_ORIGIN_REDIRECT_SENSITIVE_HEADERS) {
-    headers.delete(header);
-  }
-  return { ...init, headers };
 }
 
 function buildAbortSignal(params: { timeoutMs?: number; signal?: AbortSignal }): {
@@ -116,7 +99,6 @@ export async function fetchWithSsrFGuard(params: GuardedFetchOptions): Promise<G
 
   const visited = new Set<string>();
   let currentUrl = params.url;
-  let currentInit = params.init ? { ...params.init } : undefined;
   let redirectCount = 0;
 
   while (true) {
@@ -143,7 +125,7 @@ export async function fetchWithSsrFGuard(params: GuardedFetchOptions): Promise<G
       }
 
       const init: RequestInit & { dispatcher?: Dispatcher } = {
-        ...(currentInit ? { ...currentInit } : {}),
+        ...(params.init ? { ...params.init } : {}),
         redirect: "manual",
         ...(dispatcher ? { dispatcher } : {}),
         ...(signal ? { signal } : {}),
@@ -162,14 +144,10 @@ export async function fetchWithSsrFGuard(params: GuardedFetchOptions): Promise<G
           await release(dispatcher);
           throw new Error(`Too many redirects (limit: ${maxRedirects})`);
         }
-        const nextParsedUrl = new URL(location, parsedUrl);
-        const nextUrl = nextParsedUrl.toString();
+        const nextUrl = new URL(location, parsedUrl).toString();
         if (visited.has(nextUrl)) {
           await release(dispatcher);
           throw new Error("Redirect loop detected");
-        }
-        if (nextParsedUrl.origin !== parsedUrl.origin) {
-          currentInit = stripSensitiveHeadersForCrossOriginRedirect(currentInit);
         }
         visited.add(nextUrl);
         void response.body?.cancel();

@@ -1,12 +1,9 @@
-import { collectTextContentBlocks } from "../../agents/content-blocks.js";
 import { createOpenClawTools } from "../../agents/openclaw-tools.js";
 import type { SkillCommandSpec } from "../../agents/skills.js";
-import { applyOwnerOnlyToolPolicy } from "../../agents/tool-policy.js";
 import { getChannelDock } from "../../channels/dock.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
-import { generateSecureToken } from "../../infra/secure-random.js";
 import { resolveGatewayMessageChannel } from "../../utils/message-channel.js";
 import {
   listReservedChatSlashCommandNames,
@@ -65,7 +62,20 @@ function extractTextFromToolResult(result: any): string | null {
     const trimmed = content.trim();
     return trimmed ? trimmed : null;
   }
-  const parts = collectTextContentBlocks(content);
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  for (const block of content) {
+    if (!block || typeof block !== "object") {
+      continue;
+    }
+    const rec = block as { type?: unknown; text?: unknown };
+    if (rec.type === "text" && typeof rec.text === "string") {
+      parts.push(rec.text);
+    }
+  }
   const out = parts.join("");
   const trimmed = out.trim();
   return trimmed ? trimmed : null;
@@ -203,15 +213,14 @@ export async function handleInlineActions(params: {
         workspaceDir,
         config: cfg,
       });
-      const authorizedTools = applyOwnerOnlyToolPolicy(tools, command.senderIsOwner);
 
-      const tool = authorizedTools.find((candidate) => candidate.name === dispatch.toolName);
+      const tool = tools.find((candidate) => candidate.name === dispatch.toolName);
       if (!tool) {
         typing.cleanup();
         return { kind: "reply", reply: { text: `❌ Tool not available: ${dispatch.toolName}` } };
       }
 
-      const toolCallId = `cmd_${generateSecureToken(8)}`;
+      const toolCallId = `cmd_${Date.now()}_${Math.random().toString(16).slice(2)}`;
       try {
         const result = await tool.execute(toolCallId, {
           command: rawArgs,
@@ -278,7 +287,6 @@ export async function handleInlineActions(params: {
       command,
       sessionEntry,
       sessionKey,
-      parentSessionKey: ctx.ParentSessionKey,
       sessionScope,
       provider,
       model,
@@ -302,7 +310,6 @@ export async function handleInlineActions(params: {
       cfg,
       command: commandInput,
       agentId,
-      agentDir,
       directives,
       elevated: {
         enabled: elevatedEnabled,

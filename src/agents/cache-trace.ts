@@ -129,18 +129,12 @@ function stableStringify(value: unknown): string {
     });
   }
   if (Array.isArray(value)) {
-    const serializedEntries: string[] = [];
-    for (const entry of value) {
-      serializedEntries.push(stableStringify(entry));
-    }
-    return `[${serializedEntries.join(",")}]`;
+    return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
   }
   const record = value as Record<string, unknown>;
-  const serializedFields: string[] = [];
-  for (const key of Object.keys(record).toSorted()) {
-    serializedFields.push(`${JSON.stringify(key)}:${stableStringify(record[key])}`);
-  }
-  return `{${serializedFields.join(",")}}`;
+  const keys = Object.keys(record).toSorted();
+  const entries = keys.map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`);
+  return `{${entries.join(",")}}`;
 }
 
 function digest(value: unknown): string {

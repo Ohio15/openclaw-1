@@ -2,7 +2,6 @@ import { CHANNEL_IDS } from "../channels/registry.js";
 import { VERSION } from "../version.js";
 import type { ConfigUiHint, ConfigUiHints } from "./schema.hints.js";
 import { applySensitiveHints, buildBaseHints, mapSensitivePaths } from "./schema.hints.js";
-import { applyDerivedTags } from "./schema.tags.js";
 import { OpenClawSchema } from "./zod-schema.js";
 
 export type { ConfigUiHint, ConfigUiHints } from "./schema.hints.js";
@@ -76,7 +75,7 @@ export type PluginUiMetadata = {
   description?: string;
   configUiHints?: Record<
     string,
-    Pick<ConfigUiHint, "label" | "help" | "tags" | "advanced" | "sensitive" | "placeholder">
+    Pick<ConfigUiHint, "label" | "help" | "advanced" | "sensitive" | "placeholder">
   >;
   configSchema?: JsonSchemaNode;
 };
@@ -328,7 +327,7 @@ function buildBaseConfigSchema(): ConfigSchemaResponse {
     unrepresentable: "any",
   });
   schema.title = "OpenClawConfig";
-  const hints = applyDerivedTags(mapSensitivePaths(OpenClawSchema, "", buildBaseHints()));
+  const hints = mapSensitivePaths(OpenClawSchema, "", buildBaseHints());
   const next = {
     schema: stripChannelSchema(schema),
     uiHints: hints,
@@ -358,9 +357,7 @@ export function buildConfigSchema(params?: {
     plugins,
     channels,
   );
-  const mergedHints = applyDerivedTags(
-    applySensitiveHints(mergedWithoutSensitiveHints, extensionHintKeys),
-  );
+  const mergedHints = applySensitiveHints(mergedWithoutSensitiveHints, extensionHintKeys);
   const mergedSchema = applyChannelSchemas(applyPluginSchemas(base.schema, plugins), channels);
   return {
     ...base,

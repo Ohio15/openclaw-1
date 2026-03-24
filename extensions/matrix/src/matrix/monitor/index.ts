@@ -1,13 +1,5 @@
-import {
-  createLoggerBackedRuntime,
-  GROUP_POLICY_BLOCKED_LABEL,
-  mergeAllowlist,
-  resolveAllowlistProviderRuntimeGroupPolicy,
-  resolveDefaultGroupPolicy,
-  summarizeMapping,
-  warnMissingProviderGroupPolicyFallbackOnce,
-  type RuntimeEnv,
-} from "openclaw/plugin-sdk";
+import { format } from "node:util";
+import { mergeAllowlist, summarizeMapping, type RuntimeEnv } from "openclaw/plugin-sdk";
 import { resolveMatrixTargets } from "../../resolve-targets.js";
 import { getMatrixRuntime } from "../../runtime.js";
 import type { CoreConfig, ReplyToMode } from "../../types.js";
@@ -48,11 +40,18 @@ export async function monitorMatrixProvider(opts: MonitorMatrixOpts = {}): Promi
   }
 
   const logger = core.logging.getChildLogger({ module: "matrix-auto-reply" });
-  const runtime: RuntimeEnv =
-    opts.runtime ??
-    createLoggerBackedRuntime({
-      logger,
-    });
+  const formatRuntimeMessage = (...args: Parameters<RuntimeEnv["log"]>) => format(...args);
+  const runtime: RuntimeEnv = opts.runtime ?? {
+    log: (...args) => {
+      logger.info(formatRuntimeMessage(...args));
+    },
+    error: (...args) => {
+      logger.error(formatRuntimeMessage(...args));
+    },
+    exit: (code: number): never => {
+      throw new Error(`exit ${code}`);
+    },
+  };
   const logVerboseMessage = (message: string) => {
     if (!core.logging.shouldLogVerbose()) {
       return;
@@ -243,20 +242,8 @@ export async function monitorMatrixProvider(opts: MonitorMatrixOpts = {}): Promi
   setActiveMatrixClient(client, opts.accountId);
 
   const mentionRegexes = core.channel.mentions.buildMentionRegexes(cfg);
-  const defaultGroupPolicy = resolveDefaultGroupPolicy(cfg);
-  const { groupPolicy: groupPolicyRaw, providerMissingFallbackApplied } =
-    resolveAllowlistProviderRuntimeGroupPolicy({
-      providerConfigPresent: cfg.channels?.matrix !== undefined,
-      groupPolicy: accountConfig.groupPolicy,
-      defaultGroupPolicy,
-    });
-  warnMissingProviderGroupPolicyFallbackOnce({
-    providerMissingFallbackApplied,
-    providerKey: "matrix",
-    accountId: account.accountId,
-    blockedLabel: GROUP_POLICY_BLOCKED_LABEL.room,
-    log: (message) => logVerboseMessage(message),
-  });
+  const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
+  const groupPolicyRaw = accountConfig.groupPolicy ?? defaultGroupPolicy ?? "allowlist";
   const groupPolicy = allowlistOnly && groupPolicyRaw === "open" ? "allowlist" : groupPolicyRaw;
   const replyToMode = opts.replyToMode ?? accountConfig.replyToMode ?? "off";
   const threadReplies = accountConfig.threadReplies ?? "inbound";

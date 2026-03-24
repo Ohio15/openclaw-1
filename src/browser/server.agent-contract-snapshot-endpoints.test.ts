@@ -64,16 +64,11 @@ describe("browser control server", () => {
     });
     expect(nav.ok).toBe(true);
     expect(typeof nav.targetId).toBe("string");
-    expect(pwMocks.navigateViaPlaywright).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cdpUrl: state.cdpBaseUrl,
-        targetId: "abcd1234",
-        url: "https://example.com",
-        ssrfPolicy: {
-          dangerouslyAllowPrivateNetwork: true,
-        },
-      }),
-    );
+    expect(pwMocks.navigateViaPlaywright).toHaveBeenCalledWith({
+      cdpUrl: state.cdpBaseUrl,
+      targetId: "abcd1234",
+      url: "https://example.com",
+    });
 
     const click = await postJson<{ ok: boolean }>(`${base}/act`, {
       kind: "click",

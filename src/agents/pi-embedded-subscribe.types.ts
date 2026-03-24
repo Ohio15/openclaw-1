@@ -3,7 +3,6 @@ import type { ReasoningLevel, VerboseLevel } from "../auto-reply/thinking.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import type { HookRunner } from "../plugins/hooks.js";
 import type { BlockReplyChunking } from "./pi-embedded-block-chunker.js";
-import type { BlockReplyPayload } from "./pi-embedded-payloads.js";
 
 export type ToolResultFormat = "markdown" | "plain";
 
@@ -20,7 +19,14 @@ export type SubscribeEmbeddedPiSessionParams = {
   onReasoningStream?: (payload: { text?: string; mediaUrls?: string[] }) => void | Promise<void>;
   /** Called when a thinking/reasoning block ends (</think> tag processed). */
   onReasoningEnd?: () => void | Promise<void>;
-  onBlockReply?: (payload: BlockReplyPayload) => void | Promise<void>;
+  onBlockReply?: (payload: {
+    text?: string;
+    mediaUrls?: string[];
+    audioAsVoice?: boolean;
+    replyToId?: string;
+    replyToTag?: boolean;
+    replyToCurrent?: boolean;
+  }) => void | Promise<void>;
   /** Flush pending block replies (e.g., before tool execution to preserve message boundaries). */
   onBlockReplyFlush?: () => void | Promise<void>;
   blockReplyBreak?: "text_end" | "message_end";

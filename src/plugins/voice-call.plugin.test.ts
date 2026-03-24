@@ -34,13 +34,6 @@ type Registered = {
   methods: Map<string, unknown>;
   tools: unknown[];
 };
-type RegisterVoiceCall = (api: Record<string, unknown>) => void | Promise<void>;
-type RegisterCliContext = {
-  program: Command;
-  config: Record<string, unknown>;
-  workspaceDir?: string;
-  logger: typeof noopLogger;
-};
 
 function setup(config: Record<string, unknown>): Registered {
   const methods = new Map<string, unknown>();
@@ -64,34 +57,6 @@ function setup(config: Record<string, unknown>): Registered {
     resolvePath: (p: string) => p,
   } as unknown as Parameters<typeof plugin.register>[0]);
   return { methods, tools };
-}
-
-async function registerVoiceCallCli(program: Command) {
-  const { register } = plugin as unknown as {
-    register: RegisterVoiceCall;
-  };
-  await register({
-    id: "voice-call",
-    name: "Voice Call",
-    description: "test",
-    version: "0",
-    source: "test",
-    config: {},
-    pluginConfig: { provider: "mock" },
-    runtime: { tts: { textToSpeechTelephony: vi.fn() } },
-    logger: noopLogger,
-    registerGatewayMethod: () => {},
-    registerTool: () => {},
-    registerCli: (fn: (ctx: RegisterCliContext) => void) =>
-      fn({
-        program,
-        config: {},
-        workspaceDir: undefined,
-        logger: noopLogger,
-      }),
-    registerService: () => {},
-    resolvePath: (p: string) => p,
-  });
 }
 
 describe("voice-call plugin", () => {
@@ -180,6 +145,9 @@ describe("voice-call plugin", () => {
   });
 
   it("CLI latency summarizes turn metrics from JSONL", async () => {
+    const { register } = plugin as unknown as {
+      register: (api: Record<string, unknown>) => void | Promise<void>;
+    };
     const program = new Command();
     const tmpFile = path.join(os.tmpdir(), `voicecall-latency-${Date.now()}.jsonl`);
     fs.writeFileSync(
@@ -194,7 +162,35 @@ describe("voice-call plugin", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
     try {
-      await registerVoiceCallCli(program);
+      await register({
+        id: "voice-call",
+        name: "Voice Call",
+        description: "test",
+        version: "0",
+        source: "test",
+        config: {},
+        pluginConfig: { provider: "mock" },
+        runtime: { tts: { textToSpeechTelephony: vi.fn() } },
+        logger: noopLogger,
+        registerGatewayMethod: () => {},
+        registerTool: () => {},
+        registerCli: (
+          fn: (ctx: {
+            program: Command;
+            config: Record<string, unknown>;
+            workspaceDir?: string;
+            logger: typeof noopLogger;
+          }) => void,
+        ) =>
+          fn({
+            program,
+            config: {},
+            workspaceDir: undefined,
+            logger: noopLogger,
+          }),
+        registerService: () => {},
+        resolvePath: (p: string) => p,
+      });
 
       await program.parseAsync(["voicecall", "latency", "--file", tmpFile, "--last", "10"], {
         from: "user",
@@ -212,9 +208,40 @@ describe("voice-call plugin", () => {
   });
 
   it("CLI start prints JSON", async () => {
+    const { register } = plugin as unknown as {
+      register: (api: Record<string, unknown>) => void | Promise<void>;
+    };
     const program = new Command();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    await registerVoiceCallCli(program);
+    await register({
+      id: "voice-call",
+      name: "Voice Call",
+      description: "test",
+      version: "0",
+      source: "test",
+      config: {},
+      pluginConfig: { provider: "mock" },
+      runtime: { tts: { textToSpeechTelephony: vi.fn() } },
+      logger: noopLogger,
+      registerGatewayMethod: () => {},
+      registerTool: () => {},
+      registerCli: (
+        fn: (ctx: {
+          program: Command;
+          config: Record<string, unknown>;
+          workspaceDir?: string;
+          logger: typeof noopLogger;
+        }) => void,
+      ) =>
+        fn({
+          program,
+          config: {},
+          workspaceDir: undefined,
+          logger: noopLogger,
+        }),
+      registerService: () => {},
+      resolvePath: (p: string) => p,
+    });
 
     await program.parseAsync(["voicecall", "start", "--to", "+1", "--message", "Hello"], {
       from: "user",

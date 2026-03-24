@@ -27,8 +27,15 @@ describe("pw-tools-core", () => {
     downloadUrl: string;
     suggestedFilename: string;
   }) {
-    const harness = createDownloadEventHarness();
+    let downloadHandler: ((download: unknown) => void) | undefined;
+    const on = vi.fn((event: string, handler: (download: unknown) => void) => {
+      if (event === "download") {
+        downloadHandler = handler;
+      }
+    });
+    const off = vi.fn();
     const saveAs = vi.fn(async () => {});
+    setPwToolsCoreCurrentPage({ on, off });
 
     const p = mod.waitForDownloadViaPlaywright({
       cdpUrl: "http://127.0.0.1:18792",
@@ -37,7 +44,7 @@ describe("pw-tools-core", () => {
     });
 
     await Promise.resolve();
-    harness.trigger({
+    downloadHandler?.({
       url: () => params.downloadUrl,
       suggestedFilename: () => params.suggestedFilename,
       saveAs,
@@ -48,7 +55,7 @@ describe("pw-tools-core", () => {
     return { res, outPath };
   }
 
-  function createDownloadEventHarness() {
+  it("waits for the next download and saves it", async () => {
     let downloadHandler: ((download: unknown) => void) | undefined;
     const on = vi.fn((event: string, handler: (download: unknown) => void) => {
       if (event === "download") {
@@ -56,19 +63,6 @@ describe("pw-tools-core", () => {
       }
     });
     const off = vi.fn();
-    setPwToolsCoreCurrentPage({ on, off });
-    return {
-      trigger: (download: unknown) => {
-        downloadHandler?.(download);
-      },
-      expectArmed: () => {
-        expect(downloadHandler).toBeDefined();
-      },
-    };
-  }
-
-  it("waits for the next download and saves it", async () => {
-    const harness = createDownloadEventHarness();
 
     const saveAs = vi.fn(async () => {});
     const download = {
@@ -76,6 +70,8 @@ describe("pw-tools-core", () => {
       suggestedFilename: () => "file.bin",
       saveAs,
     };
+
+    setPwToolsCoreCurrentPage({ on, off });
 
     const targetPath = path.resolve("/tmp/file.bin");
     const p = mod.waitForDownloadViaPlaywright({
@@ -86,15 +82,21 @@ describe("pw-tools-core", () => {
     });
 
     await Promise.resolve();
-    harness.expectArmed();
-    harness.trigger(download);
+    expect(downloadHandler).toBeDefined();
+    downloadHandler?.(download);
 
     const res = await p;
     expect(saveAs).toHaveBeenCalledWith(targetPath);
     expect(res.path).toBe(targetPath);
   });
   it("clicks a ref and saves the resulting download", async () => {
-    const harness = createDownloadEventHarness();
+    let downloadHandler: ((download: unknown) => void) | undefined;
+    const on = vi.fn((event: string, handler: (download: unknown) => void) => {
+      if (event === "download") {
+        downloadHandler = handler;
+      }
+    });
+    const off = vi.fn();
 
     const click = vi.fn(async () => {});
     setPwToolsCoreCurrentRefLocator({ click });
@@ -106,6 +108,8 @@ describe("pw-tools-core", () => {
       saveAs,
     };
 
+    setPwToolsCoreCurrentPage({ on, off });
+
     const targetPath = path.resolve("/tmp/report.pdf");
     const p = mod.downloadViaPlaywright({
       cdpUrl: "http://127.0.0.1:18792",
@@ -116,10 +120,10 @@ describe("pw-tools-core", () => {
     });
 
     await Promise.resolve();
-    harness.expectArmed();
+    expect(downloadHandler).toBeDefined();
     expect(click).toHaveBeenCalledWith({ timeout: 1000 });
 
-    harness.trigger(download);
+    downloadHandler?.(download);
 
     const res = await p;
     expect(saveAs).toHaveBeenCalledWith(targetPath);

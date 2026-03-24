@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DEFAULT_AGENT_ID } from "../routing/session-key.js";
-import { expandHomePrefix } from "./home-dir.js";
 import { requestJsonlSocket } from "./jsonl-socket.js";
 export * from "./exec-approvals-analysis.js";
 export * from "./exec-approvals-allowlist.js";
@@ -16,7 +16,6 @@ export type ExecApprovalRequest = {
   request: {
     command: string;
     cwd?: string | null;
-    nodeId?: string | null;
     host?: string | null;
     security?: string | null;
     ask?: string | null;
@@ -33,7 +32,6 @@ export type ExecApprovalResolved = {
   decision: ExecApprovalDecision;
   resolvedBy?: string | null;
   ts: number;
-  request?: ExecApprovalRequest["request"];
 };
 
 export type ExecApprovalsDefaults = {
@@ -100,12 +98,25 @@ function hashExecApprovalsRaw(raw: string | null): string {
     .digest("hex");
 }
 
+function expandHome(value: string): string {
+  if (!value) {
+    return value;
+  }
+  if (value === "~") {
+    return os.homedir();
+  }
+  if (value.startsWith("~/")) {
+    return path.join(os.homedir(), value.slice(2));
+  }
+  return value;
+}
+
 export function resolveExecApprovalsPath(): string {
-  return expandHomePrefix(DEFAULT_FILE);
+  return expandHome(DEFAULT_FILE);
 }
 
 export function resolveExecApprovalsSocketPath(): string {
-  return expandHomePrefix(DEFAULT_SOCKET);
+  return expandHome(DEFAULT_SOCKET);
 }
 
 function normalizeAllowlistPattern(value: string | undefined): string | null {
@@ -359,7 +370,7 @@ export function resolveExecApprovals(
     agentId,
     overrides,
     path: resolveExecApprovalsPath(),
-    socketPath: expandHomePrefix(file.socket?.path ?? resolveExecApprovalsSocketPath()),
+    socketPath: expandHome(file.socket?.path ?? resolveExecApprovalsSocketPath()),
     token: file.socket?.token ?? "",
   });
 }
@@ -410,7 +421,7 @@ export function resolveExecApprovalsFromFile(params: {
   ];
   return {
     path: params.path ?? resolveExecApprovalsPath(),
-    socketPath: expandHomePrefix(
+    socketPath: expandHome(
       params.socketPath ?? file.socket?.path ?? resolveExecApprovalsSocketPath(),
     ),
     token: params.token ?? file.socket?.token ?? "",

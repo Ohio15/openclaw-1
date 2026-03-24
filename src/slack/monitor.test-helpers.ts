@@ -34,7 +34,6 @@ type SlackClient = {
   conversations: {
     info: Mock<(...args: unknown[]) => Promise<Record<string, unknown>>>;
     replies: Mock<(...args: unknown[]) => Promise<Record<string, unknown>>>;
-    history: Mock<(...args: unknown[]) => Promise<Record<string, unknown>>>;
   };
   users: {
     info: Mock<(...args: unknown[]) => Promise<{ user: { profile: { display_name: string } } }>>;
@@ -198,7 +197,6 @@ vi.mock("@slack/bolt", () => {
         channel: { name: "dm", is_im: true },
       }),
       replies: vi.fn().mockResolvedValue({ messages: [] }),
-      history: vi.fn().mockResolvedValue({ messages: [] }),
     },
     users: {
       info: vi.fn().mockResolvedValue({

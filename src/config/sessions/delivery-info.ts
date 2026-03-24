@@ -6,12 +6,12 @@ import { loadSessionStore } from "./store.js";
  * Extract deliveryContext and threadId from a sessionKey.
  * Supports both :thread: (most channels) and :topic: (Telegram).
  */
-export function parseSessionThreadInfo(sessionKey: string | undefined): {
-  baseSessionKey: string | undefined;
+export function extractDeliveryInfo(sessionKey: string | undefined): {
+  deliveryContext: { channel?: string; to?: string; accountId?: string } | undefined;
   threadId: string | undefined;
 } {
   if (!sessionKey) {
-    return { baseSessionKey: undefined, threadId: undefined };
+    return { deliveryContext: undefined, threadId: undefined };
   }
   const topicIndex = sessionKey.lastIndexOf(":topic:");
   const threadIndex = sessionKey.lastIndexOf(":thread:");
@@ -22,17 +22,6 @@ export function parseSessionThreadInfo(sessionKey: string | undefined): {
   const threadIdRaw =
     markerIndex === -1 ? undefined : sessionKey.slice(markerIndex + marker.length);
   const threadId = threadIdRaw?.trim() || undefined;
-  return { baseSessionKey, threadId };
-}
-
-export function extractDeliveryInfo(sessionKey: string | undefined): {
-  deliveryContext: { channel?: string; to?: string; accountId?: string } | undefined;
-  threadId: string | undefined;
-} {
-  const { baseSessionKey, threadId } = parseSessionThreadInfo(sessionKey);
-  if (!sessionKey || !baseSessionKey) {
-    return { deliveryContext: undefined, threadId };
-  }
 
   let deliveryContext: { channel?: string; to?: string; accountId?: string } | undefined;
   try {
@@ -40,7 +29,7 @@ export function extractDeliveryInfo(sessionKey: string | undefined): {
     const storePath = resolveStorePath(cfg.session?.store);
     const store = loadSessionStore(storePath);
     let entry = store[sessionKey];
-    if (!entry?.deliveryContext && baseSessionKey !== sessionKey) {
+    if (!entry?.deliveryContext && markerIndex !== -1 && baseSessionKey) {
       entry = store[baseSessionKey];
     }
     if (entry?.deliveryContext) {

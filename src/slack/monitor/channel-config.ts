@@ -47,7 +47,6 @@ export function shouldEmitSlackReactionNotification(params: {
   userId: string;
   userName?: string | null;
   allowlist?: Array<string | number> | null;
-  allowNameMatching?: boolean;
 }) {
   const { mode, botId, messageAuthorId, userId, userName, allowlist } = params;
   const effectiveMode = mode ?? "own";
@@ -69,7 +68,6 @@ export function shouldEmitSlackReactionNotification(params: {
       allowList: users,
       id: userId,
       name: userName ?? undefined,
-      allowNameMatching: params.allowNameMatching,
     });
   }
   return true;

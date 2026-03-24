@@ -18,30 +18,20 @@ class I18nManager {
     this.loadLocale();
   }
 
-  private resolveInitialLocale(): Locale {
+  private loadLocale() {
     const saved = localStorage.getItem("openclaw.i18n.locale");
     if (isSupportedLocale(saved)) {
-      return saved;
+      this.locale = saved;
+    } else {
+      const navLang = navigator.language;
+      if (navLang.startsWith("zh")) {
+        this.locale = navLang === "zh-TW" || navLang === "zh-HK" ? "zh-TW" : "zh-CN";
+      } else if (navLang.startsWith("pt")) {
+        this.locale = "pt-BR";
+      } else {
+        this.locale = "en";
+      }
     }
-    const navLang = navigator.language;
-    if (navLang.startsWith("zh")) {
-      return navLang === "zh-TW" || navLang === "zh-HK" ? "zh-TW" : "zh-CN";
-    }
-    if (navLang.startsWith("pt")) {
-      return "pt-BR";
-    }
-    return "en";
-  }
-
-  private loadLocale() {
-    const initialLocale = this.resolveInitialLocale();
-    if (initialLocale === "en") {
-      this.locale = "en";
-      return;
-    }
-    // Use the normal locale setter so startup locale loading follows the same
-    // translation-loading + notify path as manual locale changes.
-    void this.setLocale(initialLocale);
   }
 
   public getLocale(): Locale {
@@ -49,13 +39,12 @@ class I18nManager {
   }
 
   public async setLocale(locale: Locale) {
-    const needsTranslationLoad = !this.translations[locale];
-    if (this.locale === locale && !needsTranslationLoad) {
+    if (this.locale === locale) {
       return;
     }
 
     // Lazy load translations if needed
-    if (needsTranslationLoad) {
+    if (!this.translations[locale]) {
       try {
         let module: Record<string, TranslationMap>;
         if (locale === "zh-CN") {

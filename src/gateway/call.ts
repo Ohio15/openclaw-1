@@ -7,6 +7,7 @@ import {
   resolveStateDir,
 } from "../config/config.js";
 import { loadOrCreateDeviceIdentity } from "../infra/device-identity.js";
+import { pickPrimaryTailnetIPv4 } from "../infra/tailnet.js";
 import { loadGatewayTlsRuntime } from "../infra/tls/gateway.js";
 import {
   GATEWAY_CLIENT_MODES,
@@ -15,16 +16,10 @@ import {
   type GatewayClientName,
 } from "../utils/message-channel.js";
 import { GatewayClient } from "./client.js";
-import { resolveGatewayCredentialsFromConfig } from "./credentials.js";
-import {
-  CLI_DEFAULT_OPERATOR_SCOPES,
-  resolveLeastPrivilegeOperatorScopesForMethod,
-  type OperatorScope,
-} from "./method-scopes.js";
-import { isSecureWebSocketUrl } from "./net.js";
+import { pickPrimaryLanIPv4 } from "./net.js";
 import { PROTOCOL_VERSION } from "./protocol/index.js";
 
-type CallGatewayBaseOptions = {
+export type CallGatewayOptions = {
   url?: string;
   token?: string;
   password?: string;
@@ -47,18 +42,6 @@ type CallGatewayBaseOptions = {
    * Does not affect config loading; callers still control auth via opts.token/password/env/config.
    */
   configPath?: string;
-};
-
-export type CallGatewayScopedOptions = CallGatewayBaseOptions & {
-  scopes: OperatorScope[];
-};
-
-export type CallGatewayCliOptions = CallGatewayBaseOptions & {
-  scopes?: OperatorScope[];
-};
-
-export type CallGatewayOptions = CallGatewayBaseOptions & {
-  scopes?: OperatorScope[];
 };
 
 export type GatewayConnectionDetails = {
@@ -116,10 +99,18 @@ export function buildGatewayConnectionDetails(
   const remote = isRemoteMode ? config.gateway?.remote : undefined;
   const tlsEnabled = config.gateway?.tls?.enabled === true;
   const localPort = resolveGatewayPort(config);
+  const tailnetIPv4 = pickPrimaryTailnetIPv4();
   const bindMode = config.gateway?.bind ?? "loopback";
+  const preferTailnet = bindMode === "tailnet" && !!tailnetIPv4;
+  const preferLan = bindMode === "lan";
+  const lanIPv4 = preferLan ? pickPrimaryLanIPv4() : undefined;
   const scheme = tlsEnabled ? "wss" : "ws";
-  // Self-connections should always target loopback; bind mode only controls listener exposure.
-  const localUrl = `${scheme}://127.0.0.1:${localPort}`;
+  const localUrl =
+    preferTailnet && tailnetIPv4
+      ? `${scheme}://${tailnetIPv4}:${localPort}`
+      : preferLan && lanIPv4
+        ? `${scheme}://${lanIPv4}:${localPort}`
+        : `${scheme}://127.0.0.1:${localPort}`;
   const urlOverride =
     typeof options.url === "string" && options.url.trim().length > 0
       ? options.url.trim()
@@ -134,32 +125,15 @@ export function buildGatewayConnectionDetails(
       ? "config gateway.remote.url"
       : remoteMisconfigured
         ? "missing gateway.remote.url (fallback local)"
-        : "local loopback";
+        : preferTailnet && tailnetIPv4
+          ? `local tailnet ${tailnetIPv4}`
+          : preferLan && lanIPv4
+            ? `local lan ${lanIPv4}`
+            : "local loopback";
   const remoteFallbackNote = remoteMisconfigured
     ? "Warn: gateway.mode=remote but gateway.remote.url is missing; set gateway.remote.url or switch gateway.mode=local."
     : undefined;
   const bindDetail = !urlOverride && !remoteUrl ? `Bind: ${bindMode}` : undefined;
-
-  // Security check: block ALL insecure ws:// to non-loopback addresses (CWE-319, CVSS 9.8)
-  // This applies to the FINAL resolved URL, regardless of source (config, CLI override, etc).
-  // Both credentials and chat/conversation data must not be transmitted over plaintext to remote hosts.
-  if (!isSecureWebSocketUrl(url)) {
-    throw new Error(
-      [
-        `SECURITY ERROR: Gateway URL "${url}" uses plaintext ws:// to a non-loopback address.`,
-        "Both credentials and chat data would be exposed to network interception.",
-        `Source: ${urlSource}`,
-        `Config: ${configPath}`,
-        "Fix: Use wss:// for remote gateway URLs.",
-        "Safe remote access defaults:",
-        "- keep gateway.bind=loopback and use an SSH tunnel (ssh -N -L 18789:127.0.0.1:18789 user@gateway-host)",
-        "- or use Tailscale Serve/Funnel for HTTPS remote access",
-        "Doctor: openclaw doctor --fix",
-        "Docs: https://docs.openclaw.ai/gateway/remote",
-      ].join("\n"),
-    );
-  }
-
   const message = [
     `Gateway target: ${url}`,
     `Source: ${urlSource}`,
@@ -179,139 +153,94 @@ export function buildGatewayConnectionDetails(
   };
 }
 
-type GatewayRemoteSettings = {
-  url?: string;
-  token?: string;
-  password?: string;
-  tlsFingerprint?: string;
-};
-
-type ResolvedGatewayCallContext = {
-  config: OpenClawConfig;
-  configPath: string;
-  isRemoteMode: boolean;
-  remote?: GatewayRemoteSettings;
-  urlOverride?: string;
-  remoteUrl?: string;
-  explicitAuth: ExplicitGatewayAuth;
-};
-
-function trimToUndefined(value: unknown): string | undefined {
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-function resolveGatewayCallTimeout(timeoutValue: unknown): {
-  timeoutMs: number;
-  safeTimerTimeoutMs: number;
-} {
+export async function callGateway<T = Record<string, unknown>>(
+  opts: CallGatewayOptions,
+): Promise<T> {
   const timeoutMs =
-    typeof timeoutValue === "number" && Number.isFinite(timeoutValue) ? timeoutValue : 10_000;
+    typeof opts.timeoutMs === "number" && Number.isFinite(opts.timeoutMs) ? opts.timeoutMs : 10_000;
   const safeTimerTimeoutMs = Math.max(1, Math.min(Math.floor(timeoutMs), 2_147_483_647));
-  return { timeoutMs, safeTimerTimeoutMs };
-}
-
-function resolveGatewayCallContext(opts: CallGatewayBaseOptions): ResolvedGatewayCallContext {
   const config = opts.config ?? loadConfig();
-  const configPath =
-    opts.configPath ?? resolveConfigPath(process.env, resolveStateDir(process.env));
   const isRemoteMode = config.gateway?.mode === "remote";
-  const remote = isRemoteMode
-    ? (config.gateway?.remote as GatewayRemoteSettings | undefined)
-    : undefined;
-  const urlOverride = trimToUndefined(opts.url);
-  const remoteUrl = trimToUndefined(remote?.url);
+  const remote = isRemoteMode ? config.gateway?.remote : undefined;
+  const urlOverride =
+    typeof opts.url === "string" && opts.url.trim().length > 0 ? opts.url.trim() : undefined;
   const explicitAuth = resolveExplicitGatewayAuth({ token: opts.token, password: opts.password });
-  return { config, configPath, isRemoteMode, remote, urlOverride, remoteUrl, explicitAuth };
-}
-
-function ensureRemoteModeUrlConfigured(context: ResolvedGatewayCallContext): void {
-  if (!context.isRemoteMode || context.urlOverride || context.remoteUrl) {
-    return;
-  }
-  throw new Error(
-    [
-      "gateway remote mode misconfigured: gateway.remote.url missing",
-      `Config: ${context.configPath}`,
-      "Fix: set gateway.remote.url, or set gateway.mode=local.",
-    ].join("\n"),
-  );
-}
-
-function resolveGatewayCredentials(context: ResolvedGatewayCallContext): {
-  token?: string;
-  password?: string;
-} {
-  return resolveGatewayCredentialsFromConfig({
-    cfg: context.config,
-    env: process.env,
-    explicitAuth: context.explicitAuth,
-    urlOverride: context.urlOverride,
-    remotePasswordPrecedence: "env-first",
+  ensureExplicitGatewayAuth({
+    urlOverride,
+    auth: explicitAuth,
+    errorHint: "Fix: pass --token or --password (or gatewayToken in tools).",
+    configPath: opts.configPath ?? resolveConfigPath(process.env, resolveStateDir(process.env)),
   });
-}
-
-async function resolveGatewayTlsFingerprint(params: {
-  opts: CallGatewayBaseOptions;
-  context: ResolvedGatewayCallContext;
-  url: string;
-}): Promise<string | undefined> {
-  const { opts, context, url } = params;
+  const remoteUrl =
+    typeof remote?.url === "string" && remote.url.trim().length > 0 ? remote.url.trim() : undefined;
+  if (isRemoteMode && !urlOverride && !remoteUrl) {
+    const configPath =
+      opts.configPath ?? resolveConfigPath(process.env, resolveStateDir(process.env));
+    throw new Error(
+      [
+        "gateway remote mode misconfigured: gateway.remote.url missing",
+        `Config: ${configPath}`,
+        "Fix: set gateway.remote.url, or set gateway.mode=local.",
+      ].join("\n"),
+    );
+  }
+  const authToken = config.gateway?.auth?.token;
+  const authPassword = config.gateway?.auth?.password;
+  const connectionDetails = buildGatewayConnectionDetails({
+    config,
+    url: urlOverride,
+    ...(opts.configPath ? { configPath: opts.configPath } : {}),
+  });
+  const url = connectionDetails.url;
   const useLocalTls =
-    context.config.gateway?.tls?.enabled === true &&
-    !context.urlOverride &&
-    !context.remoteUrl &&
-    url.startsWith("wss://");
-  const tlsRuntime = useLocalTls
-    ? await loadGatewayTlsRuntime(context.config.gateway?.tls)
-    : undefined;
-  const overrideTlsFingerprint = trimToUndefined(opts.tlsFingerprint);
+    config.gateway?.tls?.enabled === true && !urlOverride && !remoteUrl && url.startsWith("wss://");
+  const tlsRuntime = useLocalTls ? await loadGatewayTlsRuntime(config.gateway?.tls) : undefined;
   const remoteTlsFingerprint =
-    context.isRemoteMode && !context.urlOverride && context.remoteUrl
-      ? trimToUndefined(context.remote?.tlsFingerprint)
+    isRemoteMode && !urlOverride && remoteUrl && typeof remote?.tlsFingerprint === "string"
+      ? remote.tlsFingerprint.trim()
       : undefined;
-  return (
+  const overrideTlsFingerprint =
+    typeof opts.tlsFingerprint === "string" ? opts.tlsFingerprint.trim() : undefined;
+  const tlsFingerprint =
     overrideTlsFingerprint ||
     remoteTlsFingerprint ||
-    (tlsRuntime?.enabled ? tlsRuntime.fingerprintSha256 : undefined)
-  );
-}
+    (tlsRuntime?.enabled ? tlsRuntime.fingerprintSha256 : undefined);
+  const token =
+    explicitAuth.token ||
+    (!urlOverride
+      ? isRemoteMode
+        ? typeof remote?.token === "string" && remote.token.trim().length > 0
+          ? remote.token.trim()
+          : undefined
+        : process.env.OPENCLAW_GATEWAY_TOKEN?.trim() ||
+          process.env.CLAWDBOT_GATEWAY_TOKEN?.trim() ||
+          (typeof authToken === "string" && authToken.trim().length > 0
+            ? authToken.trim()
+            : undefined)
+      : undefined);
+  const password =
+    explicitAuth.password ||
+    (!urlOverride
+      ? process.env.OPENCLAW_GATEWAY_PASSWORD?.trim() ||
+        process.env.CLAWDBOT_GATEWAY_PASSWORD?.trim() ||
+        (isRemoteMode
+          ? typeof remote?.password === "string" && remote.password.trim().length > 0
+            ? remote.password.trim()
+            : undefined
+          : typeof authPassword === "string" && authPassword.trim().length > 0
+            ? authPassword.trim()
+            : undefined)
+      : undefined);
 
-function formatGatewayCloseError(
-  code: number,
-  reason: string,
-  connectionDetails: GatewayConnectionDetails,
-): string {
-  const reasonText = reason?.trim() || "no close reason";
-  const hint =
-    code === 1006 ? "abnormal closure (no close frame)" : code === 1000 ? "normal closure" : "";
-  const suffix = hint ? ` ${hint}` : "";
-  return `gateway closed (${code}${suffix}): ${reasonText}\n${connectionDetails.message}`;
-}
-
-function formatGatewayTimeoutError(
-  timeoutMs: number,
-  connectionDetails: GatewayConnectionDetails,
-): string {
-  return `gateway timeout after ${timeoutMs}ms\n${connectionDetails.message}`;
-}
-
-async function executeGatewayRequestWithScopes<T>(params: {
-  opts: CallGatewayBaseOptions;
-  scopes: OperatorScope[];
-  url: string;
-  token?: string;
-  password?: string;
-  tlsFingerprint?: string;
-  timeoutMs: number;
-  safeTimerTimeoutMs: number;
-  connectionDetails: GatewayConnectionDetails;
-}): Promise<T> {
-  const { opts, scopes, url, token, password, tlsFingerprint, timeoutMs, safeTimerTimeoutMs } =
-    params;
+  const formatCloseError = (code: number, reason: string) => {
+    const reasonText = reason?.trim() || "no close reason";
+    const hint =
+      code === 1006 ? "abnormal closure (no close frame)" : code === 1000 ? "normal closure" : "";
+    const suffix = hint ? ` ${hint}` : "";
+    return `gateway closed (${code}${suffix}): ${reasonText}\n${connectionDetails.message}`;
+  };
+  const formatTimeoutError = () =>
+    `gateway timeout after ${timeoutMs}ms\n${connectionDetails.message}`;
   return await new Promise<T>((resolve, reject) => {
     let settled = false;
     let ignoreClose = false;
@@ -340,7 +269,7 @@ async function executeGatewayRequestWithScopes<T>(params: {
       platform: opts.platform,
       mode: opts.mode ?? GATEWAY_CLIENT_MODES.CLI,
       role: "operator",
-      scopes,
+      scopes: ["operator.admin", "operator.approvals", "operator.pairing"],
       deviceIdentity: loadOrCreateDeviceIdentity(),
       minProtocol: opts.minProtocol ?? PROTOCOL_VERSION,
       maxProtocol: opts.maxProtocol ?? PROTOCOL_VERSION,
@@ -364,89 +293,17 @@ async function executeGatewayRequestWithScopes<T>(params: {
         }
         ignoreClose = true;
         client.stop();
-        stop(new Error(formatGatewayCloseError(code, reason, params.connectionDetails)));
+        stop(new Error(formatCloseError(code, reason)));
       },
     });
 
     const timer = setTimeout(() => {
       ignoreClose = true;
       client.stop();
-      stop(new Error(formatGatewayTimeoutError(timeoutMs, params.connectionDetails)));
+      stop(new Error(formatTimeoutError()));
     }, safeTimerTimeoutMs);
 
     client.start();
-  });
-}
-
-async function callGatewayWithScopes<T = Record<string, unknown>>(
-  opts: CallGatewayBaseOptions,
-  scopes: OperatorScope[],
-): Promise<T> {
-  const { timeoutMs, safeTimerTimeoutMs } = resolveGatewayCallTimeout(opts.timeoutMs);
-  const context = resolveGatewayCallContext(opts);
-  ensureExplicitGatewayAuth({
-    urlOverride: context.urlOverride,
-    auth: context.explicitAuth,
-    errorHint: "Fix: pass --token or --password (or gatewayToken in tools).",
-    configPath: context.configPath,
-  });
-  ensureRemoteModeUrlConfigured(context);
-  const connectionDetails = buildGatewayConnectionDetails({
-    config: context.config,
-    url: context.urlOverride,
-    ...(opts.configPath ? { configPath: opts.configPath } : {}),
-  });
-  const url = connectionDetails.url;
-  const tlsFingerprint = await resolveGatewayTlsFingerprint({ opts, context, url });
-  const { token, password } = resolveGatewayCredentials(context);
-  return await executeGatewayRequestWithScopes<T>({
-    opts,
-    scopes,
-    url,
-    token,
-    password,
-    tlsFingerprint,
-    timeoutMs,
-    safeTimerTimeoutMs,
-    connectionDetails,
-  });
-}
-
-export async function callGatewayScoped<T = Record<string, unknown>>(
-  opts: CallGatewayScopedOptions,
-): Promise<T> {
-  return await callGatewayWithScopes(opts, opts.scopes);
-}
-
-export async function callGatewayCli<T = Record<string, unknown>>(
-  opts: CallGatewayCliOptions,
-): Promise<T> {
-  const scopes = Array.isArray(opts.scopes) ? opts.scopes : CLI_DEFAULT_OPERATOR_SCOPES;
-  return await callGatewayWithScopes(opts, scopes);
-}
-
-export async function callGatewayLeastPrivilege<T = Record<string, unknown>>(
-  opts: CallGatewayBaseOptions,
-): Promise<T> {
-  const scopes = resolveLeastPrivilegeOperatorScopesForMethod(opts.method);
-  return await callGatewayWithScopes(opts, scopes);
-}
-
-export async function callGateway<T = Record<string, unknown>>(
-  opts: CallGatewayOptions,
-): Promise<T> {
-  if (Array.isArray(opts.scopes)) {
-    return await callGatewayWithScopes(opts, opts.scopes);
-  }
-  const callerMode = opts.mode ?? GATEWAY_CLIENT_MODES.BACKEND;
-  const callerName = opts.clientName ?? GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT;
-  if (callerMode === GATEWAY_CLIENT_MODES.CLI || callerName === GATEWAY_CLIENT_NAMES.CLI) {
-    return await callGatewayCli(opts);
-  }
-  return await callGatewayLeastPrivilege({
-    ...opts,
-    mode: callerMode,
-    clientName: callerName,
   });
 }
 

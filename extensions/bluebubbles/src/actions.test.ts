@@ -3,10 +3,17 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { bluebubblesMessageActions } from "./actions.js";
 import { getCachedBlueBubblesPrivateApiStatus } from "./probe.js";
 
-vi.mock("./accounts.js", async () => {
-  const { createBlueBubblesAccountsMockModule } = await import("./test-harness.js");
-  return createBlueBubblesAccountsMockModule();
-});
+vi.mock("./accounts.js", () => ({
+  resolveBlueBubblesAccount: vi.fn(({ cfg, accountId }) => {
+    const config = cfg?.channels?.bluebubbles ?? {};
+    return {
+      accountId: accountId ?? "default",
+      enabled: config.enabled !== false,
+      configured: Boolean(config.serverUrl && config.password),
+      config,
+    };
+  }),
+}));
 
 vi.mock("./reactions.js", () => ({
   sendBlueBubblesReaction: vi.fn().mockResolvedValue(undefined),
@@ -47,22 +54,6 @@ describe("bluebubblesMessageActions", () => {
   const handleAction = bluebubblesMessageActions.handleAction!;
   const callHandleAction = (ctx: Omit<Parameters<typeof handleAction>[0], "channel">) =>
     handleAction({ channel: "bluebubbles", ...ctx });
-  const blueBubblesConfig = (): OpenClawConfig => ({
-    channels: {
-      bluebubbles: {
-        serverUrl: "http://localhost:1234",
-        password: "test-password",
-      },
-    },
-  });
-  const runReactAction = async (params: Record<string, unknown>) => {
-    return await callHandleAction({
-      action: "react",
-      params,
-      cfg: blueBubblesConfig(),
-      accountId: null,
-    });
-  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -301,10 +292,23 @@ describe("bluebubblesMessageActions", () => {
     it("sends reaction successfully with chatGuid", async () => {
       const { sendBlueBubblesReaction } = await import("./reactions.js");
 
-      const result = await runReactAction({
-        emoji: "❤️",
-        messageId: "msg-123",
-        chatGuid: "iMessage;-;+15551234567",
+      const cfg: OpenClawConfig = {
+        channels: {
+          bluebubbles: {
+            serverUrl: "http://localhost:1234",
+            password: "test-password",
+          },
+        },
+      };
+      const result = await callHandleAction({
+        action: "react",
+        params: {
+          emoji: "❤️",
+          messageId: "msg-123",
+          chatGuid: "iMessage;-;+15551234567",
+        },
+        cfg,
+        accountId: null,
       });
 
       expect(sendBlueBubblesReaction).toHaveBeenCalledWith(
@@ -323,11 +327,24 @@ describe("bluebubblesMessageActions", () => {
     it("sends reaction removal successfully", async () => {
       const { sendBlueBubblesReaction } = await import("./reactions.js");
 
-      const result = await runReactAction({
-        emoji: "❤️",
-        messageId: "msg-123",
-        chatGuid: "iMessage;-;+15551234567",
-        remove: true,
+      const cfg: OpenClawConfig = {
+        channels: {
+          bluebubbles: {
+            serverUrl: "http://localhost:1234",
+            password: "test-password",
+          },
+        },
+      };
+      const result = await callHandleAction({
+        action: "react",
+        params: {
+          emoji: "❤️",
+          messageId: "msg-123",
+          chatGuid: "iMessage;-;+15551234567",
+          remove: true,
+        },
+        cfg,
+        accountId: null,
       });
 
       expect(sendBlueBubblesReaction).toHaveBeenCalledWith(

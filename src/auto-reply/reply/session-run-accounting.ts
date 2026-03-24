@@ -13,7 +13,19 @@ type IncrementRunCompactionCountParams = Omit<
 };
 
 export async function persistRunSessionUsage(params: PersistRunSessionUsageParams): Promise<void> {
-  await persistSessionUsageUpdate(params);
+  await persistSessionUsageUpdate({
+    storePath: params.storePath,
+    sessionKey: params.sessionKey,
+    usage: params.usage,
+    lastCallUsage: params.lastCallUsage,
+    promptTokens: params.promptTokens,
+    modelUsed: params.modelUsed,
+    providerUsed: params.providerUsed,
+    contextTokensUsed: params.contextTokensUsed,
+    systemPromptReport: params.systemPromptReport,
+    cliSessionId: params.cliSessionId,
+    logLabel: params.logLabel,
+  });
 }
 
 export async function incrementRunCompactionCount(

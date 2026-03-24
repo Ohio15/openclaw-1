@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { MsgContext } from "../auto-reply/templating.js";
@@ -6,14 +8,7 @@ import type { MediaUnderstandingAttachmentsConfig } from "../config/types.tools.
 import { logVerbose, shouldLogVerbose } from "../globals.js";
 import { isAbortError } from "../infra/unhandled-rejections.js";
 import { fetchRemoteMedia, MediaFetchError } from "../media/fetch.js";
-import {
-  DEFAULT_IMESSAGE_ATTACHMENT_ROOTS,
-  isInboundPathAllowed,
-  mergeInboundPathRoots,
-} from "../media/inbound-path-policy.js";
-import { getDefaultMediaLocalRoots } from "../media/local-roots.js";
 import { detectMime, getFileExtension, isAudioFileName, kindFromMime } from "../media/mime.js";
-import { buildRandomTempFilePath } from "../plugin-sdk/temp-path.js";
 import { MediaUnderstandingSkipError } from "./errors.js";
 import { fetchWithTimeout } from "./providers/shared.js";
 import type { MediaAttachment, MediaUnderstandingCapability } from "./types.js";
@@ -42,14 +37,6 @@ type AttachmentCacheEntry = {
 };
 
 const DEFAULT_MAX_ATTACHMENTS = 1;
-const DEFAULT_LOCAL_PATH_ROOTS = mergeInboundPathRoots(
-  getDefaultMediaLocalRoots(),
-  DEFAULT_IMESSAGE_ATTACHMENT_ROOTS,
-);
-
-export type MediaAttachmentCacheOptions = {
-  localPathRoots?: readonly string[];
-};
 
 function normalizeAttachmentPath(raw?: string | null): string | undefined {
   const value = raw?.trim();
@@ -223,12 +210,9 @@ export function selectAttachments(params: {
 export class MediaAttachmentCache {
   private readonly entries = new Map<number, AttachmentCacheEntry>();
   private readonly attachments: MediaAttachment[];
-  private readonly localPathRoots: readonly string[];
-  private canonicalLocalPathRoots?: Promise<readonly string[]>;
 
-  constructor(attachments: MediaAttachment[], options?: MediaAttachmentCacheOptions) {
+  constructor(attachments: MediaAttachment[]) {
     this.attachments = attachments;
-    this.localPathRoots = mergeInboundPathRoots(options?.localPathRoots, DEFAULT_LOCAL_PATH_ROOTS);
     for (const attachment of attachments) {
       this.entries.set(attachment.index, { attachment });
     }
@@ -368,10 +352,7 @@ export class MediaAttachmentCache {
       timeoutMs: params.timeoutMs,
     });
     const extension = path.extname(bufferResult.fileName || "") || "";
-    const tmpPath = buildRandomTempFilePath({
-      prefix: "openclaw-media",
-      extension,
-    });
+    const tmpPath = path.join(os.tmpdir(), `openclaw-media-${crypto.randomUUID()}${extension}`);
     await fs.writeFile(tmpPath, bufferResult.buffer);
     entry.tempPath = tmpPath;
     entry.tempCleanup = async () => {
@@ -422,37 +403,15 @@ export class MediaAttachmentCache {
     if (!entry.resolvedPath) {
       return undefined;
     }
-    if (!isInboundPathAllowed({ filePath: entry.resolvedPath, roots: this.localPathRoots })) {
-      entry.resolvedPath = undefined;
-      if (shouldLogVerbose()) {
-        logVerbose(
-          `Blocked attachment path outside allowed roots: ${entry.attachment.path ?? entry.attachment.url ?? "(unknown)"}`,
-        );
-      }
-      return undefined;
-    }
     if (entry.statSize !== undefined) {
       return entry.statSize;
     }
     try {
-      const currentPath = entry.resolvedPath;
-      const stat = await fs.stat(currentPath);
+      const stat = await fs.stat(entry.resolvedPath);
       if (!stat.isFile()) {
         entry.resolvedPath = undefined;
         return undefined;
       }
-      const canonicalPath = await fs.realpath(currentPath).catch(() => currentPath);
-      const canonicalRoots = await this.getCanonicalLocalPathRoots();
-      if (!isInboundPathAllowed({ filePath: canonicalPath, roots: canonicalRoots })) {
-        entry.resolvedPath = undefined;
-        if (shouldLogVerbose()) {
-          logVerbose(
-            `Blocked canonicalized attachment path outside allowed roots: ${canonicalPath}`,
-          );
-        }
-        return undefined;
-      }
-      entry.resolvedPath = canonicalPath;
       entry.statSize = stat.size;
       return stat.size;
     } catch (err) {
@@ -462,24 +421,5 @@ export class MediaAttachmentCache {
       }
       return undefined;
     }
-  }
-
-  private async getCanonicalLocalPathRoots(): Promise<readonly string[]> {
-    if (this.canonicalLocalPathRoots) {
-      return await this.canonicalLocalPathRoots;
-    }
-    this.canonicalLocalPathRoots = (async () =>
-      mergeInboundPathRoots(
-        this.localPathRoots,
-        await Promise.all(
-          this.localPathRoots.map(async (root) => {
-            if (root.includes("*")) {
-              return root;
-            }
-            return await fs.realpath(root).catch(() => root);
-          }),
-        ),
-      ))();
-    return await this.canonicalLocalPathRoots;
   }
 }

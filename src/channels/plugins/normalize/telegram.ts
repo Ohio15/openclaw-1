@@ -1,44 +1,39 @@
-import { normalizeTelegramLookupTarget, parseTelegramTarget } from "../../../telegram/targets.js";
-
-const TELEGRAM_PREFIX_RE = /^(telegram|tg):/i;
-
-function normalizeTelegramTargetBody(raw: string): string | undefined {
+export function normalizeTelegramMessagingTarget(raw: string): string | undefined {
   const trimmed = raw.trim();
   if (!trimmed) {
     return undefined;
   }
-
-  const prefixStripped = trimmed.replace(TELEGRAM_PREFIX_RE, "").trim();
-  if (!prefixStripped) {
+  let normalized = trimmed;
+  if (normalized.startsWith("telegram:")) {
+    normalized = normalized.slice("telegram:".length).trim();
+  } else if (normalized.startsWith("tg:")) {
+    normalized = normalized.slice("tg:".length).trim();
+  }
+  if (!normalized) {
     return undefined;
   }
-
-  const parsed = parseTelegramTarget(trimmed);
-  const normalizedChatId = normalizeTelegramLookupTarget(parsed.chatId);
-  if (!normalizedChatId) {
+  const tmeMatch =
+    /^https?:\/\/t\.me\/([A-Za-z0-9_]+)$/i.exec(normalized) ??
+    /^t\.me\/([A-Za-z0-9_]+)$/i.exec(normalized);
+  if (tmeMatch?.[1]) {
+    normalized = `@${tmeMatch[1]}`;
+  }
+  if (!normalized) {
     return undefined;
   }
-
-  const keepLegacyGroupPrefix = /^group:/i.test(prefixStripped);
-  const hasTopicSuffix = /:topic:\d+$/i.test(prefixStripped);
-  const chatSegment = keepLegacyGroupPrefix ? `group:${normalizedChatId}` : normalizedChatId;
-  if (parsed.messageThreadId == null) {
-    return chatSegment;
-  }
-  const threadSuffix = hasTopicSuffix
-    ? `:topic:${parsed.messageThreadId}`
-    : `:${parsed.messageThreadId}`;
-  return `${chatSegment}${threadSuffix}`;
-}
-
-export function normalizeTelegramMessagingTarget(raw: string): string | undefined {
-  const normalizedBody = normalizeTelegramTargetBody(raw);
-  if (!normalizedBody) {
-    return undefined;
-  }
-  return `telegram:${normalizedBody}`.toLowerCase();
+  return `telegram:${normalized}`.toLowerCase();
 }
 
 export function looksLikeTelegramTargetId(raw: string): boolean {
-  return normalizeTelegramTargetBody(raw) !== undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/^(telegram|tg):/i.test(trimmed)) {
+    return true;
+  }
+  if (trimmed.startsWith("@")) {
+    return true;
+  }
+  return /^-?\d{6,}$/.test(trimmed);
 }

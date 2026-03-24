@@ -62,7 +62,7 @@ The agent reads this on each heartbeat and handles all items in one turn.
     defaults: {
       heartbeat: {
         every: "30m", // interval
-        target: "last", // explicit alert delivery target (default is "none")
+        target: "last", // where to deliver alerts
         activeHours: { start: "08:00", end: "22:00" }, // optional
       },
     },
@@ -74,9 +74,7 @@ See [Heartbeat](/gateway/heartbeat) for full configuration.
 
 ## Cron: Precise Scheduling
 
-Cron jobs run at precise times and can run in isolated sessions without affecting main context.
-Recurring top-of-hour schedules are automatically spread by a deterministic
-per-job offset in a 0-5 minute window.
+Cron jobs run at **exact times** and can run in isolated sessions without affecting main context.
 
 ### When to use cron
 
@@ -89,9 +87,7 @@ per-job offset in a 0-5 minute window.
 
 ### Cron advantages
 
-- **Precise timing**: 5-field or 6-field (seconds) cron expressions with timezone support.
-- **Built-in load spreading**: recurring top-of-hour schedules are staggered by up to 5 minutes by default.
-- **Per-job control**: override stagger with `--stagger <duration>` or force exact timing with `--exact`.
+- **Exact timing**: 5-field cron expressions with timezone support.
 - **Session isolation**: Runs in `cron:<jobId>` without polluting main history.
 - **Model overrides**: Use a cheaper or more powerful model per job.
 - **Delivery control**: Isolated jobs default to `announce` (summary); choose `none` as needed.
@@ -211,7 +207,7 @@ For ad-hoc workflows, call Lobster directly.
 - Lobster runs as a **local subprocess** (`lobster` CLI) in tool mode and returns a **JSON envelope**.
 - If the tool returns `needs_approval`, you resume with a `resumeToken` and `approve` flag.
 - The tool is an **optional plugin**; enable it additively via `tools.alsoAllow: ["lobster"]` (recommended).
-- Lobster expects the `lobster` CLI to be available on `PATH`.
+- If you pass `lobsterPath`, it must be an **absolute path**.
 
 See [Lobster](/tools/lobster) for full usage and examples.
 

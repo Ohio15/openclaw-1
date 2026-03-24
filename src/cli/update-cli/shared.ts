@@ -11,7 +11,6 @@ import { fetchNpmTagVersion } from "../../infra/update-check.js";
 import {
   detectGlobalInstallManagerByPresence,
   detectGlobalInstallManagerForRoot,
-  type CommandRunner,
   type GlobalInstallManager,
 } from "../../infra/update-global.js";
 import type { UpdateStepProgress, UpdateStepResult } from "../../infra/update-runner.js";
@@ -23,7 +22,6 @@ import { pathExists } from "../../utils.js";
 export type UpdateCommandOptions = {
   json?: boolean;
   restart?: boolean;
-  dryRun?: boolean;
   channel?: string;
   tag?: string;
   timeout?: string;
@@ -38,18 +36,6 @@ export type UpdateStatusOptions = {
 export type UpdateWizardOptions = {
   timeout?: string;
 };
-
-const INVALID_TIMEOUT_ERROR = "--timeout must be a positive integer (seconds)";
-
-export function parseTimeoutMsOrExit(timeout?: string): number | undefined | null {
-  const timeoutMs = timeout ? Number.parseInt(timeout, 10) * 1000 : undefined;
-  if (timeoutMs !== undefined && (Number.isNaN(timeoutMs) || timeoutMs <= 0)) {
-    defaultRuntime.error(INVALID_TIMEOUT_ERROR);
-    defaultRuntime.exit(1);
-    return null;
-  }
-  return timeoutMs;
-}
 
 const OPENCLAW_REPO_URL = "https://github.com/openclaw/openclaw.git";
 const MAX_LOG_CHARS = 8000;
@@ -238,7 +224,10 @@ export async function resolveGlobalManager(params: {
   installKind: "git" | "package" | "unknown";
   timeoutMs: number;
 }): Promise<GlobalInstallManager> {
-  const runCommand = createGlobalCommandRunner();
+  const runCommand = async (argv: string[], options: { timeoutMs: number }) => {
+    const res = await runCommandWithTimeout(argv, options);
+    return { stdout: res.stdout, stderr: res.stderr, code: res.code };
+  };
 
   if (params.installKind === "package") {
     const detected = await detectGlobalInstallManagerForRoot(
@@ -279,11 +268,4 @@ export async function tryWriteCompletionCache(root: string, jsonMode: boolean): 
     const detail = stderr ? ` (${stderr})` : "";
     defaultRuntime.log(theme.warn(`Completion cache update failed${detail}.`));
   }
-}
-
-export function createGlobalCommandRunner(): CommandRunner {
-  return async (argv, options) => {
-    const res = await runCommandWithTimeout(argv, options);
-    return { stdout: res.stdout, stderr: res.stderr, code: res.code };
-  };
 }

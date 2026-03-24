@@ -4,11 +4,11 @@ import { normalizeChannelId } from "../channels/plugins/index.js";
 import { createOutboundSendDeps } from "../cli/outbound-send-deps.js";
 import { agentCommand } from "../commands/agent.js";
 import { loadConfig } from "../config/config.js";
+import { loadSessionStore } from "../config/sessions.js";
 import { updateSessionStore } from "../config/sessions.js";
 import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
 import { deliverOutboundPayloads } from "../infra/outbound/deliver.js";
 import { resolveOutboundTarget } from "../infra/outbound/targets.js";
-import { registerApnsToken } from "../infra/push-apns.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import { normalizeMainKey } from "../routing/session-key.js";
 import { defaultRuntime } from "../runtime.js";
@@ -185,6 +185,45 @@ function queueSessionStoreTouch(params: {
   });
 }
 
+function resolveFallbackDeliveryRoute(params: {
+  storePath: LoadedSessionEntry["storePath"];
+  preferredChannel?: string;
+}): { channel?: string; to?: string } {
+  const { storePath, preferredChannel } = params;
+  if (!storePath) {
+    return {};
+  }
+
+  const targetChannel = preferredChannel?.trim().toLowerCase();
+  const store = loadSessionStore(storePath);
+  const candidates = Object.values(store)
+    .filter((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return false;
+      }
+      const channel = typeof entry.lastChannel === "string" ? entry.lastChannel.trim() : "";
+      const to = typeof entry.lastTo === "string" ? entry.lastTo.trim() : "";
+      if (!channel || !to) {
+        return false;
+      }
+      if (targetChannel && channel.toLowerCase() !== targetChannel) {
+        return false;
+      }
+      return true;
+    })
+    .toSorted((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+
+  const winner = candidates[0];
+  if (!winner) {
+    return {};
+  }
+
+  return {
+    channel: typeof winner.lastChannel === "string" ? winner.lastChannel.trim() : undefined,
+    to: typeof winner.lastTo === "string" ? winner.lastTo.trim() : undefined,
+  };
+}
+
 function parseSessionKeyFromPayloadJSON(payloadJSON: string): string | null {
   let payload: unknown;
   try {
@@ -198,21 +237,6 @@ function parseSessionKeyFromPayloadJSON(payloadJSON: string): string | null {
   const obj = payload as Record<string, unknown>;
   const sessionKey = typeof obj.sessionKey === "string" ? obj.sessionKey.trim() : "";
   return sessionKey.length > 0 ? sessionKey : null;
-}
-
-function parsePayloadObject(payloadJSON?: string | null): Record<string, unknown> | null {
-  if (!payloadJSON) {
-    return null;
-  }
-  let payload: unknown;
-  try {
-    payload = JSON.parse(payloadJSON) as unknown;
-  } catch {
-    return null;
-  }
-  return typeof payload === "object" && payload !== null
-    ? (payload as Record<string, unknown>)
-    : null;
 }
 
 async function sendReceiptAck(params: {
@@ -247,10 +271,17 @@ async function sendReceiptAck(params: {
 export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt: NodeEvent) => {
   switch (evt.event) {
     case "voice.transcript": {
-      const obj = parsePayloadObject(evt.payloadJSON);
-      if (!obj) {
+      if (!evt.payloadJSON) {
         return;
       }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(evt.payloadJSON) as unknown;
+      } catch {
+        return;
+      }
+      const obj =
+        typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : {};
       const text = typeof obj.text === "string" ? obj.text.trim() : "";
       if (!text) {
         return;
@@ -363,7 +394,7 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
       const channelRaw = typeof link?.channel === "string" ? link.channel.trim() : "";
       let channel = normalizeChannelId(channelRaw) ?? undefined;
       let to = typeof link?.to === "string" && link.to.trim() ? link.to.trim() : undefined;
-      const deliverRequested = Boolean(link?.deliver);
+      const deliver = Boolean(link?.deliver);
       const wantsReceipt = Boolean(link?.receipt);
       const receiptTextRaw = typeof link?.receiptText === "string" ? link.receiptText.trim() : "";
       const receiptText =
@@ -377,7 +408,7 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
       const sessionId = entry?.sessionId ?? randomUUID();
       await touchSessionStore({ cfg, sessionKey, storePath, canonicalKey, entry, sessionId, now });
 
-      if (deliverRequested && (!channel || !to)) {
+      if (deliver && (!channel || !to)) {
         const entryChannel =
           typeof entry?.lastChannel === "string"
             ? normalizeChannelId(entry.lastChannel)
@@ -390,30 +421,33 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
           to = entryTo;
         }
       }
-      const deliver = deliverRequested && Boolean(channel && to);
-      const deliveryChannel = deliver ? channel : undefined;
-      const deliveryTo = deliver ? to : undefined;
-
-      if (deliverRequested && !deliver) {
-        ctx.logGateway.warn(
-          `agent delivery disabled node=${nodeId}: missing session delivery route (channel=${channel ?? "-"} to=${to ?? "-"})`,
-        );
+      if (deliver && (!channel || !to)) {
+        const fallback = resolveFallbackDeliveryRoute({
+          storePath,
+          preferredChannel: channel ?? cfg.channels?.default ?? "telegram",
+        });
+        if (!channel && fallback.channel) {
+          channel = normalizeChannelId(fallback.channel) ?? channel;
+        }
+        if (!to && fallback.to) {
+          to = fallback.to;
+        }
       }
 
-      if (wantsReceipt && deliveryChannel && deliveryTo) {
+      if (wantsReceipt && channel && to) {
         void sendReceiptAck({
           cfg,
           deps: ctx.deps,
           sessionKey: canonicalKey,
-          channel: deliveryChannel,
-          to: deliveryTo,
+          channel,
+          to,
           text: receiptText,
         }).catch((err) => {
           ctx.logGateway.warn(`agent receipt failed node=${nodeId}: ${formatForLog(err)}`);
         });
       } else if (wantsReceipt) {
         ctx.logGateway.warn(
-          `agent receipt skipped node=${nodeId}: missing delivery route (channel=${deliveryChannel ?? "-"} to=${deliveryTo ?? "-"})`,
+          `agent receipt skipped node=${nodeId}: missing delivery route (channel=${channel ?? "-"} to=${to ?? "-"})`,
         );
       }
 
@@ -425,8 +459,8 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
           sessionKey: canonicalKey,
           thinking: link?.thinking ?? undefined,
           deliver,
-          to: deliveryTo,
-          channel: deliveryChannel,
+          to,
+          channel,
           timeout:
             typeof link?.timeoutSeconds === "number" ? link.timeoutSeconds.toString() : undefined,
           messageChannel: "node",
@@ -463,24 +497,22 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
     case "exec.started":
     case "exec.finished":
     case "exec.denied": {
-      const obj = parsePayloadObject(evt.payloadJSON);
-      if (!obj) {
+      if (!evt.payloadJSON) {
         return;
       }
+      let payload: unknown;
+      try {
+        payload = JSON.parse(evt.payloadJSON) as unknown;
+      } catch {
+        return;
+      }
+      const obj =
+        typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : {};
       const sessionKey =
         typeof obj.sessionKey === "string" ? obj.sessionKey.trim() : `node-${nodeId}`;
       if (!sessionKey) {
         return;
       }
-
-      // Respect tools.exec.notifyOnExit setting (default: true)
-      // When false, skip system event notifications for node exec events.
-      const cfg = loadConfig();
-      const notifyOnExit = cfg.tools?.exec?.notifyOnExit !== false;
-      if (!notifyOnExit) {
-        return;
-      }
-
       const runId = typeof obj.runId === "string" ? obj.runId.trim() : "";
       const command = typeof obj.command === "string" ? obj.command.trim() : "";
       const exitCode =
@@ -517,26 +549,6 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
 
       enqueueSystemEvent(text, { sessionKey, contextKey: runId ? `exec:${runId}` : "exec" });
       requestHeartbeatNow({ reason: "exec-event" });
-      return;
-    }
-    case "push.apns.register": {
-      const obj = parsePayloadObject(evt.payloadJSON);
-      if (!obj) {
-        return;
-      }
-      const token = typeof obj.token === "string" ? obj.token : "";
-      const topic = typeof obj.topic === "string" ? obj.topic : "";
-      const environment = obj.environment;
-      try {
-        await registerApnsToken({
-          nodeId,
-          token,
-          topic,
-          environment,
-        });
-      } catch (err) {
-        ctx.logGateway.warn(`push apns register failed node=${nodeId}: ${formatForLog(err)}`);
-      }
       return;
     }
     default:

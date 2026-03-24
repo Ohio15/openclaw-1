@@ -33,17 +33,3 @@ export function createBaseSignalEventHandlerDeps(
     ...overrides,
   };
 }
-
-export function createSignalReceiveEvent(envelopeOverrides: Record<string, unknown> = {}) {
-  return {
-    event: "receive",
-    data: JSON.stringify({
-      envelope: {
-        sourceNumber: "+15550001111",
-        sourceName: "Alice",
-        timestamp: 1700000000000,
-        ...envelopeOverrides,
-      },
-    }),
-  };
-}

@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { getReplyFromConfig } from "../../auto-reply/reply.js";
 import { HEARTBEAT_TOKEN } from "../../auto-reply/tokens.js";
-import { redactIdentifier } from "../../logging/redact-identifier.js";
 import type { sendMessageWhatsApp } from "../outbound.js";
 
 const state = vi.hoisted(() => ({
@@ -16,10 +15,6 @@ const state = vi.hoisted(() => ({
     idleExpiresAt: null as number | null,
   },
   events: [] as unknown[],
-  loggerInfoCalls: [] as unknown[][],
-  loggerWarnCalls: [] as unknown[][],
-  heartbeatInfoLogs: [] as string[],
-  heartbeatWarnLogs: [] as string[],
 }));
 
 vi.mock("../../agents/current-time.js", () => ({
@@ -69,15 +64,15 @@ vi.mock("../../infra/heartbeat-events.js", () => ({
 
 vi.mock("../../logging.js", () => ({
   getChildLogger: () => ({
-    info: (...args: unknown[]) => state.loggerInfoCalls.push(args),
-    warn: (...args: unknown[]) => state.loggerWarnCalls.push(args),
+    info: () => {},
+    warn: () => {},
   }),
 }));
 
 vi.mock("./loggers.js", () => ({
   whatsappHeartbeatLog: {
-    info: (msg: string) => state.heartbeatInfoLogs.push(msg),
-    warn: (msg: string) => state.heartbeatWarnLogs.push(msg),
+    info: () => {},
+    warn: () => {},
   },
 }));
 
@@ -100,13 +95,6 @@ describe("runWebHeartbeatOnce", () => {
   let replyResolver: typeof getReplyFromConfig;
 
   const getModules = async () => await import("./heartbeat-runner.js");
-  const buildRunArgs = (overrides: Record<string, unknown> = {}) => ({
-    cfg: { agents: { defaults: {} }, session: {} } as never,
-    to: "+123",
-    sender,
-    replyResolver,
-    ...overrides,
-  });
 
   beforeEach(() => {
     state.visibility = { showAlerts: true, showOk: true, useIndicator: false };
@@ -120,10 +108,6 @@ describe("runWebHeartbeatOnce", () => {
       idleExpiresAt: null,
     };
     state.events = [];
-    state.loggerInfoCalls = [];
-    state.loggerWarnCalls = [];
-    state.heartbeatInfoLogs = [];
-    state.heartbeatWarnLogs = [];
 
     senderMock = vi.fn(async () => ({ messageId: "m1" }));
     sender = senderMock as unknown as typeof sendMessageWhatsApp;
@@ -133,14 +117,26 @@ describe("runWebHeartbeatOnce", () => {
 
   it("supports manual override body dry-run without sending", async () => {
     const { runWebHeartbeatOnce } = await getModules();
-    await runWebHeartbeatOnce(buildRunArgs({ overrideBody: "hello", dryRun: true }));
+    await runWebHeartbeatOnce({
+      cfg: { agents: { defaults: {} }, session: {} } as never,
+      to: "+123",
+      sender,
+      replyResolver,
+      overrideBody: "hello",
+      dryRun: true,
+    });
     expect(senderMock).not.toHaveBeenCalled();
     expect(state.events).toHaveLength(0);
   });
 
   it("sends HEARTBEAT_OK when reply is empty and showOk is enabled", async () => {
     const { runWebHeartbeatOnce } = await getModules();
-    await runWebHeartbeatOnce(buildRunArgs());
+    await runWebHeartbeatOnce({
+      cfg: { agents: { defaults: {} }, session: {} } as never,
+      to: "+123",
+      sender,
+      replyResolver,
+    });
     expect(senderMock).toHaveBeenCalledWith("+123", HEARTBEAT_TOKEN, { verbose: false });
     expect(state.events).toEqual(
       expect.arrayContaining([expect.objectContaining({ status: "ok-empty", silent: false })]),
@@ -149,12 +145,13 @@ describe("runWebHeartbeatOnce", () => {
 
   it("injects a cron-style Current time line into the heartbeat prompt", async () => {
     const { runWebHeartbeatOnce } = await getModules();
-    await runWebHeartbeatOnce(
-      buildRunArgs({
-        cfg: { agents: { defaults: { heartbeat: { prompt: "Ops check" } } }, session: {} } as never,
-        dryRun: true,
-      }),
-    );
+    await runWebHeartbeatOnce({
+      cfg: { agents: { defaults: { heartbeat: { prompt: "Ops check" } } }, session: {} } as never,
+      to: "+123",
+      sender,
+      replyResolver,
+      dryRun: true,
+    });
     expect(replyResolver).toHaveBeenCalledTimes(1);
     const ctx = replyResolverMock.mock.calls[0]?.[0];
     expect(ctx?.Body).toContain("Ops check");
@@ -164,7 +161,12 @@ describe("runWebHeartbeatOnce", () => {
   it("treats heartbeat token-only replies as ok-token and preserves session updatedAt", async () => {
     replyResolverMock.mockResolvedValue({ text: HEARTBEAT_TOKEN });
     const { runWebHeartbeatOnce } = await getModules();
-    await runWebHeartbeatOnce(buildRunArgs());
+    await runWebHeartbeatOnce({
+      cfg: { agents: { defaults: {} }, session: {} } as never,
+      to: "+123",
+      sender,
+      replyResolver,
+    });
     expect(state.store.k?.updatedAt).toBe(123);
     expect(senderMock).toHaveBeenCalledWith("+123", HEARTBEAT_TOKEN, { verbose: false });
     expect(state.events).toEqual(
@@ -176,7 +178,12 @@ describe("runWebHeartbeatOnce", () => {
     state.visibility = { showAlerts: false, showOk: true, useIndicator: true };
     replyResolverMock.mockResolvedValue({ text: "ALERT" });
     const { runWebHeartbeatOnce } = await getModules();
-    await runWebHeartbeatOnce(buildRunArgs());
+    await runWebHeartbeatOnce({
+      cfg: { agents: { defaults: {} }, session: {} } as never,
+      to: "+123",
+      sender,
+      replyResolver,
+    });
     expect(senderMock).not.toHaveBeenCalled();
     expect(state.events).toEqual(
       expect.arrayContaining([
@@ -189,30 +196,18 @@ describe("runWebHeartbeatOnce", () => {
     replyResolverMock.mockResolvedValue({ text: "ALERT" });
     senderMock.mockRejectedValueOnce(new Error("nope"));
     const { runWebHeartbeatOnce } = await getModules();
-    await expect(runWebHeartbeatOnce(buildRunArgs())).rejects.toThrow("nope");
+    await expect(
+      runWebHeartbeatOnce({
+        cfg: { agents: { defaults: {} }, session: {} } as never,
+        to: "+123",
+        sender,
+        replyResolver,
+      }),
+    ).rejects.toThrow("nope");
     expect(state.events).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ status: "failed", reason: "ERR:Error: nope" }),
       ]),
     );
-  });
-
-  it("redacts recipient and omits body preview in heartbeat logs", async () => {
-    replyResolverMock.mockResolvedValue({ text: "sensitive heartbeat body" });
-    const { runWebHeartbeatOnce } = await getModules();
-    await runWebHeartbeatOnce(buildRunArgs({ dryRun: true }));
-
-    const expected = redactIdentifier("+123");
-    const heartbeatLogs = state.heartbeatInfoLogs.join("\n");
-    const childLoggerLogs = state.loggerInfoCalls.map((entry) => JSON.stringify(entry)).join("\n");
-
-    expect(heartbeatLogs).toContain(expected);
-    expect(heartbeatLogs).not.toContain("+123");
-    expect(heartbeatLogs).not.toContain("sensitive heartbeat body");
-
-    expect(childLoggerLogs).toContain(expected);
-    expect(childLoggerLogs).not.toContain("+123");
-    expect(childLoggerLogs).not.toContain("sensitive heartbeat body");
-    expect(childLoggerLogs).not.toContain('"preview"');
   });
 });

@@ -8,7 +8,7 @@ import type { AppViewState } from "./app-view-state.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
-import { loadAgents, loadToolsCatalog } from "./controllers/agents.ts";
+import { loadAgents } from "./controllers/agents.ts";
 import { loadChannels } from "./controllers/channels.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
 import {
@@ -21,21 +21,11 @@ import {
 } from "./controllers/config.ts";
 import {
   loadCronRuns,
-  loadMoreCronJobs,
-  loadMoreCronRuns,
-  reloadCronJobs,
   toggleCronJob,
   runCronJob,
   removeCronJob,
   addCronJob,
-  startCronEdit,
-  startCronClone,
-  cancelCronEdit,
-  validateCronForm,
-  hasCronFormErrors,
   normalizeCronFormState,
-  updateCronJobsFilter,
-  updateCronRunsFilter,
 } from "./controllers/cron.ts";
 import { loadDebug, callDebugMethod } from "./controllers/debug.ts";
 import {
@@ -54,6 +44,7 @@ import {
 import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
+import { loadSecurityAudit, patchSecurityToggle } from "./controllers/security.ts";
 import { deleteSessionAndRefresh, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
   installSkill,
@@ -62,7 +53,6 @@ import {
   updateSkillEdit,
   updateSkillEnabled,
 } from "./controllers/skills.ts";
-import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "./external-link.ts";
 import { icons } from "./icons.ts";
 import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
 import { renderAgents } from "./views/agents.ts";
@@ -71,56 +61,18 @@ import { renderChat } from "./views/chat.ts";
 import { renderConfig } from "./views/config.ts";
 import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
-import { renderSecurity } from "./views/security.ts";
-import { loadSecurityAudit } from "./controllers/security.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
 import { renderNodes } from "./views/nodes.ts";
 import { renderOverview } from "./views/overview.ts";
+import { renderSecurity } from "./views/security.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
-const CRON_THINKING_SUGGESTIONS = ["off", "minimal", "low", "medium", "high"];
-const CRON_TIMEZONE_SUGGESTIONS = [
-  "UTC",
-  "America/Los_Angeles",
-  "America/Denver",
-  "America/Chicago",
-  "America/New_York",
-  "Europe/London",
-  "Europe/Berlin",
-  "Asia/Tokyo",
-];
-
-function isHttpUrl(value: string): boolean {
-  return /^https?:\/\//i.test(value.trim());
-}
-
-function normalizeSuggestionValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function uniquePreserveOrder(values: string[]): string[] {
-  const seen = new Set<string>();
-  const output: string[] = [];
-  for (const value of values) {
-    const normalized = value.trim();
-    if (!normalized) {
-      continue;
-    }
-    const key = normalized.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    output.push(normalized);
-  }
-  return output;
-}
 
 function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   const list = state.agentsList?.agents ?? [];
@@ -139,16 +91,6 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
 }
 
 export function renderApp(state: AppViewState) {
-  const openClawVersion =
-    (typeof state.hello?.server?.version === "string" && state.hello.server.version.trim()) ||
-    state.updateAvailable?.currentVersion ||
-    t("common.na");
-  const availableUpdate =
-    state.updateAvailable &&
-    state.updateAvailable.latestVersion !== state.updateAvailable.currentVersion
-      ? state.updateAvailable
-      : null;
-  const versionStatusClass = availableUpdate ? "warn" : "ok";
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
@@ -166,56 +108,6 @@ export function renderApp(state: AppViewState) {
     state.agentsList?.defaultId ??
     state.agentsList?.agents?.[0]?.id ??
     null;
-  const cronAgentSuggestions = Array.from(
-    new Set(
-      [
-        ...(state.agentsList?.agents?.map((entry) => entry.id.trim()) ?? []),
-        ...state.cronJobs
-          .map((job) => (typeof job.agentId === "string" ? job.agentId.trim() : ""))
-          .filter(Boolean),
-      ].filter(Boolean),
-    ),
-  ).toSorted((a, b) => a.localeCompare(b));
-  const cronModelSuggestions = Array.from(
-    new Set(
-      [
-        ...state.cronModelSuggestions,
-        ...state.cronJobs
-          .map((job) => {
-            if (job.payload.kind !== "agentTurn" || typeof job.payload.model !== "string") {
-              return "";
-            }
-            return job.payload.model.trim();
-          })
-          .filter(Boolean),
-      ].filter(Boolean),
-    ),
-  ).toSorted((a, b) => a.localeCompare(b));
-  const selectedDeliveryChannel =
-    state.cronForm.deliveryChannel && state.cronForm.deliveryChannel.trim()
-      ? state.cronForm.deliveryChannel.trim()
-      : "last";
-  const jobToSuggestions = state.cronJobs
-    .map((job) => normalizeSuggestionValue(job.delivery?.to))
-    .filter(Boolean);
-  const accountToSuggestions = (
-    selectedDeliveryChannel === "last"
-      ? Object.values(state.channelsSnapshot?.channelAccounts ?? {}).flat()
-      : (state.channelsSnapshot?.channelAccounts?.[selectedDeliveryChannel] ?? [])
-  )
-    .flatMap((account) => [
-      normalizeSuggestionValue(account.accountId),
-      normalizeSuggestionValue(account.name),
-    ])
-    .filter(Boolean);
-  const rawDeliveryToSuggestions = uniquePreserveOrder([
-    ...jobToSuggestions,
-    ...accountToSuggestions,
-  ]);
-  const deliveryToSuggestions =
-    state.cronForm.deliveryMode === "webhook"
-      ? rawDeliveryToSuggestions.filter((value) => isHttpUrl(value))
-      : rawDeliveryToSuggestions;
 
   return html`
     <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
@@ -244,11 +136,6 @@ export function renderApp(state: AppViewState) {
           </div>
         </div>
         <div class="topbar-status">
-          <div class="pill">
-            <span class="statusDot ${versionStatusClass}"></span>
-            <span>${t("common.version")}</span>
-            <span class="mono">${openClawVersion}</span>
-          </div>
           <div class="pill">
             <span class="statusDot ${state.connected ? "ok" : ""}"></span>
             <span>${t("common.health")}</span>
@@ -292,8 +179,8 @@ export function renderApp(state: AppViewState) {
             <a
               class="nav-item nav-item--external"
               href="https://docs.openclaw.ai"
-              target=${EXTERNAL_LINK_TARGET}
-              rel=${buildExternalLinkRel()}
+              target="_blank"
+              rel="noreferrer"
               title="${t("common.docs")} (opens in new tab)"
             >
               <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
@@ -303,19 +190,6 @@ export function renderApp(state: AppViewState) {
         </div>
       </aside>
       <main class="content ${isChat ? "content--chat" : ""}">
-        ${
-          availableUpdate
-            ? html`<div class="update-banner callout danger" role="alert">
-              <strong>Update available:</strong> v${availableUpdate.latestVersion}
-              (running v${availableUpdate.currentVersion}).
-              <button
-                class="btn btn--sm update-banner__btn"
-                ?disabled=${state.updateRunning || !state.connected}
-                @click=${() => runUpdate(state)}
-              >${state.updateRunning ? "Updating…" : "Update now"}</button>
-            </div>`
-            : nothing
-        }
         <section class="content-header">
           <div>
             ${state.tab === "usage" ? nothing : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
@@ -335,7 +209,6 @@ export function renderApp(state: AppViewState) {
                 settings: state.settings,
                 password: state.password,
                 lastError: state.lastError,
-                lastErrorCode: state.lastErrorCode,
                 presenceCount,
                 sessionsCount,
                 cronEnabled: state.cronStatus?.enabled ?? null,
@@ -442,21 +315,11 @@ export function renderApp(state: AppViewState) {
             ? renderCron({
                 basePath: state.basePath,
                 loading: state.cronLoading,
-                jobsLoadingMore: state.cronJobsLoadingMore,
                 status: state.cronStatus,
                 jobs: state.cronJobs,
-                jobsTotal: state.cronJobsTotal,
-                jobsHasMore: state.cronJobsHasMore,
-                jobsQuery: state.cronJobsQuery,
-                jobsEnabledFilter: state.cronJobsEnabledFilter,
-                jobsSortBy: state.cronJobsSortBy,
-                jobsSortDir: state.cronJobsSortDir,
                 error: state.cronError,
                 busy: state.cronBusy,
                 form: state.cronForm,
-                fieldErrors: state.cronFieldErrors,
-                canSubmit: !hasCronFormErrors(state.cronFieldErrors),
-                editingJobId: state.cronEditingJobId,
                 channels: state.channelsSnapshot?.channelMeta?.length
                   ? state.channelsSnapshot.channelMeta.map((entry) => entry.id)
                   : (state.channelsSnapshot?.channelOrder ?? []),
@@ -464,50 +327,54 @@ export function renderApp(state: AppViewState) {
                 channelMeta: state.channelsSnapshot?.channelMeta ?? [],
                 runsJobId: state.cronRunsJobId,
                 runs: state.cronRuns,
-                runsTotal: state.cronRunsTotal,
-                runsHasMore: state.cronRunsHasMore,
-                runsLoadingMore: state.cronRunsLoadingMore,
-                runsScope: state.cronRunsScope,
-                runsStatuses: state.cronRunsStatuses,
-                runsDeliveryStatuses: state.cronRunsDeliveryStatuses,
-                runsStatusFilter: state.cronRunsStatusFilter,
-                runsQuery: state.cronRunsQuery,
-                runsSortDir: state.cronRunsSortDir,
-                agentSuggestions: cronAgentSuggestions,
-                modelSuggestions: cronModelSuggestions,
-                thinkingSuggestions: CRON_THINKING_SUGGESTIONS,
-                timezoneSuggestions: CRON_TIMEZONE_SUGGESTIONS,
-                deliveryToSuggestions,
-                onFormChange: (patch) => {
-                  state.cronForm = normalizeCronFormState({ ...state.cronForm, ...patch });
-                  state.cronFieldErrors = validateCronForm(state.cronForm);
-                },
+                onFormChange: (patch) =>
+                  (state.cronForm = normalizeCronFormState({ ...state.cronForm, ...patch })),
                 onRefresh: () => state.loadCron(),
                 onAdd: () => addCronJob(state),
-                onEdit: (job) => startCronEdit(state, job),
-                onClone: (job) => startCronClone(state, job),
-                onCancelEdit: () => cancelCronEdit(state),
                 onToggle: (job, enabled) => toggleCronJob(state, job, enabled),
                 onRun: (job) => runCronJob(state, job),
                 onRemove: (job) => removeCronJob(state, job),
-                onLoadRuns: async (jobId) => {
-                  updateCronRunsFilter(state, { cronRunsScope: "job" });
-                  await loadCronRuns(state, jobId);
-                },
-                onLoadMoreJobs: () => loadMoreCronJobs(state),
-                onJobsFiltersChange: async (patch) => {
-                  updateCronJobsFilter(state, patch);
-                  await reloadCronJobs(state);
-                },
-                onLoadMoreRuns: () => loadMoreCronRuns(state),
-                onRunsFiltersChange: async (patch) => {
-                  updateCronRunsFilter(state, patch);
-                  if (state.cronRunsScope === "all") {
-                    await loadCronRuns(state, null);
-                    return;
+                onLoadRuns: (jobId) => loadCronRuns(state, jobId),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "security"
+            ? renderSecurity({
+                report: state.securityAuditReport,
+                auditLoading: state.securityAuditLoading,
+                configForm:
+                  state.configForm ??
+                  (state.configSnapshot?.config as Record<string, unknown> | null),
+                sessionsCount: state.sessionsResult?.count ?? null,
+                onRunAudit: () => loadSecurityAudit(state),
+                onRunDeepAudit: () => loadSecurityAudit(state, { deep: true }),
+                configDirty: state.configFormDirty,
+                configSaving: state.configSaving,
+                expandedToggleGroups: state.securityExpandedToggleGroups,
+                onToggleGroup: (groupId) => {
+                  const next = new Set(state.securityExpandedToggleGroups);
+                  if (next.has(groupId)) {
+                    next.delete(groupId);
+                  } else {
+                    next.add(groupId);
                   }
-                  await loadCronRuns(state, state.cronRunsJobId);
+                  state.securityExpandedToggleGroups = next;
                 },
+                onPatch: (path, value) => patchSecurityToggle(state, path, value),
+                onSave: () => saveConfig(state),
+                onSaveAndApply: () => {
+                  void saveConfig(state).then(() => applyConfig(state));
+                },
+                activityEntries: state.securityActivityEntries,
+                activityFilter: state.securityActivityFilter,
+                onActivityFilterChange: (cat) => (state.securityActivityFilter = cat),
+                auditFilterSeverity: state.securityAuditFilterSeverity,
+                onAuditFilterChange: (sev) => (state.securityAuditFilterSeverity = sev),
+                approvalQueue: state.execApprovalQueue,
+                approvalBusy: state.execApprovalBusy,
+                onApprovalDecision: (decision) => state.handleExecApprovalDecision(decision),
               })
             : nothing
         }
@@ -546,18 +413,9 @@ export function renderApp(state: AppViewState) {
                 agentSkillsReport: state.agentSkillsReport,
                 agentSkillsError: state.agentSkillsError,
                 agentSkillsAgentId: state.agentSkillsAgentId,
-                toolsCatalogLoading: state.toolsCatalogLoading,
-                toolsCatalogError: state.toolsCatalogError,
-                toolsCatalogResult: state.toolsCatalogResult,
                 skillsFilter: state.skillsFilter,
                 onRefresh: async () => {
                   await loadAgents(state);
-                  const nextSelected =
-                    state.agentsSelectedId ??
-                    state.agentsList?.defaultId ??
-                    state.agentsList?.agents?.[0]?.id ??
-                    null;
-                  await loadToolsCatalog(state, nextSelected);
                   const agentIds = state.agentsList?.agents?.map((entry) => entry.id) ?? [];
                   if (agentIds.length > 0) {
                     void loadAgentIdentities(state, agentIds);
@@ -578,9 +436,6 @@ export function renderApp(state: AppViewState) {
                   state.agentSkillsError = null;
                   state.agentSkillsAgentId = null;
                   void loadAgentIdentity(state, agentId);
-                  if (state.agentsPanel === "tools") {
-                    void loadToolsCatalog(state, agentId);
-                  }
                   if (state.agentsPanel === "files") {
                     void loadAgentFiles(state, agentId);
                   }
@@ -599,9 +454,6 @@ export function renderApp(state: AppViewState) {
                       state.agentFileDrafts = {};
                       void loadAgentFiles(state, resolvedAgentId);
                     }
-                  }
-                  if (panel === "tools") {
-                    void loadToolsCatalog(state, resolvedAgentId);
                   }
                   if (panel === "skills") {
                     if (resolvedAgentId) {
@@ -1001,7 +853,6 @@ export function renderApp(state: AppViewState) {
                 loading: state.chatLoading,
                 sending: state.chatSending,
                 compactionStatus: state.compactionStatus,
-                fallbackStatus: state.fallbackStatus,
                 assistantAvatarUrl: chatAvatarUrl,
                 messages: state.chatMessages,
                 toolMessages: state.chatToolMessages,
@@ -1110,51 +961,6 @@ export function renderApp(state: AppViewState) {
                 onCallParamsChange: (next) => (state.debugCallParams = next),
                 onRefresh: () => loadDebug(state),
                 onCall: () => callDebugMethod(state),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "security"
-            ? renderSecurity({
-                report: state.securityAuditReport,
-                auditLoading: state.securityAuditLoading,
-                configForm: state.configForm,
-                sessionsCount: state.sessions?.length ?? null,
-                onRunAudit: () => void loadSecurityAudit(state),
-                onRunDeepAudit: () => void loadSecurityAudit(state, { deep: true }),
-                configDirty: state.configDirty,
-                configSaving: state.configSaving,
-                expandedToggleGroups: state.securityExpandedToggleGroups,
-                onToggleGroup: (groupId) => {
-                  const next = new Set(state.securityExpandedToggleGroups);
-                  if (next.has(groupId)) next.delete(groupId);
-                  else next.add(groupId);
-                  state.securityExpandedToggleGroups = next;
-                },
-                onPatch: (path, value) => {
-                  if (typeof state.handleConfigFormUpdate === "function") {
-                    state.handleConfigFormUpdate(path.join("."), value);
-                  }
-                },
-                onSave: () => {
-                  if (typeof state.handleConfigSave === "function") {
-                    void state.handleConfigSave();
-                  }
-                },
-                onSaveAndApply: () => {
-                  if (typeof state.handleConfigApply === "function") {
-                    void state.handleConfigApply();
-                  }
-                },
-                activityEntries: state.securityActivityEntries,
-                activityFilter: state.securityActivityFilter,
-                onActivityFilterChange: (category) => (state.securityActivityFilter = category),
-                auditFilterSeverity: state.securityAuditFilterSeverity,
-                onAuditFilterChange: (severity) => (state.securityAuditFilterSeverity = severity),
-                approvalQueue: state.execApprovalQueue ?? [],
-                approvalBusy: false,
-                onApprovalDecision: () => {},
               })
             : nothing
         }

@@ -1,9 +1,23 @@
 import { vi } from "vitest";
-import { createEmptyPluginRegistry, type PluginRegistry } from "../plugins/registry.js";
+import type { PluginRegistry } from "../plugins/registry.js";
 import { setActivePluginRegistry } from "../plugins/runtime.js";
 
 export const registryState: { registry: PluginRegistry } = {
-  registry: createEmptyPluginRegistry(),
+  registry: {
+    plugins: [],
+    tools: [],
+    hooks: [],
+    typedHooks: [],
+    channels: [],
+    providers: [],
+    gatewayHandlers: {},
+    httpHandlers: [],
+    httpRoutes: [],
+    cliRegistrars: [],
+    services: [],
+    commands: [],
+    diagnostics: [],
+  } as PluginRegistry,
 };
 
 export function setRegistry(registry: PluginRegistry) {

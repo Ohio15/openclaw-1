@@ -36,50 +36,6 @@ function snapshotWith(
   return { channels, channelAccounts };
 }
 
-const DEFAULT_CHECK_INTERVAL_MS = 5_000;
-
-function createSnapshotManager(
-  accounts: Record<string, Record<string, Partial<ChannelAccountSnapshot>>>,
-  overrides?: Partial<ChannelManager>,
-): ChannelManager {
-  return createMockChannelManager({
-    getRuntimeSnapshot: vi.fn(() => snapshotWith(accounts)),
-    ...overrides,
-  });
-}
-
-function startDefaultMonitor(
-  manager: ChannelManager,
-  overrides: Partial<Omit<Parameters<typeof startChannelHealthMonitor>[0], "channelManager">> = {},
-) {
-  return startChannelHealthMonitor({
-    channelManager: manager,
-    checkIntervalMs: DEFAULT_CHECK_INTERVAL_MS,
-    startupGraceMs: 0,
-    ...overrides,
-  });
-}
-
-async function startAndRunCheck(
-  manager: ChannelManager,
-  overrides: Partial<Omit<Parameters<typeof startChannelHealthMonitor>[0], "channelManager">> = {},
-) {
-  const monitor = startDefaultMonitor(manager, overrides);
-  const startupGraceMs = overrides.startupGraceMs ?? 0;
-  const checkIntervalMs = overrides.checkIntervalMs ?? DEFAULT_CHECK_INTERVAL_MS;
-  await vi.advanceTimersByTimeAsync(startupGraceMs + checkIntervalMs + 1);
-  return monitor;
-}
-
-function managedStoppedAccount(lastError: string): Partial<ChannelAccountSnapshot> {
-  return {
-    running: false,
-    enabled: true,
-    configured: true,
-    lastError,
-  };
-}
-
 describe("channel-health-monitor", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -90,85 +46,137 @@ describe("channel-health-monitor", () => {
 
   it("does not run before the grace period", async () => {
     const manager = createMockChannelManager();
-    const monitor = startDefaultMonitor(manager, { startupGraceMs: 60_000 });
-    await vi.advanceTimersByTimeAsync(5_001);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 60_000,
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(manager.getRuntimeSnapshot).not.toHaveBeenCalled();
     monitor.stop();
   });
 
   it("runs health check after grace period", async () => {
     const manager = createMockChannelManager();
-    const monitor = await startAndRunCheck(manager, { startupGraceMs: 1_000 });
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 1_000,
+    });
+    await vi.advanceTimersByTimeAsync(6_500);
     expect(manager.getRuntimeSnapshot).toHaveBeenCalled();
     monitor.stop();
   });
 
   it("skips healthy channels (running + connected)", async () => {
-    const manager = createSnapshotManager({
-      discord: {
-        default: { running: true, connected: true, enabled: true, configured: true },
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          discord: {
+            default: { running: true, connected: true, enabled: true, configured: true },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.stopChannel).not.toHaveBeenCalled();
     expect(manager.startChannel).not.toHaveBeenCalled();
     monitor.stop();
   });
 
   it("skips disabled channels", async () => {
-    const manager = createSnapshotManager({
-      imessage: {
-        default: {
-          running: false,
-          enabled: false,
-          configured: true,
-          lastError: "disabled",
-        },
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          imessage: {
+            default: {
+              running: false,
+              enabled: false,
+              configured: true,
+              lastError: "disabled",
+            },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.startChannel).not.toHaveBeenCalled();
     monitor.stop();
   });
 
   it("skips unconfigured channels", async () => {
-    const manager = createSnapshotManager({
-      discord: {
-        default: { running: false, enabled: true, configured: false },
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          discord: {
+            default: { running: false, enabled: true, configured: false },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.startChannel).not.toHaveBeenCalled();
     monitor.stop();
   });
 
   it("skips manually stopped channels", async () => {
-    const manager = createSnapshotManager(
-      {
-        discord: {
-          default: { running: false, enabled: true, configured: true },
-        },
-      },
-      { isManuallyStopped: vi.fn(() => true) },
-    );
-    const monitor = await startAndRunCheck(manager);
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          discord: {
+            default: { running: false, enabled: true, configured: true },
+          },
+        }),
+      ),
+      isManuallyStopped: vi.fn(() => true),
+    });
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.startChannel).not.toHaveBeenCalled();
     monitor.stop();
   });
 
   it("restarts a stuck channel (running but not connected)", async () => {
-    const manager = createSnapshotManager({
-      whatsapp: {
-        default: {
-          running: true,
-          connected: false,
-          enabled: true,
-          configured: true,
-          linked: true,
-        },
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          whatsapp: {
+            default: {
+              running: true,
+              connected: false,
+              enabled: true,
+              configured: true,
+              linked: true,
+            },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.stopChannel).toHaveBeenCalledWith("whatsapp", "default");
     expect(manager.resetRestartAttempts).toHaveBeenCalledWith("whatsapp", "default");
     expect(manager.startChannel).toHaveBeenCalledWith("whatsapp", "default");
@@ -176,133 +184,186 @@ describe("channel-health-monitor", () => {
   });
 
   it("restarts a stopped channel that gave up (reconnectAttempts >= 10)", async () => {
-    const manager = createSnapshotManager({
-      discord: {
-        default: {
-          ...managedStoppedAccount("Failed to resolve Discord application id"),
-          reconnectAttempts: 10,
-        },
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          discord: {
+            default: {
+              running: false,
+              enabled: true,
+              configured: true,
+              reconnectAttempts: 10,
+              lastError: "Failed to resolve Discord application id",
+            },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.resetRestartAttempts).toHaveBeenCalledWith("discord", "default");
     expect(manager.startChannel).toHaveBeenCalledWith("discord", "default");
     monitor.stop();
   });
 
   it("restarts a channel that stopped unexpectedly (not running, not manual)", async () => {
-    const manager = createSnapshotManager({
-      telegram: {
-        default: managedStoppedAccount("polling stopped unexpectedly"),
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          telegram: {
+            default: {
+              running: false,
+              enabled: true,
+              configured: true,
+              lastError: "polling stopped unexpectedly",
+            },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.resetRestartAttempts).toHaveBeenCalledWith("telegram", "default");
     expect(manager.startChannel).toHaveBeenCalledWith("telegram", "default");
     monitor.stop();
   });
 
   it("treats missing enabled/configured flags as managed accounts", async () => {
-    const manager = createSnapshotManager({
-      telegram: {
-        default: {
-          running: false,
-          lastError: "polling stopped unexpectedly",
-        },
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          telegram: {
+            default: {
+              running: false,
+              lastError: "polling stopped unexpectedly",
+            },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.startChannel).toHaveBeenCalledWith("telegram", "default");
     monitor.stop();
   });
 
   it("applies cooldown — skips recently restarted channels for 2 cycles", async () => {
-    const manager = createSnapshotManager({
-      discord: {
-        default: managedStoppedAccount("crashed"),
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          discord: {
+            default: {
+              running: false,
+              enabled: true,
+              configured: true,
+              lastError: "crashed",
+            },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.startChannel).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(DEFAULT_CHECK_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(5_000);
     expect(manager.startChannel).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(DEFAULT_CHECK_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(5_000);
     expect(manager.startChannel).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(DEFAULT_CHECK_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(5_000);
     expect(manager.startChannel).toHaveBeenCalledTimes(2);
     monitor.stop();
   });
 
   it("caps at 3 health-monitor restarts per channel per hour", async () => {
-    const manager = createSnapshotManager({
-      discord: {
-        default: managedStoppedAccount("keeps crashing"),
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          discord: {
+            default: {
+              running: false,
+              enabled: true,
+              configured: true,
+              lastError: "keeps crashing",
+            },
+          },
+        }),
+      ),
     });
-    const monitor = startDefaultMonitor(manager, {
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
       checkIntervalMs: 1_000,
+      startupGraceMs: 0,
       cooldownCycles: 1,
       maxRestartsPerHour: 3,
     });
-    await vi.advanceTimersByTimeAsync(5_001);
+    await vi.advanceTimersByTimeAsync(1_500);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(2_000);
     expect(manager.startChannel).toHaveBeenCalledTimes(3);
-    await vi.advanceTimersByTimeAsync(1_001);
+    await vi.advanceTimersByTimeAsync(2_000);
     expect(manager.startChannel).toHaveBeenCalledTimes(3);
-    monitor.stop();
-  });
-
-  it("runs checks single-flight when restart work is still in progress", async () => {
-    let releaseStart: (() => void) | undefined;
-    const startGate = new Promise<void>((resolve) => {
-      releaseStart = () => resolve();
-    });
-    const manager = createSnapshotManager(
-      {
-        telegram: {
-          default: managedStoppedAccount("stopped"),
-        },
-      },
-      {
-        startChannel: vi.fn(async () => {
-          await startGate;
-        }),
-      },
-    );
-    const monitor = startDefaultMonitor(manager, { checkIntervalMs: 100, cooldownCycles: 0 });
-    await vi.advanceTimersByTimeAsync(120);
-    expect(manager.startChannel).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(500);
-    expect(manager.startChannel).toHaveBeenCalledTimes(1);
-    releaseStart?.();
-    await Promise.resolve();
     monitor.stop();
   });
 
   it("stops cleanly", async () => {
     const manager = createMockChannelManager();
-    const monitor = startDefaultMonitor(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
     monitor.stop();
-    await vi.advanceTimersByTimeAsync(5_001);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(manager.getRuntimeSnapshot).not.toHaveBeenCalled();
   });
 
   it("stops via abort signal", async () => {
     const manager = createMockChannelManager();
     const abort = new AbortController();
-    const monitor = startDefaultMonitor(manager, { abortSignal: abort.signal });
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+      abortSignal: abort.signal,
+    });
     abort.abort();
-    await vi.advanceTimersByTimeAsync(5_001);
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(manager.getRuntimeSnapshot).not.toHaveBeenCalled();
     monitor.stop();
   });
 
   it("treats running channels without a connected field as healthy", async () => {
-    const manager = createSnapshotManager({
-      slack: {
-        default: { running: true, enabled: true, configured: true },
-      },
+    const manager = createMockChannelManager({
+      getRuntimeSnapshot: vi.fn(() =>
+        snapshotWith({
+          slack: {
+            default: { running: true, enabled: true, configured: true },
+          },
+        }),
+      ),
     });
-    const monitor = await startAndRunCheck(manager);
+    const monitor = startChannelHealthMonitor({
+      channelManager: manager,
+      checkIntervalMs: 5_000,
+      startupGraceMs: 0,
+    });
+    await vi.advanceTimersByTimeAsync(5_500);
     expect(manager.stopChannel).not.toHaveBeenCalled();
     monitor.stop();
   });

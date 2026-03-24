@@ -44,7 +44,6 @@ import { stripSlackMentionsForCommandDetection } from "../commands.js";
 import { normalizeSlackChannelType, type SlackMonitorContext } from "../context.js";
 import {
   resolveSlackAttachmentContent,
-  MAX_SLACK_MEDIA_FILES,
   resolveSlackMedia,
   resolveSlackThreadHistory,
   resolveSlackThreadStarter,
@@ -143,7 +142,6 @@ export async function prepareSlackMessage(params: {
       const allowMatch = resolveSlackAllowListMatch({
         allowList: allowFromLower,
         id: directUserId,
-        allowNameMatching: ctx.allowNameMatching,
       });
       const allowMatchMeta = formatAllowlistMatchMeta(allowMatch);
       if (!allowMatch.allowed) {
@@ -246,7 +244,6 @@ export async function prepareSlackMessage(params: {
         allowList: channelConfig?.users,
         userId: senderId,
         userName: senderName,
-        allowNameMatching: ctx.allowNameMatching,
       })
     : true;
   if (isRoom && !channelUserAuthorized) {
@@ -266,7 +263,6 @@ export async function prepareSlackMessage(params: {
     allowList: allowFromLower,
     id: senderId,
     name: senderName,
-    allowNameMatching: ctx.allowNameMatching,
   }).allowed;
   const channelUsersAllowlistConfigured =
     isRoom && Array.isArray(channelConfig?.users) && channelConfig.users.length > 0;
@@ -276,7 +272,6 @@ export async function prepareSlackMessage(params: {
           allowList: channelConfig?.users,
           userId: senderId,
           userName: senderName,
-          allowNameMatching: ctx.allowNameMatching,
         })
       : false;
   const commandGate = resolveControlCommandGate({
@@ -363,21 +358,8 @@ export async function prepareSlackMessage(params: {
   const mediaPlaceholder = effectiveDirectMedia
     ? effectiveDirectMedia.map((m) => m.placeholder).join(" ")
     : undefined;
-
-  // When files were attached but all downloads failed, create a fallback
-  // placeholder so the message is still delivered to the agent instead of
-  // being silently dropped (#25064).
-  const fileOnlyFallback =
-    !mediaPlaceholder && (message.files?.length ?? 0) > 0
-      ? message
-          .files!.slice(0, MAX_SLACK_MEDIA_FILES)
-          .map((f) => f.name?.trim() || "file")
-          .join(", ")
-      : undefined;
-  const fileOnlyPlaceholder = fileOnlyFallback ? `[Slack file: ${fileOnlyFallback}]` : undefined;
-
   const rawBody =
-    [(message.text ?? "").trim(), attachmentContent?.text, mediaPlaceholder, fileOnlyPlaceholder]
+    [(message.text ?? "").trim(), attachmentContent?.text, mediaPlaceholder]
       .filter(Boolean)
       .join("\n") || "";
   if (!rawBody) {
@@ -539,7 +521,7 @@ export async function prepareSlackMessage(params: {
       storePath,
       sessionKey, // Thread-specific session key
     });
-    if (threadInitialHistoryLimit > 0) {
+    if (threadInitialHistoryLimit > 0 && !threadSessionPreviousTimestamp) {
       const threadHistory = await resolveSlackThreadHistory({
         channelId: message.channel,
         threadTs,
@@ -660,7 +642,6 @@ export async function prepareSlackMessage(params: {
           channel: "slack",
           to: `user:${message.user}`,
           accountId: route.accountId,
-          threadId: threadContext.messageThreadId,
         }
       : undefined,
     onRecordError: (err) => {

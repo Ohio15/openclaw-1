@@ -1,5 +1,4 @@
 import type { Command } from "commander";
-import { inheritOptionFromParent } from "../command-options.js";
 import {
   runDaemonInstall,
   runDaemonRestart,
@@ -8,32 +7,6 @@ import {
   runDaemonStop,
   runDaemonUninstall,
 } from "./runners.js";
-import type { DaemonInstallOptions, GatewayRpcOpts } from "./types.js";
-
-function resolveInstallOptions(
-  cmdOpts: DaemonInstallOptions,
-  command?: Command,
-): DaemonInstallOptions {
-  const parentForce = inheritOptionFromParent<boolean>(command, "force");
-  const parentPort = inheritOptionFromParent<string>(command, "port");
-  const parentToken = inheritOptionFromParent<string>(command, "token");
-  return {
-    ...cmdOpts,
-    force: Boolean(cmdOpts.force || parentForce),
-    port: cmdOpts.port ?? parentPort,
-    token: cmdOpts.token ?? parentToken,
-  };
-}
-
-function resolveRpcOptions(cmdOpts: GatewayRpcOpts, command?: Command): GatewayRpcOpts {
-  const parentToken = inheritOptionFromParent<string>(command, "token");
-  const parentPassword = inheritOptionFromParent<string>(command, "password");
-  return {
-    ...cmdOpts,
-    token: cmdOpts.token ?? parentToken,
-    password: cmdOpts.password ?? parentPassword,
-  };
-}
 
 export function addGatewayServiceCommands(parent: Command, opts?: { statusDescription?: string }) {
   parent
@@ -46,9 +19,9 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
     .option("--no-probe", "Skip RPC probe")
     .option("--deep", "Scan system-level services", false)
     .option("--json", "Output JSON", false)
-    .action(async (cmdOpts, command) => {
+    .action(async (cmdOpts) => {
       await runDaemonStatus({
-        rpc: resolveRpcOptions(cmdOpts, command),
+        rpc: cmdOpts,
         probe: Boolean(cmdOpts.probe),
         deep: Boolean(cmdOpts.deep),
         json: Boolean(cmdOpts.json),
@@ -63,8 +36,8 @@ export function addGatewayServiceCommands(parent: Command, opts?: { statusDescri
     .option("--token <token>", "Gateway token (token auth)")
     .option("--force", "Reinstall/overwrite if already installed", false)
     .option("--json", "Output JSON", false)
-    .action(async (cmdOpts, command) => {
-      await runDaemonInstall(resolveInstallOptions(cmdOpts, command));
+    .action(async (cmdOpts) => {
+      await runDaemonInstall(cmdOpts);
     });
 
   parent

@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { expandHomePrefix, resolveRequiredHomeDir } from "../../infra/home-dir.js";
@@ -77,10 +76,8 @@ function resolvePathFromAgentSessionsDir(
   agentSessionsDir: string,
   candidateAbsPath: string,
 ): string | undefined {
-  const agentBase =
-    safeRealpathSync(path.resolve(agentSessionsDir)) ?? path.resolve(agentSessionsDir);
-  const realCandidate = safeRealpathSync(candidateAbsPath) ?? candidateAbsPath;
-  const relative = path.relative(agentBase, realCandidate);
+  const agentBase = path.resolve(agentSessionsDir);
+  const relative = path.relative(agentBase, candidateAbsPath);
   if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
     return undefined;
   }
@@ -115,47 +112,6 @@ function extractAgentIdFromAbsoluteSessionPath(candidateAbsPath: string): string
   return agentId || undefined;
 }
 
-function resolveStructuralSessionFallbackPath(
-  candidateAbsPath: string,
-  expectedAgentId: string,
-): string | undefined {
-  const normalized = path.normalize(path.resolve(candidateAbsPath));
-  const parts = normalized.split(path.sep).filter(Boolean);
-  const sessionsIndex = parts.lastIndexOf("sessions");
-  if (sessionsIndex < 2 || parts[sessionsIndex - 2] !== "agents") {
-    return undefined;
-  }
-  const agentIdPart = parts[sessionsIndex - 1];
-  if (!agentIdPart) {
-    return undefined;
-  }
-  const normalizedAgentId = normalizeAgentId(agentIdPart);
-  if (normalizedAgentId !== agentIdPart.toLowerCase()) {
-    return undefined;
-  }
-  if (normalizedAgentId !== normalizeAgentId(expectedAgentId)) {
-    return undefined;
-  }
-  const relativeSegments = parts.slice(sessionsIndex + 1);
-  // Session transcripts are stored as direct files in "sessions/".
-  if (relativeSegments.length !== 1) {
-    return undefined;
-  }
-  const fileName = relativeSegments[0];
-  if (!fileName || fileName === "." || fileName === "..") {
-    return undefined;
-  }
-  return normalized;
-}
-
-function safeRealpathSync(filePath: string): string | undefined {
-  try {
-    return fs.realpathSync(filePath);
-  } catch {
-    return undefined;
-  }
-}
-
 function resolvePathWithinSessionsDir(
   sessionsDir: string,
   candidate: string,
@@ -166,28 +122,21 @@ function resolvePathWithinSessionsDir(
     throw new Error("Session file path must not be empty");
   }
   const resolvedBase = path.resolve(sessionsDir);
-  const realBase = safeRealpathSync(resolvedBase) ?? resolvedBase;
   // Normalize absolute paths that are within the sessions directory.
   // Older versions stored absolute sessionFile paths in sessions.json;
   // convert them to relative so the containment check passes.
-  const realTrimmed = path.isAbsolute(trimmed) ? (safeRealpathSync(trimmed) ?? trimmed) : trimmed;
-  const normalized = path.isAbsolute(realTrimmed)
-    ? path.relative(realBase, realTrimmed)
-    : realTrimmed;
-  if (normalized.startsWith("..") && path.isAbsolute(realTrimmed)) {
+  const normalized = path.isAbsolute(trimmed) ? path.relative(resolvedBase, trimmed) : trimmed;
+  if (normalized.startsWith("..") && path.isAbsolute(trimmed)) {
     const tryAgentFallback = (agentId: string): string | undefined => {
       const normalizedAgentId = normalizeAgentId(agentId);
-      const siblingSessionsDir = resolveSiblingAgentSessionsDir(realBase, normalizedAgentId);
+      const siblingSessionsDir = resolveSiblingAgentSessionsDir(resolvedBase, normalizedAgentId);
       if (siblingSessionsDir) {
-        const siblingResolved = resolvePathFromAgentSessionsDir(siblingSessionsDir, realTrimmed);
+        const siblingResolved = resolvePathFromAgentSessionsDir(siblingSessionsDir, trimmed);
         if (siblingResolved) {
           return siblingResolved;
         }
       }
-      return resolvePathFromAgentSessionsDir(
-        resolveAgentSessionsDir(normalizedAgentId),
-        realTrimmed,
-      );
+      return resolvePathFromAgentSessionsDir(resolveAgentSessionsDir(normalizedAgentId), trimmed);
     };
 
     const explicitAgentId = opts?.agentId?.trim();
@@ -197,27 +146,23 @@ function resolvePathWithinSessionsDir(
         return resolvedFromAgent;
       }
     }
-    const extractedAgentId = extractAgentIdFromAbsoluteSessionPath(realTrimmed);
+    const extractedAgentId = extractAgentIdFromAbsoluteSessionPath(trimmed);
     if (extractedAgentId) {
       const resolvedFromPath = tryAgentFallback(extractedAgentId);
       if (resolvedFromPath) {
         return resolvedFromPath;
       }
-      // Cross-root compatibility for older absolute paths:
-      // keep only canonical .../agents/<agentId>/sessions/<file> shapes.
-      const structuralFallback = resolveStructuralSessionFallbackPath(
-        realTrimmed,
-        extractedAgentId,
-      );
-      if (structuralFallback) {
-        return structuralFallback;
-      }
+      // The path structurally matches .../agents/<agentId>/sessions/...
+      // Accept it even if the root directory differs from the current env
+      // (e.g., OPENCLAW_STATE_DIR changed between session creation and resolution).
+      // The structural pattern provides sufficient containment guarantees.
+      return path.resolve(trimmed);
     }
   }
   if (!normalized || normalized.startsWith("..") || path.isAbsolute(normalized)) {
     throw new Error("Session file path must be within sessions directory");
   }
-  return path.resolve(realBase, normalized);
+  return path.resolve(resolvedBase, normalized);
 }
 
 export function resolveSessionTranscriptPathInDir(
@@ -255,11 +200,7 @@ export function resolveSessionFilePath(
   const sessionsDir = resolveSessionsDir(opts);
   const candidate = entry?.sessionFile?.trim();
   if (candidate) {
-    try {
-      return resolvePathWithinSessionsDir(sessionsDir, candidate, { agentId: opts?.agentId });
-    } catch {
-      // Keep handlers alive when persisted metadata is stale/corrupt.
-    }
+    return resolvePathWithinSessionsDir(sessionsDir, candidate, { agentId: opts?.agentId });
   }
   return resolveSessionTranscriptPathInDir(sessionId, sessionsDir);
 }

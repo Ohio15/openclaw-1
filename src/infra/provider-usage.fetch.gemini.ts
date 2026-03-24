@@ -1,4 +1,4 @@
-import { buildUsageHttpErrorSnapshot, fetchJson } from "./provider-usage.fetch.shared.js";
+import { fetchJson } from "./provider-usage.fetch.shared.js";
 import { clampPercent, PROVIDER_LABELS } from "./provider-usage.shared.js";
 import type {
   ProviderUsageSnapshot,
@@ -31,10 +31,12 @@ export async function fetchGeminiUsage(
   );
 
   if (!res.ok) {
-    return buildUsageHttpErrorSnapshot({
+    return {
       provider,
-      status: res.status,
-    });
+      displayName: PROVIDER_LABELS[provider],
+      windows: [],
+      error: `HTTP ${res.status}`,
+    };
   }
 
   const data = (await res.json()) as GeminiUsageResponse;

@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import { monitorWebChannel } from "./auto-reply.js";
 import {
-  createMockWebListener,
   installWebAutoReplyTestHomeHooks,
   installWebAutoReplyUnitTestHooks,
   resetLoadConfigMock,
@@ -11,6 +10,18 @@ import {
 } from "./auto-reply.test-harness.js";
 
 installWebAutoReplyTestHomeHooks();
+
+function createMockListener() {
+  return {
+    close: vi.fn(async () => undefined),
+    onClose: new Promise<import("./inbound.js").WebListenerCloseReason>(() => {}),
+    signalClose: vi.fn(),
+    sendMessage: vi.fn(async () => ({ messageId: "msg-1" })),
+    sendPoll: vi.fn(async () => ({ messageId: "poll-1" })),
+    sendReaction: vi.fn(async () => undefined),
+    sendComposingTo: vi.fn(async () => undefined),
+  };
+}
 
 describe("typing controller idle", () => {
   installWebAutoReplyUnitTestHooks();
@@ -59,7 +70,7 @@ describe("typing controller idle", () => {
           reply,
           sendMedia,
         });
-        return createMockWebListener();
+        return createMockListener();
       },
       false,
       replyResolver,

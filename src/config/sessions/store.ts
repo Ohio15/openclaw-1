@@ -20,13 +20,8 @@ import {
 import { getFileMtimeMs, isCacheEnabled, resolveCacheTtlMs } from "../cache-utils.js";
 import { loadConfig } from "../config.js";
 import type { SessionMaintenanceConfig, SessionMaintenanceMode } from "../types.base.js";
-import { enforceSessionDiskBudget, type SessionDiskBudgetSweepResult } from "./disk-budget.js";
 import { deriveSessionMetaPatch } from "./metadata.js";
-import {
-  mergeSessionEntry,
-  normalizeSessionRuntimeModelFields,
-  type SessionEntry,
-} from "./types.js";
+import { mergeSessionEntry, type SessionEntry } from "./types.js";
 
 const log = createSubsystemLogger("sessions/store");
 
@@ -111,57 +106,12 @@ function removeThreadFromDeliveryContext(context?: DeliveryContext): DeliveryCon
   return next;
 }
 
-function normalizeStoreSessionKey(sessionKey: string): string {
-  return sessionKey.trim().toLowerCase();
-}
-
-function resolveStoreSessionEntry(params: {
-  store: Record<string, SessionEntry>;
-  sessionKey: string;
-}): {
-  normalizedKey: string;
-  existing: SessionEntry | undefined;
-  legacyKeys: string[];
-} {
-  const trimmedKey = params.sessionKey.trim();
-  const normalizedKey = normalizeStoreSessionKey(trimmedKey);
-  const legacyKeySet = new Set<string>();
-  if (
-    trimmedKey !== normalizedKey &&
-    Object.prototype.hasOwnProperty.call(params.store, trimmedKey)
-  ) {
-    legacyKeySet.add(trimmedKey);
-  }
-  let existing =
-    params.store[normalizedKey] ?? (legacyKeySet.size > 0 ? params.store[trimmedKey] : undefined);
-  let existingUpdatedAt = existing?.updatedAt ?? 0;
-  for (const [candidateKey, candidateEntry] of Object.entries(params.store)) {
-    if (candidateKey === normalizedKey) {
-      continue;
-    }
-    if (candidateKey.toLowerCase() !== normalizedKey) {
-      continue;
-    }
-    legacyKeySet.add(candidateKey);
-    const candidateUpdatedAt = candidateEntry?.updatedAt ?? 0;
-    if (!existing || candidateUpdatedAt > existingUpdatedAt) {
-      existing = candidateEntry;
-      existingUpdatedAt = candidateUpdatedAt;
-    }
-  }
-  return {
-    normalizedKey,
-    existing,
-    legacyKeys: [...legacyKeySet],
-  };
-}
-
 function normalizeSessionStore(store: Record<string, SessionEntry>): void {
   for (const [key, entry] of Object.entries(store)) {
     if (!entry) {
       continue;
     }
-    const normalized = normalizeSessionEntryDelivery(normalizeSessionRuntimeModelFields(entry));
+    const normalized = normalizeSessionEntryDelivery(entry);
     if (normalized !== entry) {
       store[key] = normalized;
     }
@@ -289,8 +239,7 @@ export function readSessionUpdatedAt(params: {
 }): number | undefined {
   try {
     const store = loadSessionStore(params.storePath);
-    const resolved = resolveStoreSessionEntry({ store, sessionKey: params.sessionKey });
-    return resolved.existing?.updatedAt;
+    return store[params.sessionKey]?.updatedAt;
   } catch {
     return undefined;
   }
@@ -304,7 +253,6 @@ const DEFAULT_SESSION_PRUNE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_SESSION_MAX_ENTRIES = 500;
 const DEFAULT_SESSION_ROTATE_BYTES = 10_485_760; // 10 MB
 const DEFAULT_SESSION_MAINTENANCE_MODE: SessionMaintenanceMode = "warn";
-const DEFAULT_SESSION_DISK_BUDGET_HIGH_WATER_RATIO = 0.8;
 
 export type SessionMaintenanceWarning = {
   activeSessionKey: string;
@@ -316,23 +264,11 @@ export type SessionMaintenanceWarning = {
   wouldCap: boolean;
 };
 
-export type SessionMaintenanceApplyReport = {
-  mode: SessionMaintenanceMode;
-  beforeCount: number;
-  afterCount: number;
-  pruned: number;
-  capped: number;
-  diskBudget: SessionDiskBudgetSweepResult | null;
-};
-
 type ResolvedSessionMaintenanceConfig = {
   mode: SessionMaintenanceMode;
   pruneAfterMs: number;
   maxEntries: number;
   rotateBytes: number;
-  resetArchiveRetentionMs: number | null;
-  maxDiskBytes: number | null;
-  highWaterBytes: number | null;
 };
 
 function resolvePruneAfterMs(maintenance?: SessionMaintenanceConfig): number {
@@ -359,70 +295,6 @@ function resolveRotateBytes(maintenance?: SessionMaintenanceConfig): number {
   }
 }
 
-function resolveResetArchiveRetentionMs(
-  maintenance: SessionMaintenanceConfig | undefined,
-  pruneAfterMs: number,
-): number | null {
-  const raw = maintenance?.resetArchiveRetention;
-  if (raw === false) {
-    return null;
-  }
-  if (raw === undefined || raw === null || raw === "") {
-    return pruneAfterMs;
-  }
-  try {
-    return parseDurationMs(String(raw).trim(), { defaultUnit: "d" });
-  } catch {
-    return pruneAfterMs;
-  }
-}
-
-function resolveMaxDiskBytes(maintenance?: SessionMaintenanceConfig): number | null {
-  const raw = maintenance?.maxDiskBytes;
-  if (raw === undefined || raw === null || raw === "") {
-    return null;
-  }
-  try {
-    return parseByteSize(String(raw).trim(), { defaultUnit: "b" });
-  } catch {
-    return null;
-  }
-}
-
-function resolveHighWaterBytes(
-  maintenance: SessionMaintenanceConfig | undefined,
-  maxDiskBytes: number | null,
-): number | null {
-  const computeDefault = () => {
-    if (maxDiskBytes == null) {
-      return null;
-    }
-    if (maxDiskBytes <= 0) {
-      return 0;
-    }
-    return Math.max(
-      1,
-      Math.min(
-        maxDiskBytes,
-        Math.floor(maxDiskBytes * DEFAULT_SESSION_DISK_BUDGET_HIGH_WATER_RATIO),
-      ),
-    );
-  };
-  if (maxDiskBytes == null) {
-    return null;
-  }
-  const raw = maintenance?.highWaterBytes;
-  if (raw === undefined || raw === null || raw === "") {
-    return computeDefault();
-  }
-  try {
-    const parsed = parseByteSize(String(raw).trim(), { defaultUnit: "b" });
-    return Math.min(parsed, maxDiskBytes);
-  } catch {
-    return computeDefault();
-  }
-}
-
 /**
  * Resolve maintenance settings from openclaw.json (`session.maintenance`).
  * Falls back to built-in defaults when config is missing or unset.
@@ -434,16 +306,11 @@ export function resolveMaintenanceConfig(): ResolvedSessionMaintenanceConfig {
   } catch {
     // Config may not be available (e.g. in tests). Use defaults.
   }
-  const pruneAfterMs = resolvePruneAfterMs(maintenance);
-  const maxDiskBytes = resolveMaxDiskBytes(maintenance);
   return {
     mode: maintenance?.mode ?? DEFAULT_SESSION_MAINTENANCE_MODE,
-    pruneAfterMs,
+    pruneAfterMs: resolvePruneAfterMs(maintenance),
     maxEntries: maintenance?.maxEntries ?? DEFAULT_SESSION_MAX_ENTRIES,
     rotateBytes: resolveRotateBytes(maintenance),
-    resetArchiveRetentionMs: resolveResetArchiveRetentionMs(maintenance, pruneAfterMs),
-    maxDiskBytes,
-    highWaterBytes: resolveHighWaterBytes(maintenance, maxDiskBytes),
   };
 }
 
@@ -526,10 +393,7 @@ export function getActiveSessionMaintenanceWarning(params: {
 export function capEntryCount(
   store: Record<string, SessionEntry>,
   overrideMax?: number,
-  opts: {
-    log?: boolean;
-    onCapped?: (params: { key: string; entry: SessionEntry }) => void;
-  } = {},
+  opts: { log?: boolean } = {},
 ): number {
   const maxEntries = overrideMax ?? resolveMaintenanceConfig().maxEntries;
   const keys = Object.keys(store);
@@ -546,10 +410,6 @@ export function capEntryCount(
 
   const toRemove = sorted.slice(maxEntries);
   for (const key of toRemove) {
-    const entry = store[key];
-    if (entry) {
-      opts.onCapped?.({ key, entry });
-    }
     delete store[key];
   }
   if (opts.log !== false) {
@@ -633,10 +493,6 @@ type SaveSessionStoreOptions = {
   activeSessionKey?: string;
   /** Optional callback for warn-only maintenance. */
   onWarn?: (warning: SessionMaintenanceWarning) => void | Promise<void>;
-  /** Optional callback with maintenance stats after a save. */
-  onMaintenanceApplied?: (report: SessionMaintenanceApplyReport) => void | Promise<void>;
-  /** Optional overrides used by maintenance commands. */
-  maintenanceOverride?: Partial<ResolvedSessionMaintenanceConfig>;
 };
 
 async function saveSessionStoreUnlocked(
@@ -651,9 +507,8 @@ async function saveSessionStoreUnlocked(
 
   if (!opts?.skipMaintenance) {
     // Resolve maintenance config once (avoids repeated loadConfig() calls).
-    const maintenance = { ...resolveMaintenanceConfig(), ...opts?.maintenanceOverride };
+    const maintenance = resolveMaintenanceConfig();
     const shouldWarnOnly = maintenance.mode === "warn";
-    const beforeCount = Object.keys(store).length;
 
     if (shouldWarnOnly) {
       const activeSessionKey = opts?.activeSessionKey?.trim();
@@ -675,96 +530,39 @@ async function saveSessionStoreUnlocked(
           await opts?.onWarn?.(warning);
         }
       }
-      const diskBudget = await enforceSessionDiskBudget({
-        store,
-        storePath,
-        activeSessionKey: opts?.activeSessionKey,
-        maintenance,
-        warnOnly: true,
-        log,
-      });
-      await opts?.onMaintenanceApplied?.({
-        mode: maintenance.mode,
-        beforeCount,
-        afterCount: Object.keys(store).length,
-        pruned: 0,
-        capped: 0,
-        diskBudget,
-      });
     } else {
       // Prune stale entries and cap total count before serializing.
-      const removedSessionFiles = new Map<string, string | undefined>();
-      const pruned = pruneStaleEntries(store, maintenance.pruneAfterMs, {
+      const prunedSessionFiles = new Map<string, string | undefined>();
+      pruneStaleEntries(store, maintenance.pruneAfterMs, {
         onPruned: ({ entry }) => {
-          if (!removedSessionFiles.has(entry.sessionId) || entry.sessionFile) {
-            removedSessionFiles.set(entry.sessionId, entry.sessionFile);
+          if (!prunedSessionFiles.has(entry.sessionId) || entry.sessionFile) {
+            prunedSessionFiles.set(entry.sessionId, entry.sessionFile);
           }
         },
       });
-      const capped = capEntryCount(store, maintenance.maxEntries, {
-        onCapped: ({ entry }) => {
-          if (!removedSessionFiles.has(entry.sessionId) || entry.sessionFile) {
-            removedSessionFiles.set(entry.sessionId, entry.sessionFile);
-          }
-        },
-      });
+      capEntryCount(store, maintenance.maxEntries);
       const archivedDirs = new Set<string>();
-      const referencedSessionIds = new Set(
-        Object.values(store)
-          .map((entry) => entry?.sessionId)
-          .filter((id): id is string => Boolean(id)),
-      );
-      for (const [sessionId, sessionFile] of removedSessionFiles) {
-        if (referencedSessionIds.has(sessionId)) {
-          continue;
-        }
+      for (const [sessionId, sessionFile] of prunedSessionFiles) {
         const archived = archiveSessionTranscripts({
           sessionId,
           storePath,
           sessionFile,
           reason: "deleted",
-          restrictToStoreDir: true,
         });
         for (const archivedPath of archived) {
           archivedDirs.add(path.dirname(archivedPath));
         }
       }
-      if (archivedDirs.size > 0 || maintenance.resetArchiveRetentionMs != null) {
-        const targetDirs =
-          archivedDirs.size > 0 ? [...archivedDirs] : [path.dirname(path.resolve(storePath))];
+      if (archivedDirs.size > 0) {
         await cleanupArchivedSessionTranscripts({
-          directories: targetDirs,
+          directories: [...archivedDirs],
           olderThanMs: maintenance.pruneAfterMs,
           reason: "deleted",
         });
-        if (maintenance.resetArchiveRetentionMs != null) {
-          await cleanupArchivedSessionTranscripts({
-            directories: targetDirs,
-            olderThanMs: maintenance.resetArchiveRetentionMs,
-            reason: "reset",
-          });
-        }
       }
 
       // Rotate the on-disk file if it exceeds the size threshold.
       await rotateSessionFile(storePath, maintenance.rotateBytes);
-
-      const diskBudget = await enforceSessionDiskBudget({
-        store,
-        storePath,
-        activeSessionKey: opts?.activeSessionKey,
-        maintenance,
-        warnOnly: false,
-        log,
-      });
-      await opts?.onMaintenanceApplied?.({
-        mode: maintenance.mode,
-        beforeCount,
-        afterCount: Object.keys(store).length,
-        pruned,
-        capped,
-        diskBudget,
-      });
     }
   }
 
@@ -797,7 +595,7 @@ async function saveSessionStoreUnlocked(
           // Final attempt failed — skip this save.  The write lock ensures
           // the next save will retry with fresh data.  Log for diagnostics.
           if (i === 4) {
-            log.warn(`rename failed after 5 attempts: ${storePath}`);
+            console.warn(`[session-store] rename failed after 5 attempts: ${storePath}`);
           }
         }
       }
@@ -1008,9 +806,8 @@ export async function updateSessionStoreEntry(params: {
 }): Promise<SessionEntry | null> {
   const { storePath, sessionKey, update } = params;
   return await withSessionStoreLock(storePath, async () => {
-    const store = loadSessionStore(storePath, { skipCache: true });
-    const resolved = resolveStoreSessionEntry({ store, sessionKey });
-    const existing = resolved.existing;
+    const store = loadSessionStore(storePath);
+    const existing = store[sessionKey];
     if (!existing) {
       return null;
     }
@@ -1019,13 +816,8 @@ export async function updateSessionStoreEntry(params: {
       return existing;
     }
     const next = mergeSessionEntry(existing, patch);
-    store[resolved.normalizedKey] = next;
-    for (const legacyKey of resolved.legacyKeys) {
-      delete store[legacyKey];
-    }
-    await saveSessionStoreUnlocked(storePath, store, {
-      activeSessionKey: resolved.normalizedKey,
-    });
+    store[sessionKey] = next;
+    await saveSessionStoreUnlocked(storePath, store, { activeSessionKey: sessionKey });
     return next;
   });
 }
@@ -1042,34 +834,24 @@ export async function recordSessionMetaFromInbound(params: {
   return await updateSessionStore(
     storePath,
     (store) => {
-      const resolved = resolveStoreSessionEntry({ store, sessionKey });
-      const existing = resolved.existing;
+      const existing = store[sessionKey];
       const patch = deriveSessionMetaPatch({
         ctx,
-        sessionKey: resolved.normalizedKey,
+        sessionKey,
         existing,
         groupResolution: params.groupResolution,
       });
       if (!patch) {
-        if (existing && resolved.legacyKeys.length > 0) {
-          store[resolved.normalizedKey] = existing;
-          for (const legacyKey of resolved.legacyKeys) {
-            delete store[legacyKey];
-          }
-        }
         return existing ?? null;
       }
       if (!existing && !createIfMissing) {
         return null;
       }
       const next = mergeSessionEntry(existing, patch);
-      store[resolved.normalizedKey] = next;
-      for (const legacyKey of resolved.legacyKeys) {
-        delete store[legacyKey];
-      }
+      store[sessionKey] = next;
       return next;
     },
-    { activeSessionKey: normalizeStoreSessionKey(sessionKey) },
+    { activeSessionKey: sessionKey },
   );
 }
 
@@ -1087,8 +869,7 @@ export async function updateLastRoute(params: {
   const { storePath, sessionKey, channel, to, accountId, threadId, ctx } = params;
   return await withSessionStoreLock(storePath, async () => {
     const store = loadSessionStore(storePath);
-    const resolved = resolveStoreSessionEntry({ store, sessionKey });
-    const existing = resolved.existing;
+    const existing = store[sessionKey];
     const now = Date.now();
     const explicitContext = normalizeDeliveryContext(params.deliveryContext);
     const inlineContext = normalizeDeliveryContext({
@@ -1129,7 +910,7 @@ export async function updateLastRoute(params: {
     const metaPatch = ctx
       ? deriveSessionMetaPatch({
           ctx,
-          sessionKey: resolved.normalizedKey,
+          sessionKey,
           existing,
           groupResolution: params.groupResolution,
         })
@@ -1146,13 +927,8 @@ export async function updateLastRoute(params: {
       existing,
       metaPatch ? { ...basePatch, ...metaPatch } : basePatch,
     );
-    store[resolved.normalizedKey] = next;
-    for (const legacyKey of resolved.legacyKeys) {
-      delete store[legacyKey];
-    }
-    await saveSessionStoreUnlocked(storePath, store, {
-      activeSessionKey: resolved.normalizedKey,
-    });
+    store[sessionKey] = next;
+    await saveSessionStoreUnlocked(storePath, store, { activeSessionKey: sessionKey });
     return next;
   });
 }

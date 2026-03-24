@@ -1,4 +1,4 @@
-import { isAbortRequestText } from "../auto-reply/reply/abort.js";
+import { isAbortTrigger } from "../auto-reply/reply/abort.js";
 
 export type ChatAbortControllerEntry = {
   controller: AbortController;
@@ -9,7 +9,11 @@ export type ChatAbortControllerEntry = {
 };
 
 export function isChatStopCommandText(text: string): boolean {
-  return isAbortRequestText(text);
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return false;
+  }
+  return trimmed.toLowerCase() === "/stop" || isAbortTrigger(trimmed);
 }
 
 export function resolveChatRunExpiresAtMs(params: {

@@ -1,12 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { useFastShortTimeouts } from "../../test/helpers/fast-short-timeouts.js";
+import { describe, expect, it, vi } from "vitest";
 import { installEmbeddingManagerFixture } from "./embedding-manager.test-harness.js";
 
 const fx = installEmbeddingManagerFixture({
   fixturePrefix: "openclaw-mem-",
-  largeTokens: 4000,
+  largeTokens: 1250,
   smallTokens: 200,
   createCfg: ({ workspaceDir, indexPath, tokens }) => ({
     agents: {
@@ -50,10 +49,6 @@ describe("memory embedding batches", () => {
     );
     expect(totalTexts).toBe(status.chunks);
     expect(embedBatch.mock.calls.length).toBeGreaterThan(1);
-    const inputs: string[] = embedBatch.mock.calls.flatMap(
-      (call: unknown[]) => (call[0] as string[] | undefined) ?? [],
-    );
-    expect(inputs.every((text) => Buffer.byteLength(text, "utf8") <= 8000)).toBe(true);
     expect(updates.length).toBeGreaterThan(0);
     expect(updates.some((update) => update.label?.includes("/"))).toBe(true);
     const last = updates[updates.length - 1];
@@ -93,11 +88,22 @@ describe("memory embedding batches", () => {
       return texts.map(() => [0, 1, 0]);
     });
 
-    const restoreFastTimeouts = useFastShortTimeouts();
+    const realSetTimeout = setTimeout;
+    const setTimeoutSpy = vi.spyOn(global, "setTimeout").mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+      ...args: unknown[]
+    ) => {
+      const delay = typeof timeout === "number" ? timeout : 0;
+      if (delay > 0 && delay <= 2000) {
+        return realSetTimeout(handler, 0, ...args);
+      }
+      return realSetTimeout(handler, delay, ...args);
+    }) as typeof setTimeout);
     try {
       await managerSmall.sync({ reason: "test" });
     } finally {
-      restoreFastTimeouts();
+      setTimeoutSpy.mockRestore();
     }
 
     expect(calls).toBe(3);

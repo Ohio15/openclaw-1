@@ -3,7 +3,6 @@ import fs from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { setLoggerOverride } from "../logging.js";
 import {
-  createWebListenerFactoryCapture,
   installWebAutoReplyTestHomeHooks,
   installWebAutoReplyUnitTestHooks,
 } from "./auto-reply.test-harness.js";
@@ -61,11 +60,18 @@ describe("web auto-reply monitor logging", () => {
     const logPath = `/tmp/openclaw-log-test-${crypto.randomUUID()}.log`;
     setLoggerOverride({ level: "trace", file: logPath });
 
-    const capture = createWebListenerFactoryCapture();
+    let capturedOnMessage:
+      | ((msg: import("./inbound.js").WebInboundMessage) => Promise<void>)
+      | undefined;
+    const listenerFactory = async (opts: {
+      onMessage: (msg: import("./inbound.js").WebInboundMessage) => Promise<void>;
+    }) => {
+      capturedOnMessage = opts.onMessage;
+      return { close: vi.fn() };
+    };
 
     const resolver = vi.fn().mockResolvedValue({ text: "auto" });
-    await monitorWebChannel(false, capture.listenerFactory as never, false, resolver as never);
-    const capturedOnMessage = capture.getOnMessage();
+    await monitorWebChannel(false, listenerFactory as never, false, resolver as never);
     expect(capturedOnMessage).toBeDefined();
 
     await capturedOnMessage?.({

@@ -33,12 +33,7 @@ test("exec disposes PTY listeners after normal exit", async () => {
     kill: vi.fn(),
   }));
 
-  const tool = createExecTool({
-    allowBackground: false,
-    host: "gateway",
-    security: "full",
-    ask: "off",
-  });
+  const tool = createExecTool({ allowBackground: false });
   const result = await tool.execute("toolcall", {
     command: "echo ok",
     pty: true,
@@ -52,29 +47,17 @@ test("exec disposes PTY listeners after normal exit", async () => {
 test("exec tears down PTY resources on timeout", async () => {
   const disposeData = vi.fn();
   const disposeExit = vi.fn();
-  let exitListener: ((event: { exitCode: number; signal?: number }) => void) | undefined;
-  const kill = vi.fn(() => {
-    // Mirror real PTY behavior: process exits shortly after force-kill.
-    exitListener?.({ exitCode: 137, signal: 9 });
-  });
+  const kill = vi.fn();
 
   ptySpawnMock.mockImplementation(() => ({
     pid: 0,
     write: vi.fn(),
     onData: () => ({ dispose: disposeData }),
-    onExit: (listener: (event: { exitCode: number; signal?: number }) => void) => {
-      exitListener = listener;
-      return { dispose: disposeExit };
-    },
+    onExit: () => ({ dispose: disposeExit }),
     kill,
   }));
 
-  const tool = createExecTool({
-    allowBackground: false,
-    host: "gateway",
-    security: "full",
-    ask: "off",
-  });
+  const tool = createExecTool({ allowBackground: false });
   await expect(
     tool.execute("toolcall", {
       command: "sleep 5",

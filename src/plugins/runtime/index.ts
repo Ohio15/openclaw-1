@@ -239,215 +239,195 @@ function loadWhatsAppActions() {
 export function createPluginRuntime(): PluginRuntime {
   return {
     version: resolveVersion(),
-    config: createRuntimeConfig(),
-    system: createRuntimeSystem(),
-    media: createRuntimeMedia(),
-    tts: { textToSpeechTelephony },
-    tools: createRuntimeTools(),
-    channel: createRuntimeChannel(),
-    logging: createRuntimeLogging(),
-    state: { resolveStateDir },
-  };
-}
-
-function createRuntimeConfig(): PluginRuntime["config"] {
-  return {
-    loadConfig,
-    writeConfigFile,
-  };
-}
-
-function createRuntimeSystem(): PluginRuntime["system"] {
-  return {
-    enqueueSystemEvent,
-    runCommandWithTimeout,
-    formatNativeDependencyHint,
-  };
-}
-
-function createRuntimeMedia(): PluginRuntime["media"] {
-  return {
-    loadWebMedia,
-    detectMime,
-    mediaKindFromMime,
-    isVoiceCompatibleAudio,
-    getImageMetadata,
-    resizeToJpeg,
-  };
-}
-
-function createRuntimeTools(): PluginRuntime["tools"] {
-  return {
-    createMemoryGetTool,
-    createMemorySearchTool,
-    registerMemoryCli,
-  };
-}
-
-function createRuntimeChannel(): PluginRuntime["channel"] {
-  return {
-    text: {
-      chunkByNewline,
-      chunkMarkdownText,
-      chunkMarkdownTextWithMode,
-      chunkText,
-      chunkTextWithMode,
-      resolveChunkMode,
-      resolveTextChunkLimit,
-      hasControlCommand,
-      resolveMarkdownTableMode,
-      convertMarkdownTables,
+    config: {
+      loadConfig,
+      writeConfigFile,
     },
-    reply: {
-      dispatchReplyWithBufferedBlockDispatcher,
-      createReplyDispatcherWithTyping,
-      resolveEffectiveMessagesConfig,
-      resolveHumanDelayConfig,
-      dispatchReplyFromConfig,
-      finalizeInboundContext,
-      formatAgentEnvelope,
-      /** @deprecated Prefer `BodyForAgent` + structured user-context blocks (do not build plaintext envelopes for prompts). */
-      formatInboundEnvelope,
-      resolveEnvelopeFormatOptions,
-    },
-    routing: {
-      resolveAgentRoute,
-    },
-    pairing: {
-      buildPairingReply,
-      readAllowFromStore: readChannelAllowFromStore,
-      upsertPairingRequest: upsertChannelPairingRequest,
+    system: {
+      enqueueSystemEvent,
+      runCommandWithTimeout,
+      formatNativeDependencyHint,
     },
     media: {
-      fetchRemoteMedia,
-      saveMediaBuffer,
+      loadWebMedia,
+      detectMime,
+      mediaKindFromMime,
+      isVoiceCompatibleAudio,
+      getImageMetadata,
+      resizeToJpeg,
     },
-    activity: {
-      record: recordChannelActivity,
-      get: getChannelActivity,
+    tts: {
+      textToSpeechTelephony,
     },
-    session: {
-      resolveStorePath,
-      readSessionUpdatedAt,
-      recordSessionMetaFromInbound,
-      recordInboundSession,
-      updateLastRoute,
+    tools: {
+      createMemoryGetTool,
+      createMemorySearchTool,
+      registerMemoryCli,
     },
-    mentions: {
-      buildMentionRegexes,
-      matchesMentionPatterns,
-      matchesMentionWithExplicit,
+    channel: {
+      text: {
+        chunkByNewline,
+        chunkMarkdownText,
+        chunkMarkdownTextWithMode,
+        chunkText,
+        chunkTextWithMode,
+        resolveChunkMode,
+        resolveTextChunkLimit,
+        hasControlCommand,
+        resolveMarkdownTableMode,
+        convertMarkdownTables,
+      },
+      reply: {
+        dispatchReplyWithBufferedBlockDispatcher,
+        createReplyDispatcherWithTyping,
+        resolveEffectiveMessagesConfig,
+        resolveHumanDelayConfig,
+        dispatchReplyFromConfig,
+        finalizeInboundContext,
+        formatAgentEnvelope,
+        /** @deprecated Prefer `BodyForAgent` + structured user-context blocks (do not build plaintext envelopes for prompts). */
+        formatInboundEnvelope,
+        resolveEnvelopeFormatOptions,
+      },
+      routing: {
+        resolveAgentRoute,
+      },
+      pairing: {
+        buildPairingReply,
+        readAllowFromStore: readChannelAllowFromStore,
+        upsertPairingRequest: upsertChannelPairingRequest,
+      },
+      media: {
+        fetchRemoteMedia,
+        saveMediaBuffer,
+      },
+      activity: {
+        record: recordChannelActivity,
+        get: getChannelActivity,
+      },
+      session: {
+        resolveStorePath,
+        readSessionUpdatedAt,
+        recordSessionMetaFromInbound,
+        recordInboundSession,
+        updateLastRoute,
+      },
+      mentions: {
+        buildMentionRegexes,
+        matchesMentionPatterns,
+        matchesMentionWithExplicit,
+      },
+      reactions: {
+        shouldAckReaction,
+        removeAckReactionAfterReply,
+      },
+      groups: {
+        resolveGroupPolicy: resolveChannelGroupPolicy,
+        resolveRequireMention: resolveChannelGroupRequireMention,
+      },
+      debounce: {
+        createInboundDebouncer,
+        resolveInboundDebounceMs,
+      },
+      commands: {
+        resolveCommandAuthorizedFromAuthorizers,
+        isControlCommandMessage,
+        shouldComputeCommandAuthorized,
+        shouldHandleTextCommands,
+      },
+      discord: {
+        messageActions: discordMessageActions,
+        auditChannelPermissions: auditDiscordChannelPermissions,
+        listDirectoryGroupsLive: listDiscordDirectoryGroupsLive,
+        listDirectoryPeersLive: listDiscordDirectoryPeersLive,
+        probeDiscord,
+        resolveChannelAllowlist: resolveDiscordChannelAllowlist,
+        resolveUserAllowlist: resolveDiscordUserAllowlist,
+        sendMessageDiscord,
+        sendPollDiscord,
+        monitorDiscordProvider,
+      },
+      slack: {
+        listDirectoryGroupsLive: listSlackDirectoryGroupsLive,
+        listDirectoryPeersLive: listSlackDirectoryPeersLive,
+        probeSlack,
+        resolveChannelAllowlist: resolveSlackChannelAllowlist,
+        resolveUserAllowlist: resolveSlackUserAllowlist,
+        sendMessageSlack,
+        monitorSlackProvider,
+        handleSlackAction,
+      },
+      telegram: {
+        auditGroupMembership: auditTelegramGroupMembership,
+        collectUnmentionedGroupIds: collectTelegramUnmentionedGroupIds,
+        probeTelegram,
+        resolveTelegramToken,
+        sendMessageTelegram,
+        sendPollTelegram,
+        monitorTelegramProvider,
+        messageActions: telegramMessageActions,
+      },
+      signal: {
+        probeSignal,
+        sendMessageSignal,
+        monitorSignalProvider,
+        messageActions: signalMessageActions,
+      },
+      imessage: {
+        monitorIMessageProvider,
+        probeIMessage,
+        sendMessageIMessage,
+      },
+      whatsapp: {
+        getActiveWebListener,
+        getWebAuthAgeMs,
+        logoutWeb,
+        logWebSelfId,
+        readWebSelfId,
+        webAuthExists,
+        sendMessageWhatsApp: sendMessageWhatsAppLazy,
+        sendPollWhatsApp: sendPollWhatsAppLazy,
+        loginWeb: loginWebLazy,
+        startWebLoginWithQr: startWebLoginWithQrLazy,
+        waitForWebLogin: waitForWebLoginLazy,
+        monitorWebChannel: monitorWebChannelLazy,
+        handleWhatsAppAction: handleWhatsAppActionLazy,
+        createLoginTool: createWhatsAppLoginTool,
+      },
+      line: {
+        listLineAccountIds,
+        resolveDefaultLineAccountId,
+        resolveLineAccount,
+        normalizeAccountId: normalizeLineAccountId,
+        probeLineBot,
+        sendMessageLine,
+        pushMessageLine,
+        pushMessagesLine,
+        pushFlexMessage,
+        pushTemplateMessage,
+        pushLocationMessage,
+        pushTextMessageWithQuickReplies,
+        createQuickReplyItems,
+        buildTemplateMessageFromPayload,
+        monitorLineProvider,
+      },
     },
-    reactions: {
-      shouldAckReaction,
-      removeAckReactionAfterReply,
+    logging: {
+      shouldLogVerbose,
+      getChildLogger: (bindings, opts) => {
+        const logger = getChildLogger(bindings, {
+          level: opts?.level ? normalizeLogLevel(opts.level) : undefined,
+        });
+        return {
+          debug: (message) => logger.debug?.(message),
+          info: (message) => logger.info(message),
+          warn: (message) => logger.warn(message),
+          error: (message) => logger.error(message),
+        };
+      },
     },
-    groups: {
-      resolveGroupPolicy: resolveChannelGroupPolicy,
-      resolveRequireMention: resolveChannelGroupRequireMention,
-    },
-    debounce: {
-      createInboundDebouncer,
-      resolveInboundDebounceMs,
-    },
-    commands: {
-      resolveCommandAuthorizedFromAuthorizers,
-      isControlCommandMessage,
-      shouldComputeCommandAuthorized,
-      shouldHandleTextCommands,
-    },
-    discord: {
-      messageActions: discordMessageActions,
-      auditChannelPermissions: auditDiscordChannelPermissions,
-      listDirectoryGroupsLive: listDiscordDirectoryGroupsLive,
-      listDirectoryPeersLive: listDiscordDirectoryPeersLive,
-      probeDiscord,
-      resolveChannelAllowlist: resolveDiscordChannelAllowlist,
-      resolveUserAllowlist: resolveDiscordUserAllowlist,
-      sendMessageDiscord,
-      sendPollDiscord,
-      monitorDiscordProvider,
-    },
-    slack: {
-      listDirectoryGroupsLive: listSlackDirectoryGroupsLive,
-      listDirectoryPeersLive: listSlackDirectoryPeersLive,
-      probeSlack,
-      resolveChannelAllowlist: resolveSlackChannelAllowlist,
-      resolveUserAllowlist: resolveSlackUserAllowlist,
-      sendMessageSlack,
-      monitorSlackProvider,
-      handleSlackAction,
-    },
-    telegram: {
-      auditGroupMembership: auditTelegramGroupMembership,
-      collectUnmentionedGroupIds: collectTelegramUnmentionedGroupIds,
-      probeTelegram,
-      resolveTelegramToken,
-      sendMessageTelegram,
-      sendPollTelegram,
-      monitorTelegramProvider,
-      messageActions: telegramMessageActions,
-    },
-    signal: {
-      probeSignal,
-      sendMessageSignal,
-      monitorSignalProvider,
-      messageActions: signalMessageActions,
-    },
-    imessage: {
-      monitorIMessageProvider,
-      probeIMessage,
-      sendMessageIMessage,
-    },
-    whatsapp: {
-      getActiveWebListener,
-      getWebAuthAgeMs,
-      logoutWeb,
-      logWebSelfId,
-      readWebSelfId,
-      webAuthExists,
-      sendMessageWhatsApp: sendMessageWhatsAppLazy,
-      sendPollWhatsApp: sendPollWhatsAppLazy,
-      loginWeb: loginWebLazy,
-      startWebLoginWithQr: startWebLoginWithQrLazy,
-      waitForWebLogin: waitForWebLoginLazy,
-      monitorWebChannel: monitorWebChannelLazy,
-      handleWhatsAppAction: handleWhatsAppActionLazy,
-      createLoginTool: createWhatsAppLoginTool,
-    },
-    line: {
-      listLineAccountIds,
-      resolveDefaultLineAccountId,
-      resolveLineAccount,
-      normalizeAccountId: normalizeLineAccountId,
-      probeLineBot,
-      sendMessageLine,
-      pushMessageLine,
-      pushMessagesLine,
-      pushFlexMessage,
-      pushTemplateMessage,
-      pushLocationMessage,
-      pushTextMessageWithQuickReplies,
-      createQuickReplyItems,
-      buildTemplateMessageFromPayload,
-      monitorLineProvider,
-    },
-  };
-}
-
-function createRuntimeLogging(): PluginRuntime["logging"] {
-  return {
-    shouldLogVerbose,
-    getChildLogger: (bindings, opts) => {
-      const logger = getChildLogger(bindings, {
-        level: opts?.level ? normalizeLogLevel(opts.level) : undefined,
-      });
-      return {
-        debug: (message) => logger.debug?.(message),
-        info: (message) => logger.info(message),
-        warn: (message) => logger.warn(message),
-        error: (message) => logger.error(message),
-      };
+    state: {
+      resolveStateDir,
     },
   };
 }

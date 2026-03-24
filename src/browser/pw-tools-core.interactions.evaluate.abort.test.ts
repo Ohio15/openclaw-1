@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 let page: { evaluate: ReturnType<typeof vi.fn> } | null = null;
 let locator: { evaluate: ReturnType<typeof vi.fn> } | null = null;
@@ -29,61 +29,64 @@ vi.mock("./pw-session.js", () => {
   };
 });
 
-let evaluateViaPlaywright: typeof import("./pw-tools-core.interactions.js").evaluateViaPlaywright;
-
-function createPendingEval() {
-  let evalCalled!: () => void;
-  const evalCalledPromise = new Promise<void>((resolve) => {
-    evalCalled = resolve;
-  });
-  return {
-    evalCalledPromise,
-    resolveEvalCalled: evalCalled,
-  };
-}
-
 describe("evaluateViaPlaywright (abort)", () => {
-  beforeAll(async () => {
-    ({ evaluateViaPlaywright } = await import("./pw-tools-core.interactions.js"));
-  });
-
-  beforeEach(() => {
+  it("rejects when aborted after page.evaluate starts", async () => {
     vi.clearAllMocks();
-  });
-
-  it.each([
-    { label: "page.evaluate", fn: "() => 1" },
-    { label: "locator.evaluate", fn: "(el) => el.textContent", ref: "e1" },
-  ])("rejects when aborted after $label starts", async ({ fn, ref }) => {
     const ctrl = new AbortController();
-    const pending = createPendingEval();
-    const pendingPromise = new Promise(() => {});
+
+    let evalCalled!: () => void;
+    const evalCalledPromise = new Promise<void>((resolve) => {
+      evalCalled = resolve;
+    });
 
     page = {
       evaluate: vi.fn(() => {
-        if (!ref) {
-          pending.resolveEvalCalled();
-        }
-        return pendingPromise;
+        evalCalled();
+        return new Promise(() => {});
       }),
     };
-    locator = {
-      evaluate: vi.fn(() => {
-        if (ref) {
-          pending.resolveEvalCalled();
-        }
-        return pendingPromise;
-      }),
-    };
+    locator = { evaluate: vi.fn() };
 
+    const { evaluateViaPlaywright } = await import("./pw-tools-core.interactions.js");
     const p = evaluateViaPlaywright({
       cdpUrl: "http://127.0.0.1:9222",
-      fn,
-      ref,
+      fn: "() => 1",
       signal: ctrl.signal,
     });
 
-    await pending.evalCalledPromise;
+    await evalCalledPromise;
+    ctrl.abort(new Error("aborted by test"));
+
+    await expect(p).rejects.toThrow("aborted by test");
+    expect(forceDisconnectPlaywrightForTarget).toHaveBeenCalled();
+  });
+
+  it("rejects when aborted after locator.evaluate starts", async () => {
+    vi.clearAllMocks();
+    const ctrl = new AbortController();
+
+    let evalCalled!: () => void;
+    const evalCalledPromise = new Promise<void>((resolve) => {
+      evalCalled = resolve;
+    });
+
+    page = { evaluate: vi.fn() };
+    locator = {
+      evaluate: vi.fn(() => {
+        evalCalled();
+        return new Promise(() => {});
+      }),
+    };
+
+    const { evaluateViaPlaywright } = await import("./pw-tools-core.interactions.js");
+    const p = evaluateViaPlaywright({
+      cdpUrl: "http://127.0.0.1:9222",
+      fn: "(el) => el.textContent",
+      ref: "e1",
+      signal: ctrl.signal,
+    });
+
+    await evalCalledPromise;
     ctrl.abort(new Error("aborted by test"));
 
     await expect(p).rejects.toThrow("aborted by test");

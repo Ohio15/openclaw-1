@@ -1,5 +1,3 @@
-import { sanitizeHtml, stripInvisibleUnicode } from "./web-fetch-visibility.js";
-
 export type ExtractMode = "markdown" | "text";
 
 const READABILITY_MAX_HTML_CHARS = 1_000_000;
@@ -211,26 +209,23 @@ export async function extractReadableContent(params: {
   url: string;
   extractMode: ExtractMode;
 }): Promise<{ text: string; title?: string } | null> {
-  const cleanHtml = await sanitizeHtml(params.html);
   const fallback = (): { text: string; title?: string } => {
-    const rendered = htmlToMarkdown(cleanHtml);
+    const rendered = htmlToMarkdown(params.html);
     if (params.extractMode === "text") {
-      const text =
-        stripInvisibleUnicode(markdownToText(rendered.text)) ||
-        stripInvisibleUnicode(normalizeWhitespace(stripTags(cleanHtml)));
+      const text = markdownToText(rendered.text) || normalizeWhitespace(stripTags(params.html));
       return { text, title: rendered.title };
     }
-    return { text: stripInvisibleUnicode(rendered.text), title: rendered.title };
+    return rendered;
   };
   if (
-    cleanHtml.length > READABILITY_MAX_HTML_CHARS ||
-    exceedsEstimatedHtmlNestingDepth(cleanHtml, READABILITY_MAX_ESTIMATED_NESTING_DEPTH)
+    params.html.length > READABILITY_MAX_HTML_CHARS ||
+    exceedsEstimatedHtmlNestingDepth(params.html, READABILITY_MAX_ESTIMATED_NESTING_DEPTH)
   ) {
     return fallback();
   }
   try {
     const { Readability, parseHTML } = await loadReadabilityDeps();
-    const { document } = parseHTML(cleanHtml);
+    const { document } = parseHTML(params.html);
     try {
       (document as { baseURI?: string }).baseURI = params.url;
     } catch {
@@ -243,11 +238,11 @@ export async function extractReadableContent(params: {
     }
     const title = parsed.title || undefined;
     if (params.extractMode === "text") {
-      const text = stripInvisibleUnicode(normalizeWhitespace(parsed.textContent ?? ""));
+      const text = normalizeWhitespace(parsed.textContent ?? "");
       return text ? { text, title } : fallback();
     }
     const rendered = htmlToMarkdown(parsed.content);
-    return { text: stripInvisibleUnicode(rendered.text), title: title ?? rendered.title };
+    return { text: rendered.text, title: title ?? rendered.title };
   } catch {
     return fallback();
   }

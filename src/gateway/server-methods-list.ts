@@ -1,9 +1,7 @@
 import { listChannelPlugins } from "../channels/plugins/index.js";
-import { GATEWAY_EVENT_UPDATE_AVAILABLE } from "./events.js";
 
 const BASE_METHODS = [
   "health",
-  "doctor.memory.status",
   "logs.tail",
   "channels.status",
   "channels.logout",
@@ -35,7 +33,6 @@ const BASE_METHODS = [
   "talk.config",
   "talk.mode",
   "models.list",
-  "tools.catalog",
   "agents.list",
   "agents.create",
   "agents.update",
@@ -67,7 +64,6 @@ const BASE_METHODS = [
   "device.pair.list",
   "device.pair.approve",
   "device.pair.reject",
-  "device.pair.remove",
   "device.token.rotate",
   "device.token.revoke",
   "node.rename",
@@ -89,6 +85,11 @@ const BASE_METHODS = [
   "agent",
   "agent.identity.get",
   "agent.wait",
+  "mesh.plan",
+  "mesh.plan.auto",
+  "mesh.run",
+  "mesh.status",
+  "mesh.retry",
   "browser.request",
   // WebChat WebSocket-native chat methods
   "chat.history",
@@ -120,5 +121,4 @@ export const GATEWAY_EVENTS = [
   "voicewake.changed",
   "exec.approval.requested",
   "exec.approval.resolved",
-  GATEWAY_EVENT_UPDATE_AVAILABLE,
 ];

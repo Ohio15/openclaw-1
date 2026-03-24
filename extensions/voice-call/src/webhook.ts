@@ -77,10 +77,6 @@ export class VoiceCallWebhookServer {
 
     const streamConfig: MediaStreamConfig = {
       sttProvider,
-      preStartTimeoutMs: this.config.streaming?.preStartTimeoutMs,
-      maxPendingConnections: this.config.streaming?.maxPendingConnections,
-      maxPendingConnectionsPerIp: this.config.streaming?.maxPendingConnectionsPerIp,
-      maxConnections: this.config.streaming?.maxConnections,
       shouldAcceptStream: ({ callId, token }) => {
         const call = this.manager.getCallByProviderCallId(callId);
         if (!call) {
@@ -196,8 +192,9 @@ export class VoiceCallWebhookServer {
       // Handle WebSocket upgrades for media streams
       if (this.mediaStreamHandler) {
         this.server.on("upgrade", (request, socket, head) => {
-          const path = this.getUpgradePathname(request);
-          if (path === streamPath) {
+          const url = new URL(request.url || "/", `http://${request.headers.host}`);
+
+          if (url.pathname === streamPath) {
             console.log("[voice-call] WebSocket upgrade for media stream");
             this.mediaStreamHandler?.handleUpgrade(request, socket, head);
           } else {
@@ -272,15 +269,6 @@ export class VoiceCallWebhookServer {
     });
   }
 
-  private getUpgradePathname(request: http.IncomingMessage): string | null {
-    try {
-      const host = request.headers.host || "localhost";
-      return new URL(request.url || "/", `http://${host}`).pathname;
-    } catch {
-      return null;
-    }
-  }
-
   /**
    * Handle incoming HTTP request.
    */
@@ -346,15 +334,11 @@ export class VoiceCallWebhookServer {
     const result = this.provider.parseWebhookEvent(ctx);
 
     // Process each event
-    if (verification.isReplay) {
-      console.warn("[voice-call] Replay detected; skipping event side effects");
-    } else {
-      for (const event of result.events) {
-        try {
-          this.manager.processEvent(event);
-        } catch (err) {
-          console.error(`[voice-call] Error processing event ${event.type}:`, err);
-        }
+    for (const event of result.events) {
+      try {
+        this.manager.processEvent(event);
+      } catch (err) {
+        console.error(`[voice-call] Error processing event ${event.type}:`, err);
       }
     }
 

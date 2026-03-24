@@ -1,13 +1,10 @@
 import fs from "node:fs/promises";
 import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
 import { detectMime } from "../../media/mime.js";
-import type { ImageSanitizationLimits } from "../image-sanitization.js";
 import { sanitizeToolResultImages } from "../tool-images.js";
 
 // oxlint-disable-next-line typescript/no-explicit-any
-export type AnyAgentTool = AgentTool<any, unknown> & {
-  ownerOnly?: boolean;
-};
+export type AnyAgentTool = AgentTool<any, unknown>;
 
 export type StringParamOptions = {
   required?: boolean;
@@ -21,23 +18,12 @@ export type ActionGate<T extends Record<string, boolean | undefined>> = (
   defaultValue?: boolean,
 ) => boolean;
 
-export const OWNER_ONLY_TOOL_ERROR = "Tool restricted to owner senders.";
-
 export class ToolInputError extends Error {
-  readonly status: number = 400;
+  readonly status = 400;
 
   constructor(message: string) {
     super(message);
     this.name = "ToolInputError";
-  }
-}
-
-export class ToolAuthorizationError extends ToolInputError {
-  override readonly status = 403;
-
-  constructor(message: string) {
-    super(message);
-    this.name = "ToolAuthorizationError";
   }
 }
 
@@ -51,24 +37,6 @@ export function createActionGate<T extends Record<string, boolean | undefined>>(
     }
     return value !== false;
   };
-}
-
-function toSnakeCaseKey(key: string): string {
-  return key
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .toLowerCase();
-}
-
-function readParamRaw(params: Record<string, unknown>, key: string): unknown {
-  if (Object.hasOwn(params, key)) {
-    return params[key];
-  }
-  const snakeKey = toSnakeCaseKey(key);
-  if (snakeKey !== key && Object.hasOwn(params, snakeKey)) {
-    return params[snakeKey];
-  }
-  return undefined;
 }
 
 export function readStringParam(
@@ -87,7 +55,7 @@ export function readStringParam(
   options: StringParamOptions = {},
 ) {
   const { required = false, trim = true, label = key, allowEmpty = false } = options;
-  const raw = readParamRaw(params, key);
+  const raw = params[key];
   if (typeof raw !== "string") {
     if (required) {
       throw new ToolInputError(`${label} required`);
@@ -110,7 +78,7 @@ export function readStringOrNumberParam(
   options: { required?: boolean; label?: string } = {},
 ): string | undefined {
   const { required = false, label = key } = options;
-  const raw = readParamRaw(params, key);
+  const raw = params[key];
   if (typeof raw === "number" && Number.isFinite(raw)) {
     return String(raw);
   }
@@ -132,7 +100,7 @@ export function readNumberParam(
   options: { required?: boolean; label?: string; integer?: boolean } = {},
 ): number | undefined {
   const { required = false, label = key, integer = false } = options;
-  const raw = readParamRaw(params, key);
+  const raw = params[key];
   let value: number | undefined;
   if (typeof raw === "number" && Number.isFinite(raw)) {
     value = raw;
@@ -170,7 +138,7 @@ export function readStringArrayParam(
   options: StringParamOptions = {},
 ) {
   const { required = false, label = key } = options;
-  const raw = readParamRaw(params, key);
+  const raw = params[key];
   if (Array.isArray(raw)) {
     const values = raw
       .filter((entry) => typeof entry === "string")
@@ -239,21 +207,6 @@ export function jsonResult(payload: unknown): AgentToolResult<unknown> {
   };
 }
 
-export function wrapOwnerOnlyToolExecution(
-  tool: AnyAgentTool,
-  senderIsOwner: boolean,
-): AnyAgentTool {
-  if (tool.ownerOnly !== true || senderIsOwner || !tool.execute) {
-    return tool;
-  }
-  return {
-    ...tool,
-    execute: async () => {
-      throw new Error(OWNER_ONLY_TOOL_ERROR);
-    },
-  };
-}
-
 export async function imageResult(params: {
   label: string;
   path: string;
@@ -261,7 +214,6 @@ export async function imageResult(params: {
   mimeType: string;
   extraText?: string;
   details?: Record<string, unknown>;
-  imageSanitization?: ImageSanitizationLimits;
 }): Promise<AgentToolResult<unknown>> {
   const content: AgentToolResult<unknown>["content"] = [
     {
@@ -278,7 +230,7 @@ export async function imageResult(params: {
     content,
     details: { path: params.path, ...params.details },
   };
-  return await sanitizeToolResultImages(result, params.label, params.imageSanitization);
+  return await sanitizeToolResultImages(result, params.label);
 }
 
 export async function imageResultFromFile(params: {
@@ -286,7 +238,6 @@ export async function imageResultFromFile(params: {
   path: string;
   extraText?: string;
   details?: Record<string, unknown>;
-  imageSanitization?: ImageSanitizationLimits;
 }): Promise<AgentToolResult<unknown>> {
   const buf = await fs.readFile(params.path);
   const mimeType = (await detectMime({ buffer: buf.slice(0, 256) })) ?? "image/png";
@@ -297,44 +248,5 @@ export async function imageResultFromFile(params: {
     mimeType,
     extraText: params.extraText,
     details: params.details,
-    imageSanitization: params.imageSanitization,
   });
-}
-
-export type AvailableTag = {
-  id?: string;
-  name: string;
-  moderated?: boolean;
-  emoji_id?: string | null;
-  emoji_name?: string | null;
-};
-
-/**
- * Validate and parse an `availableTags` parameter from untrusted input.
- * Returns `undefined` when the value is missing or not an array.
- * Entries that lack a string `name` are silently dropped.
- */
-export function parseAvailableTags(raw: unknown): AvailableTag[] | undefined {
-  if (raw === undefined || raw === null) {
-    return undefined;
-  }
-  if (!Array.isArray(raw)) {
-    return undefined;
-  }
-  const result = raw
-    .filter(
-      (t): t is Record<string, unknown> =>
-        typeof t === "object" && t !== null && typeof t.name === "string",
-    )
-    .map((t) => ({
-      ...(t.id !== undefined && typeof t.id === "string" ? { id: t.id } : {}),
-      name: t.name as string,
-      ...(typeof t.moderated === "boolean" ? { moderated: t.moderated } : {}),
-      ...(t.emoji_id === null || typeof t.emoji_id === "string" ? { emoji_id: t.emoji_id } : {}),
-      ...(t.emoji_name === null || typeof t.emoji_name === "string"
-        ? { emoji_name: t.emoji_name }
-        : {}),
-    }));
-  // Return undefined instead of empty array to avoid accidentally clearing all tags
-  return result.length ? result : undefined;
 }

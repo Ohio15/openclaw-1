@@ -238,19 +238,7 @@ function buildSendSchema(options: {
 
 function buildReactionSchema() {
   return {
-    messageId: Type.Optional(
-      Type.String({
-        description:
-          "Target message id for reaction. For Telegram, if omitted, defaults to the current inbound message id when available.",
-      }),
-    ),
-    message_id: Type.Optional(
-      Type.String({
-        // Intentional duplicate alias for tool-schema discoverability in LLMs.
-        description:
-          "snake_case alias of messageId. For Telegram, if omitted, defaults to the current inbound message id when available.",
-      }),
-    ),
+    messageId: Type.Optional(Type.String()),
     emoji: Type.Optional(Type.String()),
     remove: Type.Optional(Type.Boolean()),
     targetAuthor: Type.Optional(Type.String()),
@@ -437,12 +425,10 @@ type MessageToolOptions = {
   currentChannelId?: string;
   currentChannelProvider?: string;
   currentThreadTs?: string;
-  currentMessageId?: string | number;
   replyToMode?: "off" | "first" | "all";
   hasRepliedRef?: { value: boolean };
   sandboxRoot?: string;
   requireExplicitTarget?: boolean;
-  requesterSenderId?: string;
 };
 
 function resolveMessageToolSchemaActions(params: {
@@ -646,23 +632,17 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
         clientDisplayName: "agent",
         mode: GATEWAY_CLIENT_MODES.BACKEND,
       };
-      const hasCurrentMessageId =
-        typeof options?.currentMessageId === "number" ||
-        (typeof options?.currentMessageId === "string" &&
-          options.currentMessageId.trim().length > 0);
 
       const toolContext =
         options?.currentChannelId ||
         options?.currentChannelProvider ||
         options?.currentThreadTs ||
-        hasCurrentMessageId ||
         options?.replyToMode ||
         options?.hasRepliedRef
           ? {
               currentChannelId: options?.currentChannelId,
               currentChannelProvider: options?.currentChannelProvider,
               currentThreadTs: options?.currentThreadTs,
-              currentMessageId: options?.currentMessageId,
               replyToMode: options?.replyToMode,
               hasRepliedRef: options?.hasRepliedRef,
               // Direct tool invocations should not add cross-context decoration.
@@ -676,7 +656,6 @@ export function createMessageTool(options?: MessageToolOptions): AnyAgentTool {
         action,
         params,
         defaultAccountId: accountId ?? undefined,
-        requesterSenderId: options?.requesterSenderId,
         gateway,
         toolContext,
         sessionKey: options?.agentSessionKey,

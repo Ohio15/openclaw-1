@@ -27,12 +27,6 @@ import {
 } from "../../infra/restart-sentinel.js";
 import { scheduleGatewaySigusr1Restart } from "../../infra/restart.js";
 import { loadOpenClawPlugins } from "../../plugins/loader.js";
-import { diffConfigPaths } from "../config-reload.js";
-import {
-  formatControlPlaneActor,
-  resolveControlPlaneActor,
-  summarizeChangedPaths,
-} from "../control-plane-audit.js";
 import {
   ErrorCodes,
   errorShape,
@@ -281,7 +275,7 @@ export const configHandlers: GatewayRequestHandlers = {
       undefined,
     );
   },
-  "config.patch": async ({ params, respond, client, context }) => {
+  "config.patch": async ({ params, respond }) => {
     if (!assertValidParams(params, validateConfigPatchParams, "config.patch", respond)) {
       return;
     }
@@ -355,11 +349,6 @@ export const configHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const changedPaths = diffConfigPaths(snapshot.config, validated.config);
-    const actor = resolveControlPlaneActor(client);
-    context?.logGateway?.info(
-      `config.patch write ${formatControlPlaneActor(actor)} changedPaths=${summarizeChangedPaths(changedPaths)} restartReason=config.patch`,
-    );
     await writeConfigFile(validated.config, writeOptions);
 
     const { sessionKey, note, restartDelayMs, deliveryContext, threadId } =
@@ -376,18 +365,7 @@ export const configHandlers: GatewayRequestHandlers = {
     const restart = scheduleGatewaySigusr1Restart({
       delayMs: restartDelayMs,
       reason: "config.patch",
-      audit: {
-        actor: actor.actor,
-        deviceId: actor.deviceId,
-        clientIp: actor.clientIp,
-        changedPaths,
-      },
     });
-    if (restart.coalesced) {
-      context?.logGateway?.warn(
-        `config.patch restart coalesced ${formatControlPlaneActor(actor)} delayMs=${restart.delayMs}`,
-      );
-    }
     respond(
       true,
       {
@@ -403,7 +381,7 @@ export const configHandlers: GatewayRequestHandlers = {
       undefined,
     );
   },
-  "config.apply": async ({ params, respond, client, context }) => {
+  "config.apply": async ({ params, respond }) => {
     if (!assertValidParams(params, validateConfigApplyParams, "config.apply", respond)) {
       return;
     }
@@ -415,11 +393,6 @@ export const configHandlers: GatewayRequestHandlers = {
     if (!parsed) {
       return;
     }
-    const changedPaths = diffConfigPaths(snapshot.config, parsed.config);
-    const actor = resolveControlPlaneActor(client);
-    context?.logGateway?.info(
-      `config.apply write ${formatControlPlaneActor(actor)} changedPaths=${summarizeChangedPaths(changedPaths)} restartReason=config.apply`,
-    );
     await writeConfigFile(parsed.config, writeOptions);
 
     const { sessionKey, note, restartDelayMs, deliveryContext, threadId } =
@@ -436,18 +409,7 @@ export const configHandlers: GatewayRequestHandlers = {
     const restart = scheduleGatewaySigusr1Restart({
       delayMs: restartDelayMs,
       reason: "config.apply",
-      audit: {
-        actor: actor.actor,
-        deviceId: actor.deviceId,
-        clientIp: actor.clientIp,
-        changedPaths,
-      },
     });
-    if (restart.coalesced) {
-      context?.logGateway?.warn(
-        `config.apply restart coalesced ${formatControlPlaneActor(actor)} delayMs=${restart.delayMs}`,
-      );
-    }
     respond(
       true,
       {

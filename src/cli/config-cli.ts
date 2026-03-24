@@ -1,8 +1,6 @@
 import type { Command } from "commander";
 import JSON5 from "json5";
 import { readConfigFileSnapshot, writeConfigFile } from "../config/config.js";
-import { isBlockedObjectKey } from "../config/prototype-keys.js";
-import { redactConfigObject } from "../config/redact-snapshot.js";
 import { danger, info } from "../globals.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { defaultRuntime } from "../runtime.js";
@@ -12,9 +10,6 @@ import { shortenHomePath } from "../utils.js";
 import { formatCliCommand } from "./command-format.js";
 
 type PathSegment = string;
-type ConfigSetParseOpts = {
-  strictJson?: boolean;
-};
 
 function isIndexSegment(raw: string): boolean {
   return /^[0-9]+$/.test(raw);
@@ -72,9 +67,9 @@ function parsePath(raw: string): PathSegment[] {
   return parts.map((part) => part.trim()).filter(Boolean);
 }
 
-function parseValue(raw: string, opts: ConfigSetParseOpts): unknown {
+function parseValue(raw: string, opts: { json?: boolean }): unknown {
   const trimmed = raw.trim();
-  if (opts.strictJson) {
+  if (opts.json) {
     try {
       return JSON5.parse(trimmed);
     } catch (err) {
@@ -86,18 +81,6 @@ function parseValue(raw: string, opts: ConfigSetParseOpts): unknown {
     return JSON5.parse(trimmed);
   } catch {
     return raw;
-  }
-}
-
-function hasOwnPathKey(value: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(value, key);
-}
-
-function validatePathSegments(path: PathSegment[]): void {
-  for (const segment of path) {
-    if (!isIndexSegment(segment) && isBlockedObjectKey(segment)) {
-      throw new Error(`Invalid path segment: ${segment}`);
-    }
   }
 }
 
@@ -119,7 +102,7 @@ function getAtPath(root: unknown, path: PathSegment[]): { found: boolean; value?
       continue;
     }
     const record = current as Record<string, unknown>;
-    if (!hasOwnPathKey(record, segment)) {
+    if (!(segment in record)) {
       return { found: false };
     }
     current = record[segment];
@@ -149,7 +132,7 @@ function setAtPath(root: Record<string, unknown>, path: PathSegment[], value: un
       throw new Error(`Cannot traverse into "${segment}" (not an object)`);
     }
     const record = current as Record<string, unknown>;
-    const existing = hasOwnPathKey(record, segment) ? record[segment] : undefined;
+    const existing = record[segment];
     if (!existing || typeof existing !== "object") {
       record[segment] = nextIsIndex ? [] : {};
     }
@@ -190,7 +173,7 @@ function unsetAtPath(root: Record<string, unknown>, path: PathSegment[]): boolea
       continue;
     }
     const record = current as Record<string, unknown>;
-    if (!hasOwnPathKey(record, segment)) {
+    if (!(segment in record)) {
       return false;
     }
     current = record[segment];
@@ -212,7 +195,7 @@ function unsetAtPath(root: Record<string, unknown>, path: PathSegment[]): boolea
     return false;
   }
   const record = current as Record<string, unknown>;
-  if (!hasOwnPathKey(record, last)) {
+  if (!(last in record)) {
     return false;
   }
   delete record[last];
@@ -238,7 +221,6 @@ function parseRequiredPath(path: string): PathSegment[] {
   if (parsedPath.length === 0) {
     throw new Error("Path is empty.");
   }
-  validatePathSegments(parsedPath);
   return parsedPath;
 }
 
@@ -247,8 +229,7 @@ export async function runConfigGet(opts: { path: string; json?: boolean; runtime
   try {
     const parsedPath = parseRequiredPath(opts.path);
     const snapshot = await loadValidConfig(runtime);
-    const redacted = redactConfigObject(snapshot.config);
-    const res = getAtPath(redacted, parsedPath);
+    const res = getAtPath(snapshot.config, parsedPath);
     if (!res.found) {
       runtime.error(danger(`Config path not found: ${opts.path}`));
       runtime.exit(1);
@@ -288,7 +269,7 @@ export async function runConfigUnset(opts: { path: string; runtime?: RuntimeEnv 
       runtime.exit(1);
       return;
     }
-    await writeConfigFile(next, { unsetPaths: [parsedPath] });
+    await writeConfigFile(next);
     runtime.log(info(`Removed ${opts.path}. Restart the gateway to apply.`));
   } catch (err) {
     runtime.error(danger(String(err)));
@@ -332,14 +313,14 @@ export function registerConfigCli(program: Command) {
     .description("Set a config value by dot path")
     .argument("<path>", "Config path (dot or bracket notation)")
     .argument("<value>", "Value (JSON5 or raw string)")
-    .option("--strict-json", "Strict JSON5 parsing (error instead of raw string fallback)", false)
-    .option("--json", "Legacy alias for --strict-json", false)
+    .option("--json", "Parse value as JSON5 (required)", false)
     .action(async (path: string, value: string, opts) => {
       try {
-        const parsedPath = parseRequiredPath(path);
-        const parsedValue = parseValue(value, {
-          strictJson: Boolean(opts.strictJson || opts.json),
-        });
+        const parsedPath = parsePath(path);
+        if (parsedPath.length === 0) {
+          throw new Error("Path is empty.");
+        }
+        const parsedValue = parseValue(value, opts);
         const snapshot = await loadValidConfig();
         // Use snapshot.resolved (config after $include and ${ENV} resolution, but BEFORE runtime defaults)
         // instead of snapshot.config (runtime-merged with defaults).

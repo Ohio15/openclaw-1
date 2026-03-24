@@ -1,46 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSlackDraftStream } from "./draft-stream.js";
 
-type DraftStreamParams = Parameters<typeof createSlackDraftStream>[0];
-type DraftSendFn = NonNullable<DraftStreamParams["send"]>;
-type DraftEditFn = NonNullable<DraftStreamParams["edit"]>;
-type DraftRemoveFn = NonNullable<DraftStreamParams["remove"]>;
-type DraftWarnFn = NonNullable<DraftStreamParams["warn"]>;
-
-function createDraftStreamHarness(
-  params: {
-    maxChars?: number;
-    send?: DraftSendFn;
-    edit?: DraftEditFn;
-    remove?: DraftRemoveFn;
-    warn?: DraftWarnFn;
-  } = {},
-) {
-  const send =
-    params.send ??
-    vi.fn<DraftSendFn>(async () => ({
+describe("createSlackDraftStream", () => {
+  it("sends the first update and edits subsequent updates", async () => {
+    const send = vi.fn(async () => ({
       channelId: "C123",
       messageId: "111.222",
     }));
-  const edit = params.edit ?? vi.fn<DraftEditFn>(async () => {});
-  const remove = params.remove ?? vi.fn<DraftRemoveFn>(async () => {});
-  const warn = params.warn ?? vi.fn<DraftWarnFn>();
-  const stream = createSlackDraftStream({
-    target: "channel:C123",
-    token: "xoxb-test",
-    throttleMs: 250,
-    maxChars: params.maxChars,
-    send,
-    edit,
-    remove,
-    warn,
-  });
-  return { stream, send, edit, remove, warn };
-}
-
-describe("createSlackDraftStream", () => {
-  it("sends the first update and edits subsequent updates", async () => {
-    const { stream, send, edit } = createDraftStreamHarness();
+    const edit = vi.fn(async () => {});
+    const stream = createSlackDraftStream({
+      target: "channel:C123",
+      token: "xoxb-test",
+      throttleMs: 250,
+      send,
+      edit,
+    });
 
     stream.update("hello");
     await stream.flush();
@@ -56,7 +30,18 @@ describe("createSlackDraftStream", () => {
   });
 
   it("does not send duplicate text", async () => {
-    const { stream, send, edit } = createDraftStreamHarness();
+    const send = vi.fn(async () => ({
+      channelId: "C123",
+      messageId: "111.222",
+    }));
+    const edit = vi.fn(async () => {});
+    const stream = createSlackDraftStream({
+      target: "channel:C123",
+      token: "xoxb-test",
+      throttleMs: 250,
+      send,
+      edit,
+    });
 
     stream.update("same");
     await stream.flush();
@@ -69,10 +54,17 @@ describe("createSlackDraftStream", () => {
 
   it("supports forceNewMessage for subsequent assistant messages", async () => {
     const send = vi
-      .fn<DraftSendFn>()
+      .fn()
       .mockResolvedValueOnce({ channelId: "C123", messageId: "111.222" })
       .mockResolvedValueOnce({ channelId: "C123", messageId: "333.444" });
-    const { stream, edit } = createDraftStreamHarness({ send });
+    const edit = vi.fn(async () => {});
+    const stream = createSlackDraftStream({
+      target: "channel:C123",
+      token: "xoxb-test",
+      throttleMs: 250,
+      send,
+      edit,
+    });
 
     stream.update("first");
     await stream.flush();
@@ -86,7 +78,21 @@ describe("createSlackDraftStream", () => {
   });
 
   it("stops when text exceeds max chars", async () => {
-    const { stream, send, edit, warn } = createDraftStreamHarness({ maxChars: 5 });
+    const send = vi.fn(async () => ({
+      channelId: "C123",
+      messageId: "111.222",
+    }));
+    const edit = vi.fn(async () => {});
+    const warn = vi.fn();
+    const stream = createSlackDraftStream({
+      target: "channel:C123",
+      token: "xoxb-test",
+      maxChars: 5,
+      throttleMs: 250,
+      send,
+      edit,
+      warn,
+    });
 
     stream.update("123456");
     await stream.flush();
@@ -99,7 +105,20 @@ describe("createSlackDraftStream", () => {
   });
 
   it("clear removes preview message when one exists", async () => {
-    const { stream, remove } = createDraftStreamHarness();
+    const send = vi.fn(async () => ({
+      channelId: "C123",
+      messageId: "111.222",
+    }));
+    const edit = vi.fn(async () => {});
+    const remove = vi.fn(async () => {});
+    const stream = createSlackDraftStream({
+      target: "channel:C123",
+      token: "xoxb-test",
+      throttleMs: 250,
+      send,
+      edit,
+      remove,
+    });
 
     stream.update("hello");
     await stream.flush();
@@ -115,26 +134,23 @@ describe("createSlackDraftStream", () => {
   });
 
   it("clear is a no-op when no preview message exists", async () => {
-    const { stream, remove } = createDraftStreamHarness();
+    const send = vi.fn(async () => ({
+      channelId: "C123",
+      messageId: "111.222",
+    }));
+    const edit = vi.fn(async () => {});
+    const remove = vi.fn(async () => {});
+    const stream = createSlackDraftStream({
+      target: "channel:C123",
+      token: "xoxb-test",
+      throttleMs: 250,
+      send,
+      edit,
+      remove,
+    });
 
     await stream.clear();
 
     expect(remove).not.toHaveBeenCalled();
-  });
-
-  it("clear warns when cleanup fails", async () => {
-    const remove = vi.fn<DraftRemoveFn>(async () => {
-      throw new Error("cleanup failed");
-    });
-    const warn = vi.fn<DraftWarnFn>();
-    const { stream } = createDraftStreamHarness({ remove, warn });
-
-    stream.update("hello");
-    await stream.flush();
-    await stream.clear();
-
-    expect(warn).toHaveBeenCalledWith("slack stream preview cleanup failed: cleanup failed");
-    expect(stream.messageId()).toBeUndefined();
-    expect(stream.channelId()).toBeUndefined();
   });
 });

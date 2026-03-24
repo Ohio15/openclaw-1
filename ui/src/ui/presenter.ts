@@ -18,8 +18,7 @@ export function formatNextRun(ms?: number | null) {
   if (!ms) {
     return "n/a";
   }
-  const weekday = new Date(ms).toLocaleDateString(undefined, { weekday: "short" });
-  return `${weekday}, ${formatMs(ms)} (${formatRelativeTimestamp(ms)})`;
+  return `${formatMs(ms)} (${formatRelativeTimestamp(ms)})`;
 }
 
 export function formatSessionTokens(row: GatewaySessionRow) {

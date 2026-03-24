@@ -26,12 +26,12 @@ final class DeviceStatusService: DeviceStatusServicing {
 
     func info() -> OpenClawDeviceInfoPayload {
         let device = UIDevice.current
-        let appVersion = DeviceInfoHelper.appVersion()
-        let appBuild = DeviceStatusService.fallbackAppBuild(DeviceInfoHelper.appBuild())
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+        let appBuild = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
         let locale = Locale.preferredLanguages.first ?? Locale.current.identifier
         return OpenClawDeviceInfoPayload(
             deviceName: device.name,
-            modelIdentifier: DeviceInfoHelper.modelIdentifier(),
+            modelIdentifier: Self.modelIdentifier(),
             systemName: device.systemName,
             systemVersion: device.systemVersion,
             appVersion: appVersion,
@@ -75,8 +75,13 @@ final class DeviceStatusService: DeviceStatusServicing {
         return OpenClawStorageStatusPayload(totalBytes: total, freeBytes: free, usedBytes: used)
     }
 
-    /// Fallback for payloads that require a non-empty build (e.g. "0").
-    private static func fallbackAppBuild(_ build: String) -> String {
-        build.isEmpty ? "0" : build
+    private static func modelIdentifier() -> String {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machine = withUnsafeBytes(of: &systemInfo.machine) { ptr in
+            String(bytes: ptr.prefix { $0 != 0 }, encoding: .utf8)
+        }
+        let trimmed = machine?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "unknown" : trimmed
     }
 }

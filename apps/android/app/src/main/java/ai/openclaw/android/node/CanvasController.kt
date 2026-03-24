@@ -10,9 +10,6 @@ import androidx.core.graphics.scale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import java.io.ByteArrayOutputStream
 import android.util.Base64
 import org.json.JSONObject
@@ -34,8 +31,6 @@ class CanvasController {
   @Volatile private var debugStatusEnabled: Boolean = false
   @Volatile private var debugStatusTitle: String? = null
   @Volatile private var debugStatusSubtitle: String? = null
-  private val _currentUrl = MutableStateFlow<String?>(null)
-  val currentUrl: StateFlow<String?> = _currentUrl.asStateFlow()
 
   private val scaffoldAssetUrl = "file:///android_asset/CanvasScaffold/scaffold.html"
 
@@ -50,16 +45,9 @@ class CanvasController {
     applyDebugStatus()
   }
 
-  fun detach(webView: WebView) {
-    if (this.webView === webView) {
-      this.webView = null
-    }
-  }
-
   fun navigate(url: String) {
     val trimmed = url.trim()
     this.url = if (trimmed.isBlank() || trimmed == "/") null else trimmed
-    _currentUrl.value = this.url
     reload()
   }
 

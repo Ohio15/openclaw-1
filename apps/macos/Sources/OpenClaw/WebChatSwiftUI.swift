@@ -316,12 +316,7 @@ final class WebChatSwiftUIWindowController {
         let controller = NSViewController()
         let effectView = NSVisualEffectView()
         effectView.material = .sidebar
-        effectView.blendingMode = switch presentation {
-        case .panel:
-            .withinWindow
-        case .window:
-            .behindWindow
-        }
+        effectView.blendingMode = .behindWindow
         effectView.state = .active
         effectView.wantsLayer = true
         effectView.layer?.cornerCurve = .continuous
@@ -333,7 +328,6 @@ final class WebChatSwiftUIWindowController {
         }
         effectView.layer?.cornerRadius = cornerRadius
         effectView.layer?.masksToBounds = true
-        effectView.layer?.backgroundColor = NSColor.clear.cgColor
 
         effectView.translatesAutoresizingMaskIntoConstraints = true
         effectView.autoresizingMask = [.width, .height]
@@ -341,9 +335,6 @@ final class WebChatSwiftUIWindowController {
 
         hosting.view.translatesAutoresizingMaskIntoConstraints = false
         hosting.view.wantsLayer = true
-        hosting.view.layer?.cornerCurve = .continuous
-        hosting.view.layer?.cornerRadius = cornerRadius
-        hosting.view.layer?.masksToBounds = true
         hosting.view.layer?.backgroundColor = NSColor.clear.cgColor
 
         controller.addChild(hosting)

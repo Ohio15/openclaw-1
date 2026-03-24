@@ -1,7 +1,6 @@
 import { createAccountListHelpers } from "../channels/plugins/account-helpers.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { IMessageAccountConfig } from "../config/types.js";
-import { resolveAccountEntry } from "../routing/account-lookup.js";
 import { normalizeAccountId } from "../routing/session-key.js";
 
 export type ResolvedIMessageAccount = {
@@ -20,7 +19,11 @@ function resolveAccountConfig(
   cfg: OpenClawConfig,
   accountId: string,
 ): IMessageAccountConfig | undefined {
-  return resolveAccountEntry(cfg.channels?.imessage?.accounts, accountId);
+  const accounts = cfg.channels?.imessage?.accounts;
+  if (!accounts || typeof accounts !== "object") {
+    return undefined;
+  }
+  return accounts[accountId] as IMessageAccountConfig | undefined;
 }
 
 function mergeIMessageAccountConfig(cfg: OpenClawConfig, accountId: string): IMessageAccountConfig {
@@ -48,8 +51,6 @@ export function resolveIMessageAccount(params: {
     merged.dmPolicy ||
     merged.groupPolicy ||
     typeof merged.includeAttachments === "boolean" ||
-    (merged.attachmentRoots && merged.attachmentRoots.length > 0) ||
-    (merged.remoteAttachmentRoots && merged.remoteAttachmentRoots.length > 0) ||
     typeof merged.mediaMaxMb === "number" ||
     typeof merged.textChunkLimit === "number" ||
     (merged.groups && Object.keys(merged.groups).length > 0),

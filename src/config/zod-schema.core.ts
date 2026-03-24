@@ -129,12 +129,6 @@ export const QueueDropSchema = z.union([
   z.literal("summarize"),
 ]);
 export const ReplyToModeSchema = z.union([z.literal("off"), z.literal("first"), z.literal("all")]);
-export const TypingModeSchema = z.union([
-  z.literal("never"),
-  z.literal("instant"),
-  z.literal("thinking"),
-  z.literal("message"),
-]);
 
 // GroupPolicySchema: controls how group messages are handled
 // Used with .default("allowlist").optional() pattern:
@@ -151,18 +145,6 @@ export const BlockStreamingCoalesceSchema = z
     idleMs: z.number().int().nonnegative().optional(),
   })
   .strict();
-
-export const ReplyRuntimeConfigSchemaShape = {
-  historyLimit: z.number().int().min(0).optional(),
-  dmHistoryLimit: z.number().int().min(0).optional(),
-  dms: z.record(z.string(), DmConfigSchema.optional()).optional(),
-  textChunkLimit: z.number().int().positive().optional(),
-  chunkMode: z.enum(["length", "newline"]).optional(),
-  blockStreaming: z.boolean().optional(),
-  blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
-  responsePrefix: z.string().optional(),
-  mediaMaxMb: z.number().positive().optional(),
-};
 
 export const BlockStreamingChunkSchema = z
   .object({
@@ -266,16 +248,6 @@ export const HumanDelaySchema = z
   })
   .strict();
 
-const CliBackendWatchdogModeSchema = z
-  .object({
-    noOutputTimeoutMs: z.number().int().min(1000).optional(),
-    noOutputTimeoutRatio: z.number().min(0.05).max(0.95).optional(),
-    minMs: z.number().int().min(1000).optional(),
-    maxMs: z.number().int().min(1000).optional(),
-  })
-  .strict()
-  .optional();
-
 export const CliBackendSchema = z
   .object({
     command: z.string(),
@@ -307,8 +279,24 @@ export const CliBackendSchema = z
       .object({
         watchdog: z
           .object({
-            fresh: CliBackendWatchdogModeSchema,
-            resume: CliBackendWatchdogModeSchema,
+            fresh: z
+              .object({
+                noOutputTimeoutMs: z.number().int().min(1000).optional(),
+                noOutputTimeoutRatio: z.number().min(0.05).max(0.95).optional(),
+                minMs: z.number().int().min(1000).optional(),
+                maxMs: z.number().int().min(1000).optional(),
+              })
+              .strict()
+              .optional(),
+            resume: z
+              .object({
+                noOutputTimeoutMs: z.number().int().min(1000).optional(),
+                noOutputTimeoutRatio: z.number().min(0.05).max(0.95).optional(),
+                minMs: z.number().int().min(1000).optional(),
+                maxMs: z.number().int().min(1000).optional(),
+              })
+              .strict()
+              .optional(),
           })
           .strict()
           .optional(),
@@ -448,16 +436,6 @@ const ProviderOptionsSchema = z
   .record(z.string(), z.record(z.string(), ProviderOptionValueSchema))
   .optional();
 
-const MediaUnderstandingRuntimeFields = {
-  prompt: z.string().optional(),
-  timeoutSeconds: z.number().int().positive().optional(),
-  language: z.string().optional(),
-  providerOptions: ProviderOptionsSchema,
-  deepgram: DeepgramAudioSchema,
-  baseUrl: z.string().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-};
-
 export const MediaUnderstandingModelSchema = z
   .object({
     provider: z.string().optional(),
@@ -466,9 +444,15 @@ export const MediaUnderstandingModelSchema = z
     type: z.union([z.literal("provider"), z.literal("cli")]).optional(),
     command: z.string().optional(),
     args: z.array(z.string()).optional(),
+    prompt: z.string().optional(),
     maxChars: z.number().int().positive().optional(),
     maxBytes: z.number().int().positive().optional(),
-    ...MediaUnderstandingRuntimeFields,
+    timeoutSeconds: z.number().int().positive().optional(),
+    language: z.string().optional(),
+    providerOptions: ProviderOptionsSchema,
+    deepgram: DeepgramAudioSchema,
+    baseUrl: z.string().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
     profile: z.string().optional(),
     preferredProfile: z.string().optional(),
   })
@@ -481,7 +465,13 @@ export const ToolsMediaUnderstandingSchema = z
     scope: MediaUnderstandingScopeSchema,
     maxBytes: z.number().int().positive().optional(),
     maxChars: z.number().int().positive().optional(),
-    ...MediaUnderstandingRuntimeFields,
+    prompt: z.string().optional(),
+    timeoutSeconds: z.number().int().positive().optional(),
+    language: z.string().optional(),
+    providerOptions: ProviderOptionsSchema,
+    deepgram: DeepgramAudioSchema,
+    baseUrl: z.string().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
     attachments: MediaUnderstandingAttachmentsSchema,
     models: z.array(MediaUnderstandingModelSchema).optional(),
   })

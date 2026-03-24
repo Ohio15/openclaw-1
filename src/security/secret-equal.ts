@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 
 export function safeEqualSecret(
   provided: string | undefined | null,
@@ -7,6 +7,10 @@ export function safeEqualSecret(
   if (typeof provided !== "string" || typeof expected !== "string") {
     return false;
   }
-  const hash = (s: string) => createHash("sha256").update(s).digest();
-  return timingSafeEqual(hash(provided), hash(expected));
+  const providedBuffer = Buffer.from(provided);
+  const expectedBuffer = Buffer.from(expected);
+  if (providedBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+  return timingSafeEqual(providedBuffer, expectedBuffer);
 }

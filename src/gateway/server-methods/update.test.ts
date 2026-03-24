@@ -77,37 +77,30 @@ vi.mock("./validation.js", () => ({
 
 beforeEach(() => {
   capturedPayload = undefined;
-  runGatewayUpdateMock.mockClear();
+  runGatewayUpdateMock.mockReset();
   runGatewayUpdateMock.mockResolvedValue({
     status: "ok",
     mode: "npm",
     steps: [],
     durationMs: 100,
   });
-  scheduleGatewaySigusr1RestartMock.mockClear();
+  scheduleGatewaySigusr1RestartMock.mockReset();
   scheduleGatewaySigusr1RestartMock.mockReturnValue({ scheduled: true });
 });
-
-async function invokeUpdateRun(
-  params: Record<string, unknown>,
-  respond: ((ok: boolean, response?: unknown) => void) | undefined = undefined,
-) {
-  const { updateHandlers } = await import("./update.js");
-  const onRespond = respond ?? (() => {});
-  await updateHandlers["update.run"]({
-    params,
-    respond: onRespond as never,
-  } as never);
-}
 
 describe("update.run sentinel deliveryContext", () => {
   it("includes deliveryContext in sentinel payload when sessionKey is provided", async () => {
     capturedPayload = undefined;
+    const { updateHandlers } = await import("./update.js");
+    const handler = updateHandlers["update.run"];
 
     let responded = false;
-    await invokeUpdateRun({ sessionKey: "agent:main:webchat:dm:user-123" }, () => {
-      responded = true;
-    });
+    await handler({
+      params: { sessionKey: "agent:main:webchat:dm:user-123" },
+      respond: () => {
+        responded = true;
+      },
+    } as never);
 
     expect(responded).toBe(true);
     expect(capturedPayload).toBeDefined();
@@ -120,8 +113,13 @@ describe("update.run sentinel deliveryContext", () => {
 
   it("omits deliveryContext when no sessionKey is provided", async () => {
     capturedPayload = undefined;
+    const { updateHandlers } = await import("./update.js");
+    const handler = updateHandlers["update.run"];
 
-    await invokeUpdateRun({});
+    await handler({
+      params: {},
+      respond: () => {},
+    } as never);
 
     expect(capturedPayload).toBeDefined();
     expect(capturedPayload!.deliveryContext).toBeUndefined();
@@ -130,8 +128,13 @@ describe("update.run sentinel deliveryContext", () => {
 
   it("includes threadId in sentinel payload for threaded sessions", async () => {
     capturedPayload = undefined;
+    const { updateHandlers } = await import("./update.js");
+    const handler = updateHandlers["update.run"];
 
-    await invokeUpdateRun({ sessionKey: "agent:main:slack:dm:C0123ABC:thread:1234567890.123456" });
+    await handler({
+      params: { sessionKey: "agent:main:slack:dm:C0123ABC:thread:1234567890.123456" },
+      respond: () => {},
+    } as never);
 
     expect(capturedPayload).toBeDefined();
     expect(capturedPayload!.deliveryContext).toEqual({
@@ -143,26 +146,18 @@ describe("update.run sentinel deliveryContext", () => {
   });
 });
 
-describe("update.run timeout normalization", () => {
-  it("enforces a 1000ms minimum timeout for tiny values", async () => {
-    await invokeUpdateRun({ timeoutMs: 1 });
-
-    expect(runGatewayUpdateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        timeoutMs: 1000,
-      }),
-    );
-  });
-});
-
 describe("update.run restart scheduling", () => {
   it("schedules restart when update succeeds", async () => {
+    const { updateHandlers } = await import("./update.js");
+    const handler = updateHandlers["update.run"];
     let payload: { ok: boolean; restart: unknown } | undefined;
 
-    await invokeUpdateRun({}, (_ok: boolean, response: unknown) => {
-      const typed = response as { ok: boolean; restart: unknown };
-      payload = typed;
-    });
+    await handler({
+      params: {},
+      respond: (_ok: boolean, response: { ok: boolean; restart: unknown }) => {
+        payload = response;
+      },
+    } as never);
 
     expect(scheduleGatewaySigusr1RestartMock).toHaveBeenCalledTimes(1);
     expect(payload?.ok).toBe(true);
@@ -178,12 +173,16 @@ describe("update.run restart scheduling", () => {
       durationMs: 100,
     });
 
+    const { updateHandlers } = await import("./update.js");
+    const handler = updateHandlers["update.run"];
     let payload: { ok: boolean; restart: unknown } | undefined;
 
-    await invokeUpdateRun({}, (_ok: boolean, response: unknown) => {
-      const typed = response as { ok: boolean; restart: unknown };
-      payload = typed;
-    });
+    await handler({
+      params: {},
+      respond: (_ok: boolean, response: { ok: boolean; restart: unknown }) => {
+        payload = response;
+      },
+    } as never);
 
     expect(scheduleGatewaySigusr1RestartMock).not.toHaveBeenCalled();
     expect(payload?.ok).toBe(false);

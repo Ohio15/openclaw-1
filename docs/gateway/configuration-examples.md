@@ -169,9 +169,6 @@ Save to `~/.openclaw/openclaw.json` and you can DM the bot from that number.
       pruneAfter: "30d",
       maxEntries: 500,
       rotateBytes: "10mb",
-      resetArchiveRetention: "30d", // duration or false
-      maxDiskBytes: "500mb", // optional
-      highWaterBytes: "400mb", // optional (defaults to 80% of maxDiskBytes)
     },
     typingIntervalSeconds: 5,
     sendPolicy: {
@@ -202,7 +199,7 @@ Save to `~/.openclaw/openclaw.json` and you can DM the bot from that number.
     discord: {
       enabled: true,
       token: "YOUR_DISCORD_BOT_TOKEN",
-      dm: { enabled: true, allowFrom: ["123456789012345678"] },
+      dm: { enabled: true, allowFrom: ["steipete"] },
       guilds: {
         "123456789012345678": {
           slug: "friends-of-openclaw",
@@ -317,7 +314,7 @@ Save to `~/.openclaw/openclaw.json` and you can DM the bot from that number.
       allowFrom: {
         whatsapp: ["+15555550123"],
         telegram: ["123456789"],
-        discord: ["123456789012345678"],
+        discord: ["steipete"],
         slack: ["U123"],
         signal: ["+15555550123"],
         imessage: ["user@example.com"],
@@ -358,10 +355,6 @@ Save to `~/.openclaw/openclaw.json` and you can DM the bot from that number.
     store: "~/.openclaw/cron/cron.json",
     maxConcurrentRuns: 2,
     sessionRetention: "24h",
-    runLog: {
-      maxBytes: "2mb",
-      keepLines: 2000,
-    },
   },
 
   // Webhooks
@@ -461,7 +454,7 @@ Save to `~/.openclaw/openclaw.json` and you can DM the bot from that number.
     discord: {
       enabled: true,
       token: "YOUR_TOKEN",
-      dm: { allowFrom: ["123456789012345678"] },
+      dm: { allowFrom: ["yourname"] },
     },
   },
 }
@@ -487,14 +480,11 @@ If more than one person can DM your bot (multiple entries in `allowFrom`, pairin
     discord: {
       enabled: true,
       token: "YOUR_DISCORD_BOT_TOKEN",
-      dm: { enabled: true, allowFrom: ["123456789012345678", "987654321098765432"] },
+      dm: { enabled: true, allowFrom: ["alice", "bob"] },
     },
   },
 }
 ```
-
-For Discord/Slack/Google Chat/MS Teams/Mattermost/IRC, sender authorization is ID-first by default.
-Only enable direct mutable name/email/nick matching with each channel's `dangerouslyAllowNameMatching: true` if you explicitly accept that risk.
 
 ### OAuth with API key failover
 

@@ -1,23 +1,26 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   callGatewayMock,
   setSubagentsConfigOverride,
 } from "./openclaw-tools.subagents.test-harness.js";
-import {
-  addSubagentRunForTests,
-  listSubagentRunsForRequester,
-  resetSubagentRegistryForTests,
-} from "./subagent-registry.js";
 import "./test-helpers/fast-core-tools.js";
-import { createSubagentsTool } from "./tools/subagents-tool.js";
+
+let createOpenClawTools: (typeof import("./openclaw-tools.js"))["createOpenClawTools"];
+let addSubagentRunForTests: (typeof import("./subagent-registry.js"))["addSubagentRunForTests"];
+let listSubagentRunsForRequester: (typeof import("./subagent-registry.js"))["listSubagentRunsForRequester"];
+let resetSubagentRegistryForTests: (typeof import("./subagent-registry.js"))["resetSubagentRegistryForTests"];
 
 describe("openclaw-tools: subagents steer failure", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    vi.resetModules();
+    ({ createOpenClawTools } = await import("./openclaw-tools.js"));
+    ({ addSubagentRunForTests, listSubagentRunsForRequester, resetSubagentRegistryForTests } =
+      await import("./subagent-registry.js"));
     resetSubagentRegistryForTests();
-    callGatewayMock.mockClear();
+    callGatewayMock.mockReset();
     const storePath = path.join(
       os.tmpdir(),
       `openclaw-subagents-steer-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
@@ -55,9 +58,13 @@ describe("openclaw-tools: subagents steer failure", () => {
       return {};
     });
 
-    const tool = createSubagentsTool({
+    const tool = createOpenClawTools({
       agentSessionKey: "agent:main:main",
-    });
+      agentChannel: "discord",
+    }).find((candidate) => candidate.name === "subagents");
+    if (!tool) {
+      throw new Error("missing subagents tool");
+    }
 
     const result = await tool.execute("call-steer", {
       action: "steer",

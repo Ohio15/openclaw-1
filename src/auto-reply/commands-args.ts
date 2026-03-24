@@ -22,44 +22,33 @@ function normalizeArgValue(value: unknown): string | undefined {
   return text ? text : undefined;
 }
 
-function formatActionArgs(
-  values: CommandArgValues,
-  params: {
-    formatKnownAction: (action: string, path: string | undefined) => string | undefined;
-  },
-): string | undefined {
+const formatConfigArgs: CommandArgsFormatter = (values) => {
   const action = normalizeArgValue(values.action)?.toLowerCase();
   const path = normalizeArgValue(values.path);
   const value = normalizeArgValue(values.value);
   if (!action) {
     return undefined;
   }
-  const knownAction = params.formatKnownAction(action, path);
-  if (knownAction) {
-    return knownAction;
+  const rest = formatSetUnsetArgAction(action, { path, value });
+  if (action === "show" || action === "get") {
+    return path ? `${action} ${path}` : action;
   }
-  return formatSetUnsetArgAction(action, { path, value });
-}
+  return rest;
+};
 
-const formatConfigArgs: CommandArgsFormatter = (values) =>
-  formatActionArgs(values, {
-    formatKnownAction: (action, path) => {
-      if (action === "show" || action === "get") {
-        return path ? `${action} ${path}` : action;
-      }
-      return undefined;
-    },
-  });
-
-const formatDebugArgs: CommandArgsFormatter = (values) =>
-  formatActionArgs(values, {
-    formatKnownAction: (action) => {
-      if (action === "show" || action === "reset") {
-        return action;
-      }
-      return undefined;
-    },
-  });
+const formatDebugArgs: CommandArgsFormatter = (values) => {
+  const action = normalizeArgValue(values.action)?.toLowerCase();
+  const path = normalizeArgValue(values.path);
+  const value = normalizeArgValue(values.value);
+  if (!action) {
+    return undefined;
+  }
+  const rest = formatSetUnsetArgAction(action, { path, value });
+  if (action === "show" || action === "reset") {
+    return action;
+  }
+  return rest;
+};
 
 function formatSetUnsetArgAction(
   action: string,

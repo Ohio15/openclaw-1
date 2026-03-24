@@ -1,15 +1,11 @@
 import {
-  buildBaseAccountStatusSnapshot,
-  buildBaseChannelStatusSummary,
   buildChannelConfigSchema,
   DEFAULT_ACCOUNT_ID,
-  deleteAccountFromConfigSection,
   formatPairingApproveHint,
   getChatChannelMeta,
   PAIRING_APPROVED_MESSAGE,
-  resolveAllowlistProviderRuntimeGroupPolicy,
-  resolveDefaultGroupPolicy,
   setAccountEnabledInConfigSection,
+  deleteAccountFromConfigSection,
   type ChannelPlugin,
 } from "openclaw/plugin-sdk";
 import {
@@ -116,9 +112,6 @@ export const ircPlugin: ChannelPlugin<ResolvedIrcAccount, IrcProbe> = {
       ),
     formatAllowFrom: ({ allowFrom }) =>
       allowFrom.map((entry) => normalizeIrcAllowEntry(String(entry))).filter(Boolean),
-    resolveDefaultTo: ({ cfg, accountId }) =>
-      resolveIrcAccount({ cfg: cfg as CoreConfig, accountId }).config.defaultTo?.trim() ||
-      undefined,
   },
   security: {
     resolveDmPolicy: ({ cfg, accountId, account }) => {
@@ -138,12 +131,8 @@ export const ircPlugin: ChannelPlugin<ResolvedIrcAccount, IrcProbe> = {
     },
     collectWarnings: ({ account, cfg }) => {
       const warnings: string[] = [];
-      const defaultGroupPolicy = resolveDefaultGroupPolicy(cfg);
-      const { groupPolicy } = resolveAllowlistProviderRuntimeGroupPolicy({
-        providerConfigPresent: cfg.channels?.irc !== undefined,
-        groupPolicy: account.config.groupPolicy,
-        defaultGroupPolicy,
-      });
+      const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
+      const groupPolicy = account.config.groupPolicy ?? defaultGroupPolicy ?? "allowlist";
       if (groupPolicy === "open") {
         warnings.push(
           '- IRC channels: groupPolicy="open" allows all channels and senders (mention-gated). Prefer channels.irc.groupPolicy="allowlist" with channels.irc.groups.',
@@ -321,23 +310,37 @@ export const ircPlugin: ChannelPlugin<ResolvedIrcAccount, IrcProbe> = {
       lastError: null,
     },
     buildChannelSummary: ({ account, snapshot }) => ({
-      ...buildBaseChannelStatusSummary(snapshot),
+      configured: snapshot.configured ?? false,
       host: account.host,
       port: snapshot.port,
       tls: account.tls,
       nick: account.nick,
+      running: snapshot.running ?? false,
+      lastStartAt: snapshot.lastStartAt ?? null,
+      lastStopAt: snapshot.lastStopAt ?? null,
+      lastError: snapshot.lastError ?? null,
       probe: snapshot.probe,
       lastProbeAt: snapshot.lastProbeAt ?? null,
     }),
     probeAccount: async ({ cfg, account, timeoutMs }) =>
       probeIrc(cfg as CoreConfig, { accountId: account.accountId, timeoutMs }),
     buildAccountSnapshot: ({ account, runtime, probe }) => ({
-      ...buildBaseAccountStatusSnapshot({ account, runtime, probe }),
+      accountId: account.accountId,
+      name: account.name,
+      enabled: account.enabled,
+      configured: account.configured,
       host: account.host,
       port: account.port,
       tls: account.tls,
       nick: account.nick,
       passwordSource: account.passwordSource,
+      running: runtime?.running ?? false,
+      lastStartAt: runtime?.lastStartAt ?? null,
+      lastStopAt: runtime?.lastStopAt ?? null,
+      lastError: runtime?.lastError ?? null,
+      probe,
+      lastInboundAt: runtime?.lastInboundAt ?? null,
+      lastOutboundAt: runtime?.lastOutboundAt ?? null,
     }),
   },
   gateway: {

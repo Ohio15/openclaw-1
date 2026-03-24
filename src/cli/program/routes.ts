@@ -43,16 +43,9 @@ const routeStatus: RouteSpec = {
 };
 
 const routeSessions: RouteSpec = {
-  // Fast-path only bare `sessions`; subcommands (e.g. `sessions cleanup`)
-  // must fall through to Commander so nested handlers run.
-  match: (path) => path[0] === "sessions" && !path[1],
+  match: (path) => path[0] === "sessions",
   run: async (argv) => {
     const json = hasFlag(argv, "--json");
-    const allAgents = hasFlag(argv, "--all-agents");
-    const agent = getFlagValue(argv, "--agent");
-    if (agent === null) {
-      return false;
-    }
     const store = getFlagValue(argv, "--store");
     if (store === null) {
       return false;
@@ -62,7 +55,7 @@ const routeSessions: RouteSpec = {
       return false;
     }
     const { sessionsCommand } = await import("../../commands/sessions.js");
-    await sessionsCommand({ json, store, agent, allAgents, active }, defaultRuntime);
+    await sessionsCommand({ json, store, active }, defaultRuntime);
     return true;
   },
 };

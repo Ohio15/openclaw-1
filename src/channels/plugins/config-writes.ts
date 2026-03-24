@@ -1,5 +1,4 @@
 import type { OpenClawConfig } from "../../config/config.js";
-import { resolveAccountEntry } from "../../routing/account-lookup.js";
 import { normalizeAccountId } from "../../routing/session-key.js";
 import type { ChannelId } from "./types.js";
 
@@ -9,7 +8,16 @@ type ChannelConfigWithAccounts = {
 };
 
 function resolveAccountConfig(accounts: ChannelConfigWithAccounts["accounts"], accountId: string) {
-  return resolveAccountEntry(accounts, accountId);
+  if (!accounts || typeof accounts !== "object") {
+    return undefined;
+  }
+  if (accountId in accounts) {
+    return accounts[accountId];
+  }
+  const matchKey = Object.keys(accounts).find(
+    (key) => key.toLowerCase() === accountId.toLowerCase(),
+  );
+  return matchKey ? accounts[matchKey] : undefined;
 }
 
 export function resolveChannelConfigWrites(params: {

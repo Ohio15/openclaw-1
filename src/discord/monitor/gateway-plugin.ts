@@ -1,7 +1,5 @@
 import { GatewayIntents, GatewayPlugin } from "@buape/carbon/gateway";
-import type { APIGatewayBotInfo } from "discord-api-types/v10";
 import { HttpsProxyAgent } from "https-proxy-agent";
-import { ProxyAgent, fetch as undiciFetch } from "undici";
 import WebSocket from "ws";
 import type { DiscordAccountConfig } from "../../config/types.js";
 import { danger } from "../../globals.js";
@@ -16,8 +14,7 @@ export function resolveDiscordGatewayIntents(
     GatewayIntents.MessageContent |
     GatewayIntents.DirectMessages |
     GatewayIntents.GuildMessageReactions |
-    GatewayIntents.DirectMessageReactions |
-    GatewayIntents.GuildVoiceStates;
+    GatewayIntents.DirectMessageReactions;
   if (intentsConfig?.presence) {
     intents |= GatewayIntents.GuildPresences;
   }
@@ -44,8 +41,7 @@ export function createDiscordGatewayPlugin(params: {
   }
 
   try {
-    const wsAgent = new HttpsProxyAgent<string>(proxy);
-    const fetchAgent = new ProxyAgent(proxy);
+    const agent = new HttpsProxyAgent<string>(proxy);
 
     params.runtime.log?.("discord: gateway proxy enabled");
 
@@ -54,28 +50,8 @@ export function createDiscordGatewayPlugin(params: {
         super(options);
       }
 
-      override async registerClient(client: Parameters<GatewayPlugin["registerClient"]>[0]) {
-        if (!this.gatewayInfo) {
-          try {
-            const response = await undiciFetch("https://discord.com/api/v10/gateway/bot", {
-              headers: {
-                Authorization: `Bot ${client.options.token}`,
-              },
-              dispatcher: fetchAgent,
-            } as Record<string, unknown>);
-            this.gatewayInfo = (await response.json()) as APIGatewayBotInfo;
-          } catch (error) {
-            throw new Error(
-              `Failed to get gateway information from Discord: ${error instanceof Error ? error.message : String(error)}`,
-              { cause: error },
-            );
-          }
-        }
-        return super.registerClient(client);
-      }
-
-      override createWebSocket(url: string) {
-        return new WebSocket(url, { agent: wsAgent });
+      createWebSocket(url: string) {
+        return new WebSocket(url, { agent });
       }
     }
 

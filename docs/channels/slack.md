@@ -165,13 +165,12 @@ For actions/directory reads, user token can be preferred when configured. For wr
 
     Channel allowlist lives under `channels.slack.channels`.
 
-    Runtime note: if `channels.slack` is completely missing (env-only setup), runtime falls back to `groupPolicy="allowlist"` and logs a warning (even if `channels.defaults.groupPolicy` is set).
+    Runtime note: if `channels.slack` is completely missing (env-only setup) and `channels.defaults.groupPolicy` is unset, runtime falls back to `groupPolicy="open"` and logs a warning.
 
     Name/ID resolution:
 
     - channel allowlist entries and DM allowlist entries are resolved at startup when token access allows
     - unresolved entries are kept as configured
-    - inbound authorization matching is ID-first by default; direct username/slug matching requires `channels.slack.dangerouslyAllowNameMatching: true`
 
   </Tab>
 
@@ -192,8 +191,6 @@ For actions/directory reads, user token can be preferred when configured. For wr
     - `skills`
     - `systemPrompt`
     - `tools`, `toolsBySender`
-    - `toolsBySender` key format: `id:`, `e164:`, `username:`, `name:`, or `"*"` wildcard
-      (legacy unprefixed keys still map to `id:` only)
 
   </Tab>
 </Tabs>
@@ -244,7 +241,7 @@ Manual reply tags are supported:
 - `[[reply_to_current]]`
 - `[[reply_to:<id>]]`
 
-Note: `replyToMode="off"` disables **all** reply threading in Slack, including explicit `[[reply_to_*]]` tags. This differs from Telegram, where explicit tags are still honored in `"off"` mode. The difference reflects the platform threading models: Slack threads hide messages from the channel, while Telegram replies remain visible in the main chat flow.
+Note: `replyToMode="off"` disables implicit reply threading. Explicit `[[reply_to_*]]` tags are still honored.
 
 ## Media, chunking, and delivery
 
@@ -464,47 +461,6 @@ openclaw pairing list slack
   </Accordion>
 </AccordionGroup>
 
-## Text streaming
-
-OpenClaw supports Slack native text streaming via the Agents and AI Apps API.
-
-`channels.slack.streaming` controls live preview behavior:
-
-- `off`: disable live preview streaming.
-- `partial` (default): replace preview text with the latest partial output.
-- `block`: append chunked preview updates.
-- `progress`: show progress status text while generating, then send final text.
-
-`channels.slack.nativeStreaming` controls Slack's native streaming API (`chat.startStream` / `chat.appendStream` / `chat.stopStream`) when `streaming` is `partial` (default: `true`).
-
-Disable native Slack streaming (keep draft preview behavior):
-
-```yaml
-channels:
-  slack:
-    streaming: partial
-    nativeStreaming: false
-```
-
-Legacy keys:
-
-- `channels.slack.streamMode` (`replace | status_final | append`) is auto-migrated to `channels.slack.streaming`.
-- boolean `channels.slack.streaming` is auto-migrated to `channels.slack.nativeStreaming`.
-
-### Requirements
-
-1. Enable **Agents and AI Apps** in your Slack app settings.
-2. Ensure the app has the `assistant:write` scope.
-3. A reply thread must be available for that message. Thread selection still follows `replyToMode`.
-
-### Behavior
-
-- First text chunk starts a stream (`chat.startStream`).
-- Later text chunks append to the same stream (`chat.appendStream`).
-- End of reply finalizes stream (`chat.stopStream`).
-- Media and non-text payloads fall back to normal delivery.
-- If streaming fails mid-reply, OpenClaw falls back to normal delivery for remaining payloads.
-
 ## Configuration reference pointers
 
 Primary reference:
@@ -514,10 +470,9 @@ Primary reference:
   High-signal Slack fields:
   - mode/auth: `mode`, `botToken`, `appToken`, `signingSecret`, `webhookPath`, `accounts.*`
   - DM access: `dm.enabled`, `dmPolicy`, `allowFrom` (legacy: `dm.policy`, `dm.allowFrom`), `dm.groupEnabled`, `dm.groupChannels`
-  - compatibility toggle: `dangerouslyAllowNameMatching` (break-glass; keep off unless needed)
   - channel access: `groupPolicy`, `channels.*`, `channels.*.users`, `channels.*.requireMention`
   - threading/history: `replyToMode`, `replyToModeByChatType`, `thread.*`, `historyLimit`, `dmHistoryLimit`, `dms.*.historyLimit`
-  - delivery: `textChunkLimit`, `chunkMode`, `mediaMaxMb`, `streaming`, `nativeStreaming`
+  - delivery: `textChunkLimit`, `chunkMode`, `mediaMaxMb`
   - ops/features: `configWrites`, `commands.native`, `slashCommand.*`, `actions.*`, `userToken`, `userTokenReadOnly`
 
 ## Related

@@ -12,11 +12,9 @@ import {
   type EmbeddingProvider,
   type EmbeddingProviderResult,
   type GeminiEmbeddingClient,
-  type MistralEmbeddingClient,
   type OpenAiEmbeddingClient,
   type VoyageEmbeddingClient,
 } from "./embeddings.js";
-import { isFileMissingError, statRegularFile } from "./fs-utils.js";
 import { bm25RankToScore, buildFtsQuery, mergeHybridResults } from "./hybrid.js";
 import { isMemoryPath, normalizeExtraMemoryPaths } from "./internal.js";
 import { MemoryManagerEmbeddingOps } from "./manager-embedding-ops.js";
@@ -47,14 +45,13 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
   protected readonly workspaceDir: string;
   protected readonly settings: ResolvedMemorySearchConfig;
   protected provider: EmbeddingProvider | null;
-  private readonly requestedProvider: "openai" | "local" | "gemini" | "voyage" | "mistral" | "auto";
-  protected fallbackFrom?: "openai" | "local" | "gemini" | "voyage" | "mistral";
+  private readonly requestedProvider: "openai" | "local" | "gemini" | "voyage" | "auto";
+  protected fallbackFrom?: "openai" | "local" | "gemini" | "voyage";
   protected fallbackReason?: string;
   private readonly providerUnavailableReason?: string;
   protected openAi?: OpenAiEmbeddingClient;
   protected gemini?: GeminiEmbeddingClient;
   protected voyage?: VoyageEmbeddingClient;
-  protected mistral?: MistralEmbeddingClient;
   protected batch: {
     enabled: boolean;
     wait: boolean;
@@ -161,7 +158,6 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     this.openAi = params.providerResult.openAi;
     this.gemini = params.providerResult.gemini;
     this.voyage = params.providerResult.voyage;
-    this.mistral = params.providerResult.mistral;
     this.sources = new Set(params.settings.sources);
     this.db = this.openDatabase();
     this.providerKey = this.computeProviderKey();
@@ -382,9 +378,6 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     force?: boolean;
     progress?: (update: MemorySyncProgressUpdate) => void;
   }): Promise<void> {
-    if (this.closed) {
-      return;
-    }
     if (this.syncing) {
       return this.syncing;
     }
@@ -444,19 +437,11 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     if (!absPath.endsWith(".md")) {
       throw new Error("path required");
     }
-    const statResult = await statRegularFile(absPath);
-    if (statResult.missing) {
-      return { text: "", path: relPath };
+    const stat = await fs.lstat(absPath);
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new Error("path required");
     }
-    let content: string;
-    try {
-      content = await fs.readFile(absPath, "utf-8");
-    } catch (err) {
-      if (isFileMissingError(err)) {
-        return { text: "", path: relPath };
-      }
-      throw err;
-    }
+    const content = await fs.readFile(absPath, "utf-8");
     if (!params.from && !params.lines) {
       return { text: content, path: relPath };
     }
@@ -608,7 +593,6 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
       return;
     }
     this.closed = true;
-    const pendingSync = this.syncing;
     if (this.watchTimer) {
       clearTimeout(this.watchTimer);
       this.watchTimer = null;
@@ -628,11 +612,6 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     if (this.sessionUnsubscribe) {
       this.sessionUnsubscribe();
       this.sessionUnsubscribe = null;
-    }
-    if (pendingSync) {
-      try {
-        await pendingSync;
-      } catch {}
     }
     this.db.close();
     INDEX_CACHE.delete(this.cacheKey);

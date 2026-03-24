@@ -1,5 +1,4 @@
 import { normalizeChannelId } from "../channels/plugins/index.js";
-import { resolveAccountEntry } from "../routing/account-lookup.js";
 import { normalizeAccountId } from "../routing/session-key.js";
 import type { OpenClawConfig } from "./config.js";
 import type { TelegramCapabilitiesConfig } from "./types.telegram.js";
@@ -33,7 +32,14 @@ function resolveAccountCapabilities(params: {
 
   const accounts = cfg.accounts;
   if (accounts && typeof accounts === "object") {
-    const match = resolveAccountEntry(accounts, normalizedAccountId);
+    const direct = accounts[normalizedAccountId];
+    if (direct) {
+      return normalizeCapabilities(direct.capabilities) ?? normalizeCapabilities(cfg.capabilities);
+    }
+    const matchKey = Object.keys(accounts).find(
+      (key) => key.toLowerCase() === normalizedAccountId.toLowerCase(),
+    );
+    const match = matchKey ? accounts[matchKey] : undefined;
     if (match) {
       return normalizeCapabilities(match.capabilities) ?? normalizeCapabilities(cfg.capabilities);
     }

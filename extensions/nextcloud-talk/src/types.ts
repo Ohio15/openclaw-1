@@ -169,7 +169,6 @@ export type NextcloudTalkWebhookServerOptions = {
   path: string;
   secret: string;
   maxBodyBytes?: number;
-  readBody?: (req: import("node:http").IncomingMessage, maxBodyBytes: number) => Promise<string>;
   onMessage: (message: NextcloudTalkInboundMessage) => void | Promise<void>;
   onError?: (error: Error) => void;
   abortSignal?: AbortSignal;

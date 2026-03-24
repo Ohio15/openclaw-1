@@ -151,7 +151,6 @@ export function buildToolActionFingerprint(
   if (action) {
     parts.push(`action=${action}`);
   }
-  let hasStableTarget = false;
   for (const key of [
     "path",
     "filePath",
@@ -168,14 +167,10 @@ export function buildToolActionFingerprint(
     const value = normalizeFingerprintValue(record?.[key]);
     if (value) {
       parts.push(`${key.toLowerCase()}=${value}`);
-      hasStableTarget = true;
     }
   }
   const normalizedMeta = meta?.trim().replace(/\s+/g, " ").toLowerCase();
-  // Meta text often carries volatile details (for example "N chars").
-  // Prefer stable arg-derived keys for matching; only fall back to meta
-  // when no stable target key is available.
-  if (normalizedMeta && !hasStableTarget) {
+  if (normalizedMeta) {
     parts.push(`meta=${normalizedMeta}`);
   }
   return parts.join("|");

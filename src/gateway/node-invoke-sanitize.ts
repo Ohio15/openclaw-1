@@ -3,7 +3,6 @@ import { sanitizeSystemRunParamsForForwarding } from "./node-invoke-system-run-a
 import type { GatewayClient } from "./server-methods/types.js";
 
 export function sanitizeNodeInvokeParamsForForwarding(opts: {
-  nodeId: string;
   command: string;
   rawParams: unknown;
   client: GatewayClient | null;
@@ -13,7 +12,6 @@ export function sanitizeNodeInvokeParamsForForwarding(opts: {
   | { ok: false; message: string; details?: Record<string, unknown> } {
   if (opts.command === "system.run") {
     return sanitizeSystemRunParamsForForwarding({
-      nodeId: opts.nodeId,
       rawParams: opts.rawParams,
       client: opts.client,
       execApprovalManager: opts.execApprovalManager,

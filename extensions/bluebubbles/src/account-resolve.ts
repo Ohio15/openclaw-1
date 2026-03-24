@@ -12,7 +12,6 @@ export function resolveBlueBubblesServerAccount(params: BlueBubblesAccountResolv
   baseUrl: string;
   password: string;
   accountId: string;
-  allowPrivateNetwork: boolean;
 } {
   const account = resolveBlueBubblesAccount({
     cfg: params.cfg ?? {},
@@ -26,10 +25,5 @@ export function resolveBlueBubblesServerAccount(params: BlueBubblesAccountResolv
   if (!password) {
     throw new Error("BlueBubbles password is required");
   }
-  return {
-    baseUrl,
-    password,
-    accountId: account.accountId,
-    allowPrivateNetwork: account.config.allowPrivateNetwork === true,
-  };
+  return { baseUrl, password, accountId: account.accountId };
 }

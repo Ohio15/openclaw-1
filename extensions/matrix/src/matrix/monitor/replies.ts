@@ -41,11 +41,6 @@ export async function deliverMatrixReplies(params: {
       params.runtime.error?.("matrix reply missing text/media");
       continue;
     }
-    // Skip pure reasoning messages so internal thinking traces are never delivered.
-    if (reply.text && isReasoningOnlyMessage(reply.text)) {
-      logVerbose("matrix reply is reasoning-only; skipping");
-      continue;
-    }
     const replyToIdRaw = reply.replyToId?.trim();
     const replyToId = params.threadId || params.replyToMode === "off" ? undefined : replyToIdRaw;
     const rawText = reply.text ?? "";
@@ -58,10 +53,8 @@ export async function deliverMatrixReplies(params: {
 
     const shouldIncludeReply = (id?: string) =>
       Boolean(id) && (params.replyToMode === "all" || !hasReplied);
-    const replyToIdForReply = shouldIncludeReply(replyToId) ? replyToId : undefined;
 
     if (mediaList.length === 0) {
-      let sentTextChunk = false;
       for (const chunk of core.channel.text.chunkMarkdownTextWithMode(
         text,
         chunkLimit,
@@ -73,14 +66,13 @@ export async function deliverMatrixReplies(params: {
         }
         await sendMessageMatrix(params.roomId, trimmed, {
           client: params.client,
-          replyToId: replyToIdForReply,
+          replyToId: shouldIncludeReply(replyToId) ? replyToId : undefined,
           threadId: params.threadId,
           accountId: params.accountId,
         });
-        sentTextChunk = true;
-      }
-      if (replyToIdForReply && !hasReplied && sentTextChunk) {
-        hasReplied = true;
+        if (shouldIncludeReply(replyToId)) {
+          hasReplied = true;
+        }
       }
       continue;
     }
@@ -91,34 +83,15 @@ export async function deliverMatrixReplies(params: {
       await sendMessageMatrix(params.roomId, caption, {
         client: params.client,
         mediaUrl,
-        replyToId: replyToIdForReply,
+        replyToId: shouldIncludeReply(replyToId) ? replyToId : undefined,
         threadId: params.threadId,
         audioAsVoice: reply.audioAsVoice,
         accountId: params.accountId,
       });
+      if (shouldIncludeReply(replyToId)) {
+        hasReplied = true;
+      }
       first = false;
     }
-    if (replyToIdForReply && !hasReplied) {
-      hasReplied = true;
-    }
   }
-}
-
-const REASONING_PREFIX = "Reasoning:\n";
-const THINKING_TAG_RE = /^\s*<\s*(?:think(?:ing)?|thought|antthinking)\b/i;
-
-/**
- * Detect messages that contain only reasoning/thinking content and no user-facing answer.
- * These are emitted by the agent when `includeReasoning` is active but should not
- * be forwarded to channels that do not support a dedicated reasoning lane.
- */
-function isReasoningOnlyMessage(text: string): boolean {
-  const trimmed = text.trim();
-  if (trimmed.startsWith(REASONING_PREFIX)) {
-    return true;
-  }
-  if (THINKING_TAG_RE.test(trimmed)) {
-    return true;
-  }
-  return false;
 }

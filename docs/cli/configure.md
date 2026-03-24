@@ -29,5 +29,5 @@ Notes:
 
 ```bash
 openclaw configure
-openclaw configure --section model --section channels
+openclaw configure --section models --section channels
 ```

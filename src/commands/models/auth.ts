@@ -10,6 +10,7 @@ import { normalizeProviderId } from "../../agents/model-selection.js";
 import { resolveDefaultAgentWorkspaceDir } from "../../agents/workspace.js";
 import { formatCliCommand } from "../../cli/command-format.js";
 import { parseDurationMs } from "../../cli/parse-duration.js";
+import { readConfigFileSnapshot } from "../../config/config.js";
 import { logConfigUpdated } from "../../config/logging.js";
 import { resolvePluginProviders } from "../../plugins/providers.js";
 import type { ProviderAuthResult, ProviderPlugin } from "../../plugins/types.js";
@@ -27,7 +28,7 @@ import {
   pickAuthMethod,
   resolveProviderMatch,
 } from "../provider-auth-helpers.js";
-import { loadValidConfigOrThrow, updateConfig } from "./shared.js";
+import { updateConfig } from "./shared.js";
 
 const confirm = (params: Parameters<typeof clackConfirm>[0]) =>
   clackConfirm({
@@ -277,7 +278,13 @@ export async function modelsAuthLoginCommand(opts: LoginOptions, runtime: Runtim
     throw new Error("models auth login requires an interactive TTY.");
   }
 
-  const config = await loadValidConfigOrThrow();
+  const snapshot = await readConfigFileSnapshot();
+  if (!snapshot.valid) {
+    const issues = snapshot.issues.map((issue) => `- ${issue.path}: ${issue.message}`).join("\n");
+    throw new Error(`Invalid config at ${snapshot.path}\n${issues}`);
+  }
+
+  const config = snapshot.config;
   const defaultAgentId = resolveDefaultAgentId(config);
   const agentDir = resolveAgentDir(config, defaultAgentId);
   const workspaceDir =

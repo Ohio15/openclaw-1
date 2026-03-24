@@ -6,7 +6,14 @@ import type { MessageActionRunResult } from "../infra/outbound/message-action-ru
 import { formatTargetDisplay } from "../infra/outbound/target-resolver.js";
 import { renderTable } from "../terminal/table.js";
 import { isRich, theme } from "../terminal/theme.js";
-import { shortenText } from "./text-format.js";
+
+const shortenText = (value: string, maxLen: number) => {
+  const chars = Array.from(value);
+  if (chars.length <= maxLen) {
+    return value;
+  }
+  return `${chars.slice(0, Math.max(0, maxLen - 1)).join("")}…`;
+};
 
 const resolveChannelLabel = (channel: ChannelId) =>
   getChannelPlugin(channel)?.meta.label ?? channel;

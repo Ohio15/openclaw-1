@@ -1,35 +1,8 @@
 import type { MatrixClient } from "@vector-im/matrix-bot-sdk";
 import type { PluginRuntime, RuntimeLogger } from "openclaw/plugin-sdk";
 import type { MatrixAuth } from "../client.js";
-import { sendReadReceiptMatrix } from "../send.js";
 import type { MatrixRawEvent } from "./types.js";
 import { EventType } from "./types.js";
-
-function createSelfUserIdResolver(client: Pick<MatrixClient, "getUserId">) {
-  let selfUserId: string | undefined;
-  let selfUserIdLookup: Promise<string | undefined> | undefined;
-
-  return async (): Promise<string | undefined> => {
-    if (selfUserId) {
-      return selfUserId;
-    }
-    if (!selfUserIdLookup) {
-      selfUserIdLookup = client
-        .getUserId()
-        .then((userId) => {
-          selfUserId = userId;
-          return userId;
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          if (!selfUserId) {
-            selfUserIdLookup = undefined;
-          }
-        });
-    }
-    return await selfUserIdLookup;
-  };
-}
 
 export function registerMatrixMonitorEvents(params: {
   client: MatrixClient;
@@ -52,26 +25,7 @@ export function registerMatrixMonitorEvents(params: {
     onRoomMessage,
   } = params;
 
-  const resolveSelfUserId = createSelfUserIdResolver(client);
-  client.on("room.message", (roomId: string, event: MatrixRawEvent) => {
-    const eventId = event?.event_id;
-    const senderId = event?.sender;
-    if (eventId && senderId) {
-      void (async () => {
-        const currentSelfUserId = await resolveSelfUserId();
-        if (!currentSelfUserId || senderId === currentSelfUserId) {
-          return;
-        }
-        await sendReadReceiptMatrix(roomId, eventId, client).catch((err) => {
-          logVerboseMessage(
-            `matrix: early read receipt failed room=${roomId} id=${eventId}: ${String(err)}`,
-          );
-        });
-      })();
-    }
-
-    onRoomMessage(roomId, event);
-  });
+  client.on("room.message", onRoomMessage);
 
   client.on("room.encrypted_event", (roomId: string, event: MatrixRawEvent) => {
     const eventId = event?.event_id ?? "unknown";

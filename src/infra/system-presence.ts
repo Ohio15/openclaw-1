@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import { pickPrimaryLanIPv4 } from "../gateway/net.js";
-import { resolveRuntimeServiceVersion } from "../version.js";
 
 export type SystemPresence = {
   host?: string;
@@ -51,7 +50,11 @@ function resolvePrimaryIPv4(): string | undefined {
 function initSelfPresence() {
   const host = os.hostname();
   const ip = resolvePrimaryIPv4() ?? undefined;
-  const version = resolveRuntimeServiceVersion(process.env, "unknown");
+  const version =
+    process.env.OPENCLAW_VERSION ??
+    process.env.OPENCLAW_SERVICE_VERSION ??
+    process.env.npm_package_version ??
+    "unknown";
   const modelIdentifier = (() => {
     const p = os.platform();
     if (p === "darwin") {

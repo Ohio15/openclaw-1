@@ -1,6 +1,7 @@
 {
   "name": "@openclaw/twitch",
-  "version": "2026.2.25",
+  "version": "2026.2.16",
+  "private": true,
   "description": "OpenClaw Twitch channel plugin",
   "type": "module",
   "dependencies": {
@@ -8,6 +9,9 @@
     "@twurple/auth": "^8.0.3",
     "@twurple/chat": "^8.0.3",
     "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "openclaw": "workspace:*"
   },
   "openclaw": {
     "extensions": [

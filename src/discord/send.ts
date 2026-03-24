@@ -41,17 +41,11 @@ export {
   sendMessageDiscord,
   sendPollDiscord,
   sendStickerDiscord,
-  sendWebhookMessageDiscord,
   sendVoiceMessageDiscord,
 } from "./send.outbound.js";
 export { sendDiscordComponentMessage } from "./send.components.js";
 export {
   fetchChannelPermissionsDiscord,
-  hasAllGuildPermissionsDiscord,
-  hasAnyGuildPermissionDiscord,
-  fetchMemberGuildPermissionsDiscord,
-} from "./send.permissions.js";
-export {
   fetchReactionsDiscord,
   reactMessageDiscord,
   removeOwnReactionsDiscord,

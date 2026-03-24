@@ -1,8 +1,4 @@
-import {
-  formatInboundFromLabel as formatInboundFromLabelShared,
-  resolveThreadSessionKeys as resolveThreadSessionKeysShared,
-  type OpenClawConfig,
-} from "openclaw/plugin-sdk";
+import type { OpenClawConfig } from "openclaw/plugin-sdk";
 export { createDedupeCache, rawDataToString } from "openclaw/plugin-sdk";
 
 export type ResponsePrefixContext = {
@@ -19,7 +15,27 @@ export function extractShortModelName(fullModel: string): string {
   return modelPart.replace(/-\d{8}$/, "").replace(/-latest$/, "");
 }
 
-export const formatInboundFromLabel = formatInboundFromLabelShared;
+export function formatInboundFromLabel(params: {
+  isGroup: boolean;
+  groupLabel?: string;
+  groupId?: string;
+  directLabel: string;
+  directId?: string;
+  groupFallback?: string;
+}): string {
+  if (params.isGroup) {
+    const label = params.groupLabel?.trim() || params.groupFallback || "Group";
+    const id = params.groupId?.trim();
+    return id ? `${label} id:${id}` : label;
+  }
+
+  const directLabel = params.directLabel.trim();
+  const directId = params.directId?.trim();
+  if (!directId || directId === directLabel) {
+    return directLabel;
+  }
+  return `${directLabel} id:${directId}`;
+}
 
 function normalizeAgentId(value: string | undefined | null): string {
   const trimmed = (value ?? "").trim();
@@ -65,8 +81,13 @@ export function resolveThreadSessionKeys(params: {
   parentSessionKey?: string;
   useSuffix?: boolean;
 }): { sessionKey: string; parentSessionKey?: string } {
-  return resolveThreadSessionKeysShared({
-    ...params,
-    normalizeThreadId: (threadId) => threadId,
-  });
+  const threadId = (params.threadId ?? "").trim();
+  if (!threadId) {
+    return { sessionKey: params.baseSessionKey, parentSessionKey: undefined };
+  }
+  const useSuffix = params.useSuffix ?? true;
+  const sessionKey = useSuffix
+    ? `${params.baseSessionKey}:thread:${threadId}`
+    : params.baseSessionKey;
+  return { sessionKey, parentSessionKey: params.parentSessionKey };
 }

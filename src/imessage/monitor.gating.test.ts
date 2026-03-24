@@ -48,19 +48,16 @@ function resolve(params: {
   });
 }
 
-function resolveDispatchDecision(params: {
-  cfg: OpenClawConfig;
-  message: IMessagePayload;
-  groupHistories?: Parameters<typeof resolveIMessageInboundDecision>[0]["groupHistories"];
-}) {
-  const groupHistories = params.groupHistories ?? new Map();
+function buildDispatchContextPayload(params: { cfg: OpenClawConfig; message: IMessagePayload }) {
+  const { cfg, message } = params;
+  const groupHistories = new Map();
   const decision = resolveIMessageInboundDecision({
-    cfg: params.cfg,
+    cfg,
     accountId: "default",
-    message: params.message,
+    message,
     opts: {},
-    messageText: params.message.text ?? "",
-    bodyText: params.message.text ?? "",
+    messageText: message.text ?? "",
+    bodyText: message.text ?? "",
     allowFrom: ["*"],
     groupAllowFrom: [],
     groupPolicy: "open",
@@ -73,12 +70,6 @@ function resolveDispatchDecision(params: {
   if (decision.kind !== "dispatch") {
     throw new Error("expected dispatch decision");
   }
-  return { decision, groupHistories };
-}
-
-function buildDispatchContextPayload(params: { cfg: OpenClawConfig; message: IMessagePayload }) {
-  const { cfg, message } = params;
-  const { decision, groupHistories } = resolveDispatchDecision({ cfg, message });
 
   const { ctxPayload } = buildIMessageInboundContext({
     cfg,
@@ -176,7 +167,25 @@ describe("imessage monitor gating + envelope builders", () => {
       text: "hello",
       is_group: false,
     };
-    const { decision } = resolveDispatchDecision({ cfg, message, groupHistories });
+    const decision = resolveIMessageInboundDecision({
+      cfg,
+      accountId: "default",
+      message,
+      opts: {},
+      messageText: message.text ?? "",
+      bodyText: message.text ?? "",
+      allowFrom: ["*"],
+      groupAllowFrom: [],
+      groupPolicy: "open",
+      dmPolicy: "open",
+      storeAllowFrom: [],
+      historyLimit: 0,
+      groupHistories,
+    });
+    expect(decision.kind).toBe("dispatch");
+    if (decision.kind !== "dispatch") {
+      throw new Error("expected dispatch decision");
+    }
     expect(decision.isGroup).toBe(true);
     expect(decision.route.sessionKey).toBe("agent:main:imessage:group:2");
   });

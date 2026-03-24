@@ -12,8 +12,6 @@ import {
   readConfigFileSnapshot,
   writeConfigFile,
 } from "../../config/config.js";
-import { toAgentModelListLike } from "../../config/model-input.js";
-import type { AgentModelConfig } from "../../config/types.agents-shared.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 
 export const ensureFlagCompatibility = (opts: { json?: boolean; plain?: boolean }) => {
@@ -61,20 +59,15 @@ export const isLocalBaseUrl = (baseUrl: string) => {
   }
 };
 
-export async function loadValidConfigOrThrow(): Promise<OpenClawConfig> {
+export async function updateConfig(
+  mutator: (cfg: OpenClawConfig) => OpenClawConfig,
+): Promise<OpenClawConfig> {
   const snapshot = await readConfigFileSnapshot();
   if (!snapshot.valid) {
     const issues = snapshot.issues.map((issue) => `- ${issue.path}: ${issue.message}`).join("\n");
     throw new Error(`Invalid config at ${snapshot.path}\n${issues}`);
   }
-  return snapshot.config;
-}
-
-export async function updateConfig(
-  mutator: (cfg: OpenClawConfig) => OpenClawConfig,
-): Promise<OpenClawConfig> {
-  const config = await loadValidConfigOrThrow();
-  const next = mutator(config);
+  const next = mutator(snapshot.config);
   await writeConfigFile(next);
   return next;
 }
@@ -166,8 +159,7 @@ export function mergePrimaryFallbackConfig(
   existing: PrimaryFallbackConfig | undefined,
   patch: { primary?: string; fallbacks?: string[] },
 ): PrimaryFallbackConfig {
-  const base = existing && typeof existing === "object" ? existing : undefined;
-  const next: PrimaryFallbackConfig = { ...base };
+  const next: PrimaryFallbackConfig = { ...existing };
   if (patch.primary !== undefined) {
     next.primary = patch.primary;
   }
@@ -191,9 +183,9 @@ export function applyDefaultModelPrimaryUpdate(params: {
   }
 
   const defaults = params.cfg.agents?.defaults ?? {};
-  const existing = toAgentModelListLike(
-    (defaults as Record<string, unknown>)[params.field] as AgentModelConfig | undefined,
-  );
+  const existing = (defaults as Record<string, unknown>)[params.field] as
+    | PrimaryFallbackConfig
+    | undefined;
 
   return {
     ...params.cfg,

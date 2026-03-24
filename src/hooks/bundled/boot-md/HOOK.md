@@ -16,5 +16,4 @@ metadata:
 
 # Boot Checklist Hook
 
-Runs `BOOT.md` at gateway startup for each configured agent scope, if the file exists in that
-agent's resolved workspace.
+Runs `BOOT.md` every time the gateway starts, if the file exists in the workspace.

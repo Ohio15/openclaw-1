@@ -332,19 +332,11 @@ export function resolveSessionDisplayName(
   const displayName = row?.displayName?.trim() || "";
   const { prefix, fallbackName } = parseSessionKey(key);
 
-  const applyTypedPrefix = (name: string): string => {
-    if (!prefix) {
-      return name;
-    }
-    const prefixPattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}\\s*`, "i");
-    return prefixPattern.test(name) ? name : `${prefix} ${name}`;
-  };
-
   if (label && label !== key) {
-    return applyTypedPrefix(label);
+    return prefix ? `${prefix} ${label}` : label;
   }
   if (displayName && displayName !== key) {
-    return applyTypedPrefix(displayName);
+    return prefix ? `${prefix} ${displayName}` : displayName;
   }
   return fallbackName;
 }

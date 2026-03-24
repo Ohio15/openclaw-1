@@ -37,20 +37,6 @@ function createPostWebhookTestHarness(rawBody: string, secret = "secret") {
   return { bot, handler, secret };
 }
 
-const runSignedPost = async (params: {
-  handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>;
-  rawBody: string;
-  secret: string;
-  res: ServerResponse;
-}) =>
-  await params.handler(
-    {
-      method: "POST",
-      headers: { "x-line-signature": sign(params.rawBody, params.secret) },
-    } as unknown as IncomingMessage,
-    params.res,
-  );
-
 describe("createLineNodeWebhookHandler", () => {
   it("returns 200 for GET", async () => {
     const bot = { handleWebhook: vi.fn(async () => {}) };
@@ -82,17 +68,6 @@ describe("createLineNodeWebhookHandler", () => {
     expect(bot.handleWebhook).not.toHaveBeenCalled();
   });
 
-  it("returns 405 for non-GET/non-POST methods", async () => {
-    const { bot, handler } = createPostWebhookTestHarness(JSON.stringify({ events: [] }));
-
-    const { res, headers } = createRes();
-    await handler({ method: "PUT", headers: {} } as unknown as IncomingMessage, res);
-
-    expect(res.statusCode).toBe(405);
-    expect(headers.allow).toBe("GET, POST");
-    expect(bot.handleWebhook).not.toHaveBeenCalled();
-  });
-
   it("rejects missing signature when events are non-empty", async () => {
     const rawBody = JSON.stringify({ events: [{ type: "message" }] });
     const { bot, handler } = createPostWebhookTestHarness(rawBody);
@@ -101,28 +76,6 @@ describe("createLineNodeWebhookHandler", () => {
     await handler({ method: "POST", headers: {} } as unknown as IncomingMessage, res);
 
     expect(res.statusCode).toBe(400);
-    expect(bot.handleWebhook).not.toHaveBeenCalled();
-  });
-
-  it("uses a tight body-read limit for unsigned POST requests", async () => {
-    const bot = { handleWebhook: vi.fn(async () => {}) };
-    const runtime = { log: vi.fn(), error: vi.fn(), exit: vi.fn() };
-    const readBody = vi.fn(async (_req: IncomingMessage, maxBytes: number) => {
-      expect(maxBytes).toBe(4096);
-      return JSON.stringify({ events: [{ type: "message" }] });
-    });
-    const handler = createLineNodeWebhookHandler({
-      channelSecret: "secret",
-      bot,
-      runtime,
-      readBody,
-    });
-
-    const { res } = createRes();
-    await handler({ method: "POST", headers: {} } as unknown as IncomingMessage, res);
-
-    expect(res.statusCode).toBe(400);
-    expect(readBody).toHaveBeenCalledTimes(1);
     expect(bot.handleWebhook).not.toHaveBeenCalled();
   });
 
@@ -145,7 +98,13 @@ describe("createLineNodeWebhookHandler", () => {
     const { bot, handler, secret } = createPostWebhookTestHarness(rawBody);
 
     const { res } = createRes();
-    await runSignedPost({ handler, rawBody, secret, res });
+    await handler(
+      {
+        method: "POST",
+        headers: { "x-line-signature": sign(rawBody, secret) },
+      } as unknown as IncomingMessage,
+      res,
+    );
 
     expect(res.statusCode).toBe(200);
     expect(bot.handleWebhook).toHaveBeenCalledWith(
@@ -158,7 +117,13 @@ describe("createLineNodeWebhookHandler", () => {
     const { bot, handler, secret } = createPostWebhookTestHarness(rawBody);
 
     const { res } = createRes();
-    await runSignedPost({ handler, rawBody, secret, res });
+    await handler(
+      {
+        method: "POST",
+        headers: { "x-line-signature": sign(rawBody, secret) },
+      } as unknown as IncomingMessage,
+      res,
+    );
 
     expect(res.statusCode).toBe(400);
     expect(bot.handleWebhook).not.toHaveBeenCalled();

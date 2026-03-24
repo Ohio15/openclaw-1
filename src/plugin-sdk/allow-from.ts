@@ -9,25 +9,6 @@ export function formatAllowFromLowercase(params: {
     .map((entry) => entry.toLowerCase());
 }
 
-export function isNormalizedSenderAllowed(params: {
-  senderId: string | number;
-  allowFrom: Array<string | number>;
-  stripPrefixRe?: RegExp;
-}): boolean {
-  const normalizedAllow = formatAllowFromLowercase({
-    allowFrom: params.allowFrom,
-    stripPrefixRe: params.stripPrefixRe,
-  });
-  if (normalizedAllow.length === 0) {
-    return false;
-  }
-  if (normalizedAllow.includes("*")) {
-    return true;
-  }
-  const sender = String(params.senderId).trim().toLowerCase();
-  return normalizedAllow.includes(sender);
-}
-
 type ParsedChatAllowTarget =
   | { kind: "chat_id"; chatId: number }
   | { kind: "chat_guid"; chatGuid: string }
@@ -45,7 +26,7 @@ export function isAllowedParsedChatSender<TParsed extends ParsedChatAllowTarget>
 }): boolean {
   const allowFrom = params.allowFrom.map((entry) => String(entry).trim());
   if (allowFrom.length === 0) {
-    return false;
+    return true;
   }
   if (allowFrom.includes("*")) {
     return true;

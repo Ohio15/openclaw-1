@@ -5,7 +5,6 @@ import {
   normalizeApiKeyInput,
   validateApiKeyInput,
 } from "./auth-choice.api-key.js";
-import { createAuthChoiceAgentModelNoter } from "./auth-choice.apply-helpers.js";
 import type { ApplyAuthChoiceParams, ApplyAuthChoiceResult } from "./auth-choice.apply.js";
 import { applyDefaultModelChoice } from "./auth-choice.default-model.js";
 import {
@@ -21,7 +20,15 @@ export async function applyAuthChoiceOpenRouter(
 ): Promise<ApplyAuthChoiceResult> {
   let nextConfig = params.config;
   let agentModelOverride: string | undefined;
-  const noteAgentModel = createAuthChoiceAgentModelNoter(params);
+  const noteAgentModel = async (model: string) => {
+    if (!params.agentId) {
+      return;
+    }
+    await params.prompter.note(
+      `Default model set to ${model} for agent "${params.agentId}".`,
+      "Model configured",
+    );
+  };
 
   const store = ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false });
   const profileOrder = resolveAuthProfileOrder({

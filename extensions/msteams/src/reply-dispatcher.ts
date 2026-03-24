@@ -68,7 +68,6 @@ export function createMSTeamsReplyDispatcher(params: {
     core.channel.reply.createReplyDispatcherWithTyping({
       ...prefixOptions,
       humanDelay: core.channel.reply.resolveHumanDelayConfig(params.cfg, params.agentId),
-      typingCallbacks,
       deliver: async (payload) => {
         const tableMode = core.channel.text.resolveMarkdownTableMode({
           cfg: params.cfg,
@@ -122,6 +121,7 @@ export function createMSTeamsReplyDispatcher(params: {
           hint,
         });
       },
+      onReplyStart: typingCallbacks.onReplyStart,
     });
 
   return {

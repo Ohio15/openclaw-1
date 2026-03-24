@@ -8,10 +8,9 @@ vi.mock("../pi-model-discovery.js", () => ({
 import type { OpenClawConfig } from "../../config/config.js";
 import { buildInlineProviderModels, resolveModel } from "./model.js";
 import {
-  buildOpenAICodexForwardCompatExpectation,
   makeModel,
   mockDiscoveredModel,
-  mockOpenAICodexTemplateModel,
+  OPENAI_CODEX_TEMPLATE_MODEL,
   resetMockDiscoverModels,
 } from "./model.test-harness.js";
 
@@ -172,12 +171,24 @@ describe("resolveModel", () => {
   });
 
   it("builds an openai-codex fallback for gpt-5.3-codex", () => {
-    mockOpenAICodexTemplateModel();
+    mockDiscoveredModel({
+      provider: "openai-codex",
+      modelId: "gpt-5.2-codex",
+      templateModel: OPENAI_CODEX_TEMPLATE_MODEL,
+    });
 
     const result = resolveModel("openai-codex", "gpt-5.3-codex", "/tmp/agent");
 
     expect(result.error).toBeUndefined();
-    expect(result.model).toMatchObject(buildOpenAICodexForwardCompatExpectation("gpt-5.3-codex"));
+    expect(result.model).toMatchObject({
+      provider: "openai-codex",
+      id: "gpt-5.3-codex",
+      api: "openai-codex-responses",
+      baseUrl: "https://chatgpt.com/backend-api",
+      reasoning: true,
+      contextWindow: 272000,
+      maxTokens: 128000,
+    });
   });
 
   it("builds an anthropic forward-compat fallback for claude-opus-4-6", () => {
@@ -206,28 +217,58 @@ describe("resolveModel", () => {
     });
   });
 
-  it("builds an anthropic forward-compat fallback for claude-sonnet-4-6", () => {
+  it("builds an antigravity forward-compat fallback for claude-opus-4-6-thinking", () => {
     mockDiscoveredModel({
-      provider: "anthropic",
-      modelId: "claude-sonnet-4-5",
+      provider: "google-antigravity",
+      modelId: "claude-opus-4-5-thinking",
       templateModel: buildForwardCompatTemplate({
-        id: "claude-sonnet-4-5",
-        name: "Claude Sonnet 4.5",
-        provider: "anthropic",
-        api: "anthropic-messages",
-        baseUrl: "https://api.anthropic.com",
+        id: "claude-opus-4-5-thinking",
+        name: "Claude Opus 4.5 Thinking",
+        provider: "google-antigravity",
+        api: "google-gemini-cli",
+        baseUrl: "https://daily-cloudcode-pa.sandbox.googleapis.com",
       }),
     });
 
     expectResolvedForwardCompatFallback({
-      provider: "anthropic",
-      id: "claude-sonnet-4-6",
+      provider: "google-antigravity",
+      id: "claude-opus-4-6-thinking",
       expectedModel: {
-        provider: "anthropic",
-        id: "claude-sonnet-4-6",
-        api: "anthropic-messages",
-        baseUrl: "https://api.anthropic.com",
+        provider: "google-antigravity",
+        id: "claude-opus-4-6-thinking",
+        api: "google-gemini-cli",
+        baseUrl: "https://daily-cloudcode-pa.sandbox.googleapis.com",
         reasoning: true,
+        contextWindow: 200000,
+        maxTokens: 64000,
+      },
+    });
+  });
+
+  it("builds an antigravity forward-compat fallback for claude-opus-4-6", () => {
+    mockDiscoveredModel({
+      provider: "google-antigravity",
+      modelId: "claude-opus-4-5",
+      templateModel: buildForwardCompatTemplate({
+        id: "claude-opus-4-5",
+        name: "Claude Opus 4.5",
+        provider: "google-antigravity",
+        api: "google-gemini-cli",
+        baseUrl: "https://daily-cloudcode-pa.sandbox.googleapis.com",
+      }),
+    });
+
+    expectResolvedForwardCompatFallback({
+      provider: "google-antigravity",
+      id: "claude-opus-4-6",
+      expectedModel: {
+        provider: "google-antigravity",
+        id: "claude-opus-4-6",
+        api: "google-gemini-cli",
+        baseUrl: "https://daily-cloudcode-pa.sandbox.googleapis.com",
+        reasoning: true,
+        contextWindow: 200000,
+        maxTokens: 64000,
       },
     });
   });

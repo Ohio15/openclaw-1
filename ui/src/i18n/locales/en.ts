@@ -2,7 +2,6 @@ import type { TranslationMap } from "../lib/types.ts";
 
 export const en: TranslationMap = {
   common: {
-    version: "Version",
     health: "Health",
     ok: "OK",
     offline: "Offline",
@@ -30,13 +29,13 @@ export const en: TranslationMap = {
     sessions: "Sessions",
     usage: "Usage",
     cron: "Cron Jobs",
+    security: "Security",
     skills: "Skills",
     nodes: "Nodes",
     chat: "Chat",
     config: "Config",
     debug: "Debug",
     logs: "Logs",
-    security: "Security",
   },
   subtitles: {
     agents: "Manage agent workspaces, tools, and identities.",
@@ -46,13 +45,13 @@ export const en: TranslationMap = {
     sessions: "Inspect active sessions and adjust per-session defaults.",
     usage: "Monitor API usage and costs.",
     cron: "Schedule wakeups and recurring agent runs.",
+    security: "Security posture, audit findings, and approval controls.",
     skills: "Manage skill availability and API key injection.",
     nodes: "Paired devices, capabilities, and command exposure.",
     chat: "Direct gateway chat session for quick interventions.",
     config: "Edit ~/.openclaw/openclaw.json safely.",
     debug: "Gateway snapshots, events, and manual RPC calls.",
     logs: "Live tail of the gateway file logs.",
-    security: "Security posture, audit findings, and approval controls.",
   },
   overview: {
     access: {
@@ -97,11 +96,6 @@ export const en: TranslationMap = {
       required: "This gateway requires auth. Add a token or password, then click Connect.",
       failed:
         "Auth failed. Re-copy a tokenized URL with {command}, or update the token, then click Connect.",
-    },
-    pairing: {
-      hint: "This device needs pairing approval from the gateway host.",
-      mobileHint:
-        "On mobile? Copy the full URL (including #token=...) from openclaw dashboard --no-open on your desktop.",
     },
     insecure: {
       hint: "This page is HTTP, so the browser blocks device identity. Use HTTPS (Tailscale Serve) or open {url} on the gateway host.",

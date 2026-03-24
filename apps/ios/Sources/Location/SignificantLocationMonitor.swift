@@ -10,8 +10,7 @@ enum SignificantLocationMonitor {
     static func startIfNeeded(
         locationService: any LocationServicing,
         locationMode: OpenClawLocationMode,
-        gateway: GatewayNodeSession,
-        beforeSend: (@MainActor @Sendable () async -> Void)? = nil
+        gateway: GatewayNodeSession
     ) {
         guard locationMode == .always else { return }
         let status = locationService.authorizationStatus()
@@ -32,9 +31,6 @@ enum SignificantLocationMonitor {
                   let json = String(data: data, encoding: .utf8)
             else { return }
             Task { @MainActor in
-                if let beforeSend {
-                    await beforeSend()
-                }
                 await gateway.sendEvent(event: "location.update", payloadJSON: json)
             }
         }

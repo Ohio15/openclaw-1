@@ -87,7 +87,6 @@ vi.mock("./session.js", () => {
 });
 
 import { monitorWebInbox, resetWebInboundDedupe } from "./inbound.js";
-let createWaSocket: typeof import("./session.js").createWaSocket;
 
 async function waitForMessage(onMessage: ReturnType<typeof vi.fn>) {
   await vi.waitFor(() => expect(onMessage).toHaveBeenCalledTimes(1), {
@@ -98,19 +97,12 @@ async function waitForMessage(onMessage: ReturnType<typeof vi.fn>) {
 }
 
 describe("web inbound media saves with extension", () => {
-  async function getMockSocket() {
-    return (await createWaSocket(false, false)) as unknown as {
-      ev: import("node:events").EventEmitter;
-    };
-  }
-
   beforeEach(() => {
     saveMediaBufferSpy.mockClear();
     resetWebInboundDedupe();
   });
 
   beforeAll(async () => {
-    ({ createWaSocket } = await import("./session.js"));
     await fs.rm(HOME, { recursive: true, force: true });
   });
 
@@ -126,7 +118,12 @@ describe("web inbound media saves with extension", () => {
       accountId: "default",
       authDir: path.join(HOME, "wa-auth"),
     });
-    const realSock = await getMockSocket();
+    const { createWaSocket } = await import("./session.js");
+    const realSock = await (
+      createWaSocket as unknown as () => Promise<{
+        ev: import("node:events").EventEmitter;
+      }>
+    )();
 
     realSock.ev.emit("messages.upsert", {
       type: "notify",
@@ -205,7 +202,12 @@ describe("web inbound media saves with extension", () => {
       accountId: "default",
       authDir: path.join(HOME, "wa-auth"),
     });
-    const realSock = await getMockSocket();
+    const { createWaSocket } = await import("./session.js");
+    const realSock = await (
+      createWaSocket as unknown as () => Promise<{
+        ev: import("node:events").EventEmitter;
+      }>
+    )();
 
     const upsert = {
       type: "notify",

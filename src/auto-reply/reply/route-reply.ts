@@ -15,7 +15,6 @@ import { INTERNAL_MESSAGE_CHANNEL, normalizeMessageChannel } from "../../utils/m
 import type { OriginatingChannelType } from "../templating.js";
 import type { ReplyPayload } from "../types.js";
 import { normalizeReplyPayload } from "./normalize-reply.js";
-import { shouldSuppressReasoningPayload } from "./reply-payloads.js";
 
 export type RouteReplyParams = {
   /** The reply payload to send. */
@@ -57,9 +56,6 @@ export type RouteReplyResult = {
  */
 export async function routeReply(params: RouteReplyParams): Promise<RouteReplyResult> {
   const { payload, channel, to, accountId, threadId, cfg, abortSignal } = params;
-  if (shouldSuppressReasoningPayload(payload)) {
-    return { ok: true };
-  }
   const normalizedChannel = normalizeMessageChannel(channel);
   const resolvedAgentId = params.sessionKey
     ? resolveSessionAgentId({

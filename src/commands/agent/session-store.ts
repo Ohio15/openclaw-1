@@ -1,14 +1,10 @@
 import { setCliSessionId } from "../../agents/cli-session.js";
-import { resolveContextTokensForModel } from "../../agents/context.js";
+import { lookupContextTokens } from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { isCliProvider } from "../../agents/model-selection.js";
 import { deriveSessionTotalTokens, hasNonzeroUsage } from "../../agents/usage.js";
 import type { OpenClawConfig } from "../../config/config.js";
-import {
-  setSessionRuntimeModel,
-  type SessionEntry,
-  updateSessionStore,
-} from "../../config/sessions.js";
+import { type SessionEntry, updateSessionStore } from "../../config/sessions.js";
 
 type RunResult = Awaited<
   ReturnType<(typeof import("../../agents/pi-embedded.js"))["runEmbeddedPiAgent"]>
@@ -46,13 +42,7 @@ export async function updateSessionStoreAfterAgentRun(params: {
   const modelUsed = result.meta.agentMeta?.model ?? fallbackModel ?? defaultModel;
   const providerUsed = result.meta.agentMeta?.provider ?? fallbackProvider ?? defaultProvider;
   const contextTokens =
-    resolveContextTokensForModel({
-      cfg,
-      provider: providerUsed,
-      model: modelUsed,
-      contextTokensOverride: params.contextTokensOverride,
-      fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
-    }) ?? DEFAULT_CONTEXT_TOKENS;
+    params.contextTokensOverride ?? lookupContextTokens(modelUsed) ?? DEFAULT_CONTEXT_TOKENS;
 
   const entry = sessionStore[sessionKey] ?? {
     sessionId,
@@ -62,12 +52,10 @@ export async function updateSessionStoreAfterAgentRun(params: {
     ...entry,
     sessionId,
     updatedAt: Date.now(),
+    modelProvider: providerUsed,
+    model: modelUsed,
     contextTokens,
   };
-  setSessionRuntimeModel(next, {
-    provider: providerUsed,
-    model: modelUsed,
-  });
   if (isCliProvider(providerUsed, cfg)) {
     const cliSessionId = result.meta.agentMeta?.sessionId?.trim();
     if (cliSessionId) {
@@ -88,8 +76,6 @@ export async function updateSessionStoreAfterAgentRun(params: {
     next.outputTokens = output;
     next.totalTokens = totalTokens;
     next.totalTokensFresh = true;
-    next.cacheRead = usage.cacheRead ?? 0;
-    next.cacheWrite = usage.cacheWrite ?? 0;
   }
   if (compactionsThisRun > 0) {
     next.compactionCount = (entry.compactionCount ?? 0) + compactionsThisRun;

@@ -13,10 +13,8 @@ extension OnboardingView {
         guard self.state.connectionMode == .local else { return }
         let configured = await self.loadAgentWorkspace()
         let url = AgentWorkspace.resolveWorkspaceURL(from: configured)
-        let safety = AgentWorkspace.bootstrapSafety(for: url)
-        if let reason = safety.unsafeReason {
-            self.workspaceStatus = "Workspace not touched: \(reason)"
-        } else {
+        switch AgentWorkspace.bootstrapSafety(for: url) {
+        case .safe:
             do {
                 _ = try AgentWorkspace.bootstrap(workspaceURL: url)
                 if (configured ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -25,6 +23,8 @@ extension OnboardingView {
             } catch {
                 self.workspaceStatus = "Failed to create workspace: \(error.localizedDescription)"
             }
+        case let .unsafe (reason):
+            self.workspaceStatus = "Workspace not touched: \(reason)"
         }
         self.refreshBootstrapStatus()
     }
@@ -54,7 +54,7 @@ extension OnboardingView {
 
         do {
             let url = AgentWorkspace.resolveWorkspaceURL(from: self.workspacePath)
-            if let reason = AgentWorkspace.bootstrapSafety(for: url).unsafeReason {
+            if case let .unsafe (reason) = AgentWorkspace.bootstrapSafety(for: url) {
                 self.workspaceStatus = "Workspace not created: \(reason)"
                 return
             }

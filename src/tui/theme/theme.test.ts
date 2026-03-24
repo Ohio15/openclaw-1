@@ -7,8 +7,7 @@ const cliHighlightMocks = vi.hoisted(() => ({
 
 vi.mock("cli-highlight", () => cliHighlightMocks);
 
-const { markdownTheme, searchableSelectListTheme, selectListTheme, theme } =
-  await import("./theme.js");
+const { markdownTheme, theme } = await import("./theme.js");
 
 const stripAnsi = (str: string) =>
   str.replace(new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g"), "");
@@ -16,8 +15,8 @@ const stripAnsi = (str: string) =>
 describe("markdownTheme", () => {
   describe("highlightCode", () => {
     beforeEach(() => {
-      cliHighlightMocks.highlight.mockClear();
-      cliHighlightMocks.supportsLanguage.mockClear();
+      cliHighlightMocks.highlight.mockReset();
+      cliHighlightMocks.supportsLanguage.mockReset();
       cliHighlightMocks.highlight.mockImplementation((code: string) => code);
       cliHighlightMocks.supportsLanguage.mockReturnValue(true);
     });
@@ -58,25 +57,5 @@ describe("theme", () => {
   it("keeps assistant text in terminal default foreground", () => {
     expect(theme.assistantText("hello")).toBe("hello");
     expect(stripAnsi(theme.assistantText("hello"))).toBe("hello");
-  });
-});
-
-describe("list themes", () => {
-  it("reuses shared select-list styles in searchable list theme", () => {
-    expect(searchableSelectListTheme.selectedPrefix(">")).toBe(selectListTheme.selectedPrefix(">"));
-    expect(searchableSelectListTheme.selectedText("entry")).toBe(
-      selectListTheme.selectedText("entry"),
-    );
-    expect(searchableSelectListTheme.description("desc")).toBe(selectListTheme.description("desc"));
-    expect(searchableSelectListTheme.scrollInfo("scroll")).toBe(
-      selectListTheme.scrollInfo("scroll"),
-    );
-    expect(searchableSelectListTheme.noMatch("none")).toBe(selectListTheme.noMatch("none"));
-  });
-
-  it("keeps searchable list specific renderers readable", () => {
-    expect(stripAnsi(searchableSelectListTheme.searchPrompt("Search:"))).toBe("Search:");
-    expect(stripAnsi(searchableSelectListTheme.searchInput("query"))).toBe("query");
-    expect(stripAnsi(searchableSelectListTheme.matchHighlight("match"))).toBe("match");
   });
 });

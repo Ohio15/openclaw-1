@@ -1,5 +1,4 @@
 import { createNonExitingRuntime, type RuntimeEnv } from "../../runtime.js";
-import { normalizeStringEntries } from "../../shared/string-normalization.js";
 import type { MonitorIMessageOpts } from "./types.js";
 
 export function resolveRuntime(opts: MonitorIMessageOpts): RuntimeEnv {
@@ -7,5 +6,5 @@ export function resolveRuntime(opts: MonitorIMessageOpts): RuntimeEnv {
 }
 
 export function normalizeAllowList(list?: Array<string | number>) {
-  return normalizeStringEntries(list);
+  return (list ?? []).map((entry) => String(entry).trim()).filter(Boolean);
 }

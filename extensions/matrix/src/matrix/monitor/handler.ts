@@ -18,7 +18,12 @@ import {
   parsePollStartContent,
   type PollStartContent,
 } from "../poll-types.js";
-import { reactMatrixMessage, sendMessageMatrix, sendTypingMatrix } from "../send.js";
+import {
+  reactMatrixMessage,
+  sendMessageMatrix,
+  sendReadReceiptMatrix,
+  sendTypingMatrix,
+} from "../send.js";
 import {
   normalizeMatrixAllowList,
   resolveMatrixAllowListMatch,
@@ -213,10 +218,9 @@ export function createMatrixRoomMessageHandler(params: MatrixMonitorHandlerParam
       }
 
       const senderName = await getMemberDisplayName(roomId, senderId);
-      const storeAllowFrom =
-        dmPolicy === "allowlist"
-          ? []
-          : await core.channel.pairing.readAllowFromStore("matrix").catch(() => []);
+      const storeAllowFrom = await core.channel.pairing
+        .readAllowFromStore("matrix")
+        .catch(() => []);
       const effectiveAllowFrom = normalizeMatrixAllowList([...allowFrom, ...storeAllowFrom]);
       const groupAllowFrom = cfg.channels?.matrix?.groupAllowFrom ?? [];
       const effectiveGroupAllowFrom = normalizeMatrixAllowList(groupAllowFrom);
@@ -597,6 +601,14 @@ export function createMatrixRoomMessageHandler(params: MatrixMonitorHandlerParam
         return;
       }
 
+      if (messageId) {
+        sendReadReceiptMatrix(roomId, messageId, client).catch((err) => {
+          logVerboseMessage(
+            `matrix: read receipt failed room=${roomId} id=${messageId}: ${String(err)}`,
+          );
+        });
+      }
+
       let didSendReply = false;
       const tableMode = core.channel.text.resolveMarkdownTableMode({
         cfg,
@@ -635,7 +647,6 @@ export function createMatrixRoomMessageHandler(params: MatrixMonitorHandlerParam
         core.channel.reply.createReplyDispatcherWithTyping({
           ...prefixOptions,
           humanDelay: core.channel.reply.resolveHumanDelayConfig(cfg, route.agentId),
-          typingCallbacks,
           deliver: async (payload) => {
             await deliverMatrixReplies({
               replies: [payload],
@@ -653,6 +664,8 @@ export function createMatrixRoomMessageHandler(params: MatrixMonitorHandlerParam
           onError: (err, info) => {
             runtime.error?.(`matrix ${info.kind} reply failed: ${String(err)}`);
           },
+          onReplyStart: typingCallbacks.onReplyStart,
+          onIdle: typingCallbacks.onIdle,
         });
 
       const { queuedFinal, counts } = await core.channel.reply.dispatchReplyFromConfig({

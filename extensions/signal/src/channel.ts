@@ -1,6 +1,5 @@
 import {
   applyAccountNameToChannelSection,
-  buildBaseAccountStatusSnapshot,
   buildBaseChannelStatusSummary,
   buildChannelConfigSchema,
   collectStatusIssuesFromLastError,
@@ -18,8 +17,6 @@ import {
   PAIRING_APPROVED_MESSAGE,
   resolveChannelMediaMaxBytes,
   resolveDefaultSignalAccountId,
-  resolveAllowlistProviderRuntimeGroupPolicy,
-  resolveDefaultGroupPolicy,
   resolveSignalAccount,
   setAccountEnabledInConfigSection,
   signalOnboardingAdapter,
@@ -106,8 +103,6 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
         .filter(Boolean)
         .map((entry) => (entry === "*" ? "*" : normalizeE164(entry.replace(/^signal:/i, ""))))
         .filter(Boolean),
-    resolveDefaultTo: ({ cfg, accountId }) =>
-      resolveSignalAccount({ cfg, accountId }).config.defaultTo?.trim() || undefined,
   },
   security: {
     resolveDmPolicy: ({ cfg, accountId, account }) => {
@@ -126,12 +121,8 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
       };
     },
     collectWarnings: ({ account, cfg }) => {
-      const defaultGroupPolicy = resolveDefaultGroupPolicy(cfg);
-      const { groupPolicy } = resolveAllowlistProviderRuntimeGroupPolicy({
-        providerConfigPresent: cfg.channels?.signal !== undefined,
-        groupPolicy: account.config.groupPolicy,
-        defaultGroupPolicy,
-      });
+      const defaultGroupPolicy = cfg.channels?.defaults?.groupPolicy;
+      const groupPolicy = account.config.groupPolicy ?? defaultGroupPolicy ?? "allowlist";
       if (groupPolicy !== "open") {
         return [];
       }
@@ -274,8 +265,18 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
       return await getSignalRuntime().channel.signal.probeSignal(baseUrl, timeoutMs);
     },
     buildAccountSnapshot: ({ account, runtime, probe }) => ({
-      ...buildBaseAccountStatusSnapshot({ account, runtime, probe }),
+      accountId: account.accountId,
+      name: account.name,
+      enabled: account.enabled,
+      configured: account.configured,
       baseUrl: account.baseUrl,
+      running: runtime?.running ?? false,
+      lastStartAt: runtime?.lastStartAt ?? null,
+      lastStopAt: runtime?.lastStopAt ?? null,
+      lastError: runtime?.lastError ?? null,
+      probe,
+      lastInboundAt: runtime?.lastInboundAt ?? null,
+      lastOutboundAt: runtime?.lastOutboundAt ?? null,
     }),
   },
   gateway: {

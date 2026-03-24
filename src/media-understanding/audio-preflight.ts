@@ -7,7 +7,6 @@ import {
   buildProviderRegistry,
   createMediaAttachmentCache,
   normalizeMediaAttachments,
-  resolveMediaAttachmentLocalRoots,
   runCapability,
 } from "./runner.js";
 import type { MediaUnderstandingProvider } from "./types.js";
@@ -51,9 +50,7 @@ export async function transcribeFirstAudio(params: {
   }
 
   const providerRegistry = buildProviderRegistry(params.providers);
-  const cache = createMediaAttachmentCache(attachments, {
-    localPathRoots: resolveMediaAttachmentLocalRoots({ cfg, ctx }),
-  });
+  const cache = createMediaAttachmentCache(attachments);
 
   try {
     const result = await runCapability({

@@ -1,8 +1,8 @@
 import type { OpenClawApp } from "./app.ts";
 import { loadDebug } from "./controllers/debug.ts";
-import { loadSecurityAudit } from "./controllers/security.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
+import { loadSecurityAudit } from "./controllers/security.ts";
 
 type PollingHost = {
   nodesPollInterval: number | null;
@@ -69,7 +69,6 @@ export function stopDebugPolling(host: PollingHost) {
   clearInterval(host.debugPollInterval);
   host.debugPollInterval = null;
 }
-
 
 export function startSecurityPolling(host: PollingHost) {
   if (host.securityPollInterval != null) {

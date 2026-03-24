@@ -3,11 +3,10 @@ import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import { Type } from "@sinclair/typebox";
 import type { ExecAsk, ExecHost, ExecSecurity } from "../infra/exec-approvals.js";
 import { requestHeartbeatNow } from "../infra/heartbeat-wake.js";
-import { isDangerousHostEnvVarName } from "../infra/host-env-security.js";
 import { mergePathPrepend } from "../infra/path-prepend.js";
 import { enqueueSystemEvent } from "../infra/system-events.js";
 import type { ProcessSession } from "./bash-process-registry.js";
-import type { ExecToolDetails } from "./bash-tools.exec-types.js";
+import type { ExecToolDetails } from "./bash-tools.exec.js";
 import type { BashSandboxConfig } from "./bash-tools.shared.js";
 export { applyPathPrepend, normalizePathPrepend } from "../infra/path-prepend.js";
 import { logWarn } from "../logger.js";
@@ -29,23 +28,28 @@ import {
 import { buildCursorPositionResponse, stripDsrRequests } from "./pty-dsr.js";
 import { getShellConfig, sanitizeBinaryOutput } from "./shell-utils.js";
 
-// Sanitize inherited host env before merge so dangerous variables from process.env
-// are not propagated into non-sandboxed executions.
-export function sanitizeHostBaseEnv(env: Record<string, string>): Record<string, string> {
-  const sanitized: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    const upperKey = key.toUpperCase();
-    if (upperKey === "PATH") {
-      sanitized[key] = value;
-      continue;
-    }
-    if (isDangerousHostEnvVarName(upperKey)) {
-      continue;
-    }
-    sanitized[key] = value;
-  }
-  return sanitized;
-}
+// Security: Blocklist of environment variables that could alter execution flow
+// or inject code when running on non-sandboxed hosts (Gateway/Node).
+const DANGEROUS_HOST_ENV_VARS = new Set([
+  "LD_PRELOAD",
+  "LD_LIBRARY_PATH",
+  "LD_AUDIT",
+  "DYLD_INSERT_LIBRARIES",
+  "DYLD_LIBRARY_PATH",
+  "NODE_OPTIONS",
+  "NODE_PATH",
+  "PYTHONPATH",
+  "PYTHONHOME",
+  "RUBYLIB",
+  "PERL5LIB",
+  "BASH_ENV",
+  "ENV",
+  "GCONV_PATH",
+  "IFS",
+  "SSLKEYLOGFILE",
+]);
+const DANGEROUS_HOST_ENV_PREFIXES = ["DYLD_", "LD_"];
+
 // Centralized sanitization helper.
 // Throws an error if dangerous variables or PATH modifications are detected on the host.
 export function validateHostEnv(env: Record<string, string>): void {
@@ -53,7 +57,12 @@ export function validateHostEnv(env: Record<string, string>): void {
     const upperKey = key.toUpperCase();
 
     // 1. Block known dangerous variables (Fail Closed)
-    if (isDangerousHostEnvVarName(upperKey)) {
+    if (DANGEROUS_HOST_ENV_PREFIXES.some((prefix) => upperKey.startsWith(prefix))) {
+      throw new Error(
+        `Security Violation: Environment variable '${key}' is forbidden during host execution.`,
+      );
+    }
+    if (DANGEROUS_HOST_ENV_VARS.has(upperKey)) {
       throw new Error(
         `Security Violation: Environment variable '${key}' is forbidden during host execution.`,
       );
@@ -284,7 +293,7 @@ export async function runExecProcess(opts: {
   notifyOnExitEmptySuccess?: boolean;
   scopeKey?: string;
   sessionKey?: string;
-  timeoutSec: number | null;
+  timeoutSec: number;
   onUpdate?: (partialResult: AgentToolResult<ExecToolDetails>) => void;
 }): Promise<ExecProcessHandle> {
   const startedAt = Date.now();
@@ -499,13 +508,7 @@ export async function runExecProcess(opts: {
     .then((exit): ExecProcessOutcome => {
       const durationMs = Date.now() - startedAt;
       const isNormalExit = exit.reason === "exit";
-      const exitCode = exit.exitCode ?? 0;
-      // Shell exit codes 126 (not executable) and 127 (command not found) are
-      // unrecoverable infrastructure failures that should surface as real errors
-      // rather than silently completing — e.g. `python: command not found`.
-      const isShellFailure = exitCode === 126 || exitCode === 127;
-      const status: "completed" | "failed" =
-        isNormalExit && !isShellFailure ? "completed" : "failed";
+      const status: "completed" | "failed" = isNormalExit ? "completed" : "failed";
 
       markExited(session, exit.exitCode, exit.exitSignal, status);
       maybeNotifyOnExit(session, status);
@@ -514,6 +517,7 @@ export async function runExecProcess(opts: {
       }
       const aggregated = session.aggregated.trim();
       if (status === "completed") {
+        const exitCode = exit.exitCode ?? 0;
         const exitMsg = exitCode !== 0 ? `\n\n(Command exited with code ${exitCode})` : "";
         return {
           status: "completed",
@@ -524,14 +528,9 @@ export async function runExecProcess(opts: {
           timedOut: false,
         };
       }
-      const reason = isShellFailure
-        ? exitCode === 127
-          ? "Command not found"
-          : "Command not executable (permission denied)"
-        : exit.reason === "overall-timeout"
-          ? typeof opts.timeoutSec === "number" && opts.timeoutSec > 0
-            ? `Command timed out after ${opts.timeoutSec} seconds`
-            : "Command timed out"
+      const reason =
+        exit.reason === "overall-timeout"
+          ? `Command timed out after ${opts.timeoutSec} seconds`
           : exit.reason === "no-output-timeout"
             ? "Command timed out waiting for output"
             : exit.exitSignal != null

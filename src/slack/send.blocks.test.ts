@@ -1,12 +1,38 @@
-import { describe, expect, it } from "vitest";
-import { createSlackSendTestClient, installSlackBlockTestMocks } from "./blocks.test-helpers.js";
+import type { WebClient } from "@slack/web-api";
+import { describe, expect, it, vi } from "vitest";
 
-installSlackBlockTestMocks();
+vi.mock("../config/config.js", () => ({
+  loadConfig: () => ({}),
+}));
+
+vi.mock("./accounts.js", () => ({
+  resolveSlackAccount: () => ({
+    accountId: "default",
+    botToken: "xoxb-test",
+    botTokenSource: "config",
+    config: {},
+  }),
+}));
+
 const { sendMessageSlack } = await import("./send.js");
+
+function createClient() {
+  return {
+    conversations: {
+      open: vi.fn(async () => ({ channel: { id: "D123" } })),
+    },
+    chat: {
+      postMessage: vi.fn(async () => ({ ts: "171234.567" })),
+    },
+  } as unknown as WebClient & {
+    conversations: { open: ReturnType<typeof vi.fn> };
+    chat: { postMessage: ReturnType<typeof vi.fn> };
+  };
+}
 
 describe("sendMessageSlack blocks", () => {
   it("posts blocks with fallback text when message is empty", async () => {
-    const client = createSlackSendTestClient();
+    const client = createClient();
     const result = await sendMessageSlack("channel:C123", "", {
       token: "xoxb-test",
       client,
@@ -25,7 +51,7 @@ describe("sendMessageSlack blocks", () => {
   });
 
   it("derives fallback text from image blocks", async () => {
-    const client = createSlackSendTestClient();
+    const client = createClient();
     await sendMessageSlack("channel:C123", "", {
       token: "xoxb-test",
       client,
@@ -40,7 +66,7 @@ describe("sendMessageSlack blocks", () => {
   });
 
   it("derives fallback text from video blocks", async () => {
-    const client = createSlackSendTestClient();
+    const client = createClient();
     await sendMessageSlack("channel:C123", "", {
       token: "xoxb-test",
       client,
@@ -63,7 +89,7 @@ describe("sendMessageSlack blocks", () => {
   });
 
   it("derives fallback text from file blocks", async () => {
-    const client = createSlackSendTestClient();
+    const client = createClient();
     await sendMessageSlack("channel:C123", "", {
       token: "xoxb-test",
       client,
@@ -78,7 +104,7 @@ describe("sendMessageSlack blocks", () => {
   });
 
   it("rejects blocks combined with mediaUrl", async () => {
-    const client = createSlackSendTestClient();
+    const client = createClient();
     await expect(
       sendMessageSlack("channel:C123", "hi", {
         token: "xoxb-test",
@@ -91,7 +117,7 @@ describe("sendMessageSlack blocks", () => {
   });
 
   it("rejects empty blocks arrays from runtime callers", async () => {
-    const client = createSlackSendTestClient();
+    const client = createClient();
     await expect(
       sendMessageSlack("channel:C123", "hi", {
         token: "xoxb-test",
@@ -103,7 +129,7 @@ describe("sendMessageSlack blocks", () => {
   });
 
   it("rejects blocks arrays above Slack max count", async () => {
-    const client = createSlackSendTestClient();
+    const client = createClient();
     const blocks = Array.from({ length: 51 }, () => ({ type: "divider" }));
     await expect(
       sendMessageSlack("channel:C123", "hi", {
@@ -116,7 +142,7 @@ describe("sendMessageSlack blocks", () => {
   });
 
   it("rejects blocks missing type from runtime callers", async () => {
-    const client = createSlackSendTestClient();
+    const client = createClient();
     await expect(
       sendMessageSlack("channel:C123", "hi", {
         token: "xoxb-test",

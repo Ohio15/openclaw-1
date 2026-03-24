@@ -66,7 +66,7 @@ function resolveContextGuardTarget(
 }
 
 function normalizeTarget(channel: ChannelId, raw: string): string | undefined {
-  return normalizeTargetForProvider(channel, raw) ?? raw.trim();
+  return normalizeTargetForProvider(channel, raw) ?? raw.trim().toLowerCase();
 }
 
 function isCrossContextTarget(params: {

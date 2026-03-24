@@ -2,14 +2,13 @@ import { Type } from "@sinclair/typebox";
 import { loadConfig } from "../../config/config.js";
 import { callGateway } from "../../gateway/call.js";
 import { capArrayByJsonBytes } from "../../gateway/session-utils.fs.js";
-import { redactSensitiveText } from "../../logging/redact.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam } from "./common.js";
 import {
   createSessionVisibilityGuard,
   createAgentToAgentPolicy,
-  isResolvedSessionVisibleToRequester,
+  isRequesterSpawnedSessionVisible,
   resolveEffectiveSessionToolsVisibility,
   resolveSessionReference,
   resolveSandboxedSessionToolContext,
@@ -27,46 +26,31 @@ const SESSIONS_HISTORY_TEXT_MAX_CHARS = 4000;
 
 // sandbox policy handling is shared with sessions-list-tool via sessions-helpers.ts
 
-function truncateHistoryText(text: string): {
-  text: string;
-  truncated: boolean;
-  redacted: boolean;
-} {
-  // Redact credentials, API keys, tokens before returning session history.
-  // Prevents sensitive data leakage via sessions_history tool (OC-07).
-  const sanitized = redactSensitiveText(text);
-  const redacted = sanitized !== text;
-  if (sanitized.length <= SESSIONS_HISTORY_TEXT_MAX_CHARS) {
-    return { text: sanitized, truncated: false, redacted };
+function truncateHistoryText(text: string): { text: string; truncated: boolean } {
+  if (text.length <= SESSIONS_HISTORY_TEXT_MAX_CHARS) {
+    return { text, truncated: false };
   }
-  const cut = truncateUtf16Safe(sanitized, SESSIONS_HISTORY_TEXT_MAX_CHARS);
-  return { text: `${cut}\n…(truncated)…`, truncated: true, redacted };
+  const cut = truncateUtf16Safe(text, SESSIONS_HISTORY_TEXT_MAX_CHARS);
+  return { text: `${cut}\n…(truncated)…`, truncated: true };
 }
 
-function sanitizeHistoryContentBlock(block: unknown): {
-  block: unknown;
-  truncated: boolean;
-  redacted: boolean;
-} {
+function sanitizeHistoryContentBlock(block: unknown): { block: unknown; truncated: boolean } {
   if (!block || typeof block !== "object") {
-    return { block, truncated: false, redacted: false };
+    return { block, truncated: false };
   }
   const entry = { ...(block as Record<string, unknown>) };
   let truncated = false;
-  let redacted = false;
   const type = typeof entry.type === "string" ? entry.type : "";
   if (typeof entry.text === "string") {
     const res = truncateHistoryText(entry.text);
     entry.text = res.text;
     truncated ||= res.truncated;
-    redacted ||= res.redacted;
   }
   if (type === "thinking") {
     if (typeof entry.thinking === "string") {
       const res = truncateHistoryText(entry.thinking);
       entry.thinking = res.text;
       truncated ||= res.truncated;
-      redacted ||= res.redacted;
     }
     // The encrypted signature can be extremely large and is not useful for history recall.
     if ("thinkingSignature" in entry) {
@@ -78,7 +62,6 @@ function sanitizeHistoryContentBlock(block: unknown): {
     const res = truncateHistoryText(entry.partialJson);
     entry.partialJson = res.text;
     truncated ||= res.truncated;
-    redacted ||= res.redacted;
   }
   if (type === "image") {
     const data = typeof entry.data === "string" ? entry.data : undefined;
@@ -92,20 +75,15 @@ function sanitizeHistoryContentBlock(block: unknown): {
       entry.bytes = bytes;
     }
   }
-  return { block: entry, truncated, redacted };
+  return { block: entry, truncated };
 }
 
-function sanitizeHistoryMessage(message: unknown): {
-  message: unknown;
-  truncated: boolean;
-  redacted: boolean;
-} {
+function sanitizeHistoryMessage(message: unknown): { message: unknown; truncated: boolean } {
   if (!message || typeof message !== "object") {
-    return { message, truncated: false, redacted: false };
+    return { message, truncated: false };
   }
   const entry = { ...(message as Record<string, unknown>) };
   let truncated = false;
-  let redacted = false;
   // Tool result details often contain very large nested payloads.
   if ("details" in entry) {
     delete entry.details;
@@ -124,20 +102,17 @@ function sanitizeHistoryMessage(message: unknown): {
     const res = truncateHistoryText(entry.content);
     entry.content = res.text;
     truncated ||= res.truncated;
-    redacted ||= res.redacted;
   } else if (Array.isArray(entry.content)) {
     const updated = entry.content.map((block) => sanitizeHistoryContentBlock(block));
     entry.content = updated.map((item) => item.block);
     truncated ||= updated.some((item) => item.truncated);
-    redacted ||= updated.some((item) => item.redacted);
   }
   if (typeof entry.text === "string") {
     const res = truncateHistoryText(entry.text);
     entry.text = res.text;
     truncated ||= res.truncated;
-    redacted ||= res.redacted;
   }
-  return { message: entry, truncated, redacted };
+  return { message: entry, truncated };
 }
 
 function jsonUtf8Bytes(value: unknown): number {
@@ -208,18 +183,17 @@ export function createSessionsHistoryTool(opts?: {
       const resolvedKey = resolvedSession.key;
       const displayKey = resolvedSession.displayKey;
       const resolvedViaSessionId = resolvedSession.resolvedViaSessionId;
-
-      const visible = await isResolvedSessionVisibleToRequester({
-        requesterSessionKey: effectiveRequesterKey,
-        targetSessionKey: resolvedKey,
-        restrictToSpawned,
-        resolvedViaSessionId,
-      });
-      if (!visible) {
-        return jsonResult({
-          status: "forbidden",
-          error: `Session not visible from this sandboxed agent session: ${sessionKeyParam}`,
+      if (restrictToSpawned && !resolvedViaSessionId && resolvedKey !== effectiveRequesterKey) {
+        const ok = await isRequesterSpawnedSessionVisible({
+          requesterSessionKey: effectiveRequesterKey,
+          targetSessionKey: resolvedKey,
         });
+        if (!ok) {
+          return jsonResult({
+            status: "forbidden",
+            error: `Session not visible from this sandboxed agent session: ${sessionKeyParam}`,
+          });
+        }
       }
 
       const a2aPolicy = createAgentToAgentPolicy(cfg);
@@ -254,7 +228,6 @@ export function createSessionsHistoryTool(opts?: {
       const selectedMessages = includeTools ? rawMessages : stripToolMessages(rawMessages);
       const sanitizedMessages = selectedMessages.map((message) => sanitizeHistoryMessage(message));
       const contentTruncated = sanitizedMessages.some((entry) => entry.truncated);
-      const contentRedacted = sanitizedMessages.some((entry) => entry.redacted);
       const cappedMessages = capArrayByJsonBytes(
         sanitizedMessages.map((entry) => entry.message),
         SESSIONS_HISTORY_MAX_BYTES,
@@ -271,7 +244,6 @@ export function createSessionsHistoryTool(opts?: {
         truncated: droppedMessages || contentTruncated || hardened.hardCapped,
         droppedMessages: droppedMessages || hardened.hardCapped,
         contentTruncated,
-        contentRedacted,
         bytes: hardened.bytes,
       });
     },

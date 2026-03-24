@@ -3,23 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  buildFileEntry,
   chunkMarkdown,
   listMemoryFiles,
   normalizeExtraMemoryPaths,
   remapChunkLines,
 } from "./internal.js";
-
-function setupTempDirLifecycle(prefix: string): () => string {
-  let tmpDir = "";
-  beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  });
-  afterEach(async () => {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  });
-  return () => tmpDir;
-}
 
 describe("normalizeExtraMemoryPaths", () => {
   it("trims, resolves, and dedupes paths", () => {
@@ -37,10 +25,17 @@ describe("normalizeExtraMemoryPaths", () => {
 });
 
 describe("listMemoryFiles", () => {
-  const getTmpDir = setupTempDirLifecycle("memory-test-");
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "memory-test-"));
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
 
   it("includes files from additional paths (directory)", async () => {
-    const tmpDir = getTmpDir();
     await fs.writeFile(path.join(tmpDir, "MEMORY.md"), "# Default memory");
     const extraDir = path.join(tmpDir, "extra-notes");
     await fs.mkdir(extraDir, { recursive: true });
@@ -57,7 +52,6 @@ describe("listMemoryFiles", () => {
   });
 
   it("includes files from additional paths (single file)", async () => {
-    const tmpDir = getTmpDir();
     await fs.writeFile(path.join(tmpDir, "MEMORY.md"), "# Default memory");
     const singleFile = path.join(tmpDir, "standalone.md");
     await fs.writeFile(singleFile, "# Standalone");
@@ -68,7 +62,6 @@ describe("listMemoryFiles", () => {
   });
 
   it("handles relative paths in additional paths", async () => {
-    const tmpDir = getTmpDir();
     await fs.writeFile(path.join(tmpDir, "MEMORY.md"), "# Default memory");
     const extraDir = path.join(tmpDir, "subdir");
     await fs.mkdir(extraDir, { recursive: true });
@@ -80,7 +73,6 @@ describe("listMemoryFiles", () => {
   });
 
   it("ignores non-existent additional paths", async () => {
-    const tmpDir = getTmpDir();
     await fs.writeFile(path.join(tmpDir, "MEMORY.md"), "# Default memory");
 
     const files = await listMemoryFiles(tmpDir, ["/does/not/exist"]);
@@ -88,7 +80,6 @@ describe("listMemoryFiles", () => {
   });
 
   it("ignores symlinked files and directories", async () => {
-    const tmpDir = getTmpDir();
     await fs.writeFile(path.join(tmpDir, "MEMORY.md"), "# Default memory");
     const extraDir = path.join(tmpDir, "extra");
     await fs.mkdir(extraDir, { recursive: true });
@@ -122,37 +113,6 @@ describe("listMemoryFiles", () => {
       expect(files.some((file) => file.endsWith("linked.md"))).toBe(false);
       expect(files.some((file) => file.endsWith("nested.md"))).toBe(false);
     }
-  });
-
-  it("dedupes overlapping extra paths that resolve to the same file", async () => {
-    const tmpDir = getTmpDir();
-    await fs.writeFile(path.join(tmpDir, "MEMORY.md"), "# Default memory");
-    const files = await listMemoryFiles(tmpDir, [tmpDir, ".", path.join(tmpDir, "MEMORY.md")]);
-    const memoryMatches = files.filter((file) => file.endsWith("MEMORY.md"));
-    expect(memoryMatches).toHaveLength(1);
-  });
-});
-
-describe("buildFileEntry", () => {
-  const getTmpDir = setupTempDirLifecycle("memory-build-entry-");
-
-  it("returns null when the file disappears before reading", async () => {
-    const tmpDir = getTmpDir();
-    const target = path.join(tmpDir, "ghost.md");
-    await fs.writeFile(target, "ghost", "utf-8");
-    await fs.rm(target);
-    const entry = await buildFileEntry(target, tmpDir);
-    expect(entry).toBeNull();
-  });
-
-  it("returns metadata when the file exists", async () => {
-    const tmpDir = getTmpDir();
-    const target = path.join(tmpDir, "note.md");
-    await fs.writeFile(target, "hello", "utf-8");
-    const entry = await buildFileEntry(target, tmpDir);
-    expect(entry).not.toBeNull();
-    expect(entry?.path).toBe("note.md");
-    expect(entry?.size).toBeGreaterThan(0);
   });
 });
 

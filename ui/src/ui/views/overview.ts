@@ -1,12 +1,9 @@
 import { html } from "lit";
-import { ConnectErrorDetailCodes } from "../../../../src/gateway/protocol/connect-error-details.js";
 import { t, i18n, type Locale } from "../../i18n/index.ts";
-import { buildExternalLinkRel, EXTERNAL_LINK_TARGET } from "../external-link.ts";
 import { formatRelativeTimestamp, formatDurationHuman } from "../format.ts";
 import type { GatewayHelloOk } from "../gateway.ts";
 import { formatNextRun } from "../presenter.ts";
 import type { UiSettings } from "../storage.ts";
-import { shouldShowPairingHint } from "./overview-hints.ts";
 
 export type OverviewProps = {
   connected: boolean;
@@ -14,7 +11,6 @@ export type OverviewProps = {
   settings: UiSettings;
   password: string;
   lastError: string | null;
-  lastErrorCode: string | null;
   presenceCount: number;
   sessionsCount: number | null;
   cronEnabled: boolean | null;
@@ -42,70 +38,18 @@ export function renderOverview(props: OverviewProps) {
   const authMode = snapshot?.authMode;
   const isTrustedProxy = authMode === "trusted-proxy";
 
-  const pairingHint = (() => {
-    if (!shouldShowPairingHint(props.connected, props.lastError, props.lastErrorCode)) {
-      return null;
-    }
-    return html`
-      <div class="muted" style="margin-top: 8px">
-        ${t("overview.pairing.hint")}
-        <div style="margin-top: 6px">
-          <span class="mono">openclaw devices list</span><br />
-          <span class="mono">openclaw devices approve &lt;requestId&gt;</span>
-        </div>
-        <div style="margin-top: 6px; font-size: 12px;">
-          ${t("overview.pairing.mobileHint")}
-        </div>
-        <div style="margin-top: 6px">
-          <a
-            class="session-link"
-            href="https://docs.openclaw.ai/web/control-ui#device-pairing-first-connection"
-            target=${EXTERNAL_LINK_TARGET}
-            rel=${buildExternalLinkRel()}
-            title="Device pairing docs (opens in new tab)"
-            >Docs: Device pairing</a
-          >
-        </div>
-      </div>
-    `;
-  })();
-
   const authHint = (() => {
     if (props.connected || !props.lastError) {
       return null;
     }
     const lower = props.lastError.toLowerCase();
-    const authRequiredCodes = new Set<string>([
-      ConnectErrorDetailCodes.AUTH_REQUIRED,
-      ConnectErrorDetailCodes.AUTH_TOKEN_MISSING,
-      ConnectErrorDetailCodes.AUTH_PASSWORD_MISSING,
-      ConnectErrorDetailCodes.AUTH_TOKEN_NOT_CONFIGURED,
-      ConnectErrorDetailCodes.AUTH_PASSWORD_NOT_CONFIGURED,
-    ]);
-    const authFailureCodes = new Set<string>([
-      ...authRequiredCodes,
-      ConnectErrorDetailCodes.AUTH_UNAUTHORIZED,
-      ConnectErrorDetailCodes.AUTH_TOKEN_MISMATCH,
-      ConnectErrorDetailCodes.AUTH_PASSWORD_MISMATCH,
-      ConnectErrorDetailCodes.AUTH_DEVICE_TOKEN_MISMATCH,
-      ConnectErrorDetailCodes.AUTH_RATE_LIMITED,
-      ConnectErrorDetailCodes.AUTH_TAILSCALE_IDENTITY_MISSING,
-      ConnectErrorDetailCodes.AUTH_TAILSCALE_PROXY_MISSING,
-      ConnectErrorDetailCodes.AUTH_TAILSCALE_WHOIS_FAILED,
-      ConnectErrorDetailCodes.AUTH_TAILSCALE_IDENTITY_MISMATCH,
-    ]);
-    const authFailed = props.lastErrorCode
-      ? authFailureCodes.has(props.lastErrorCode)
-      : lower.includes("unauthorized") || lower.includes("connect failed");
+    const authFailed = lower.includes("unauthorized") || lower.includes("connect failed");
     if (!authFailed) {
       return null;
     }
     const hasToken = Boolean(props.settings.token.trim());
     const hasPassword = Boolean(props.password.trim());
-    const isAuthRequired = props.lastErrorCode
-      ? authRequiredCodes.has(props.lastErrorCode)
-      : !hasToken && !hasPassword;
-    if (isAuthRequired) {
+    if (!hasToken && !hasPassword) {
       return html`
         <div class="muted" style="margin-top: 8px">
           ${t("overview.auth.required")}
@@ -117,8 +61,8 @@ export function renderOverview(props: OverviewProps) {
             <a
               class="session-link"
               href="https://docs.openclaw.ai/web/dashboard"
-              target=${EXTERNAL_LINK_TARGET}
-              rel=${buildExternalLinkRel()}
+              target="_blank"
+              rel="noreferrer"
               title="Control UI auth docs (opens in new tab)"
               >Docs: Control UI auth</a
             >
@@ -133,8 +77,8 @@ export function renderOverview(props: OverviewProps) {
           <a
             class="session-link"
             href="https://docs.openclaw.ai/web/dashboard"
-            target=${EXTERNAL_LINK_TARGET}
-            rel=${buildExternalLinkRel()}
+            target="_blank"
+            rel="noreferrer"
             title="Control UI auth docs (opens in new tab)"
             >Docs: Control UI auth</a
           >
@@ -152,14 +96,7 @@ export function renderOverview(props: OverviewProps) {
       return null;
     }
     const lower = props.lastError.toLowerCase();
-    const insecureContextCode =
-      props.lastErrorCode === ConnectErrorDetailCodes.CONTROL_UI_DEVICE_IDENTITY_REQUIRED ||
-      props.lastErrorCode === ConnectErrorDetailCodes.DEVICE_IDENTITY_REQUIRED;
-    if (
-      !insecureContextCode &&
-      !lower.includes("secure context") &&
-      !lower.includes("device identity required")
-    ) {
+    if (!lower.includes("secure context") && !lower.includes("device identity required")) {
       return null;
     }
     return html`
@@ -172,8 +109,8 @@ export function renderOverview(props: OverviewProps) {
           <a
             class="session-link"
             href="https://docs.openclaw.ai/gateway/tailscale"
-            target=${EXTERNAL_LINK_TARGET}
-            rel=${buildExternalLinkRel()}
+            target="_blank"
+            rel="noreferrer"
             title="Tailscale Serve docs (opens in new tab)"
             >Docs: Tailscale Serve</a
           >
@@ -181,8 +118,8 @@ export function renderOverview(props: OverviewProps) {
           <a
             class="session-link"
             href="https://docs.openclaw.ai/web/control-ui#insecure-http"
-            target=${EXTERNAL_LINK_TARGET}
-            rel=${buildExternalLinkRel()}
+            target="_blank"
+            rel="noreferrer"
             title="Insecure HTTP docs (opens in new tab)"
             >Docs: Insecure HTTP</a
           >
@@ -304,7 +241,6 @@ export function renderOverview(props: OverviewProps) {
           props.lastError
             ? html`<div class="callout danger" style="margin-top: 14px;">
               <div>${props.lastError}</div>
-              ${pairingHint ?? ""}
               ${authHint ?? ""}
               ${insecureContextHint ?? ""}
             </div>`

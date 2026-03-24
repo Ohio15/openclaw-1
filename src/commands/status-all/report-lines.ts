@@ -121,11 +121,11 @@ export async function buildStatusAllReportLines(params: {
 
   const agentRows = params.agentStatus.agents.map((a) => ({
     Agent: a.name?.trim() ? `${a.id} (${a.name.trim()})` : a.id,
-    BootstrapFile:
+    Bootstrap:
       a.bootstrapPending === true
-        ? warn("PRESENT")
+        ? warn("PENDING")
         : a.bootstrapPending === false
-          ? ok("ABSENT")
+          ? ok("OK")
           : "unknown",
     Sessions: String(a.sessionsCount),
     Active: a.lastActiveAgeMs != null ? formatTimeAgo(a.lastActiveAgeMs) : "unknown",
@@ -136,7 +136,7 @@ export async function buildStatusAllReportLines(params: {
     width: tableWidth,
     columns: [
       { key: "Agent", header: "Agent", minWidth: 12 },
-      { key: "BootstrapFile", header: "Bootstrap file", minWidth: 14 },
+      { key: "Bootstrap", header: "Bootstrap", minWidth: 10 },
       { key: "Sessions", header: "Sessions", align: "right", minWidth: 8 },
       { key: "Active", header: "Active", minWidth: 10 },
       { key: "Store", header: "Store", flex: true, minWidth: 34 },

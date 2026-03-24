@@ -1,12 +1,11 @@
+import { createRequire } from "node:module";
 import util from "node:util";
 import type { OpenClawConfig } from "../config/types.js";
 import { isVerbose } from "../globals.js";
 import { stripAnsi } from "../terminal/ansi.js";
 import { readLoggingConfig } from "./config.js";
-import { resolveEnvLogLevelOverride } from "./env-log-level.js";
 import { type LogLevel, normalizeLogLevel } from "./levels.js";
 import { getLogger, type LoggerSettings } from "./logger.js";
-import { resolveNodeRequireFromMeta } from "./node-require.js";
 import { loggingState } from "./state.js";
 import { formatLocalIsoWithOffset } from "./timestamps.js";
 
@@ -17,16 +16,14 @@ type ConsoleSettings = {
 };
 export type ConsoleLoggerSettings = ConsoleSettings;
 
-const requireConfig = resolveNodeRequireFromMeta(import.meta.url);
+const requireConfig = createRequire(import.meta.url);
 type ConsoleConfigLoader = () => OpenClawConfig["logging"] | undefined;
 const loadConfigFallbackDefault: ConsoleConfigLoader = () => {
   try {
-    const loaded = requireConfig?.("../config/config.js") as
-      | {
-          loadConfig?: () => OpenClawConfig;
-        }
-      | undefined;
-    return loaded?.loadConfig?.().logging;
+    const loaded = requireConfig("../config/config.js") as {
+      loadConfig?: () => OpenClawConfig;
+    };
+    return loaded.loadConfig?.().logging;
   } catch {
     return undefined;
   }
@@ -72,8 +69,7 @@ function resolveConsoleSettings(): ConsoleSettings {
       }
     }
   }
-  const envLevel = resolveEnvLogLevelOverride();
-  const level = envLevel ?? normalizeConsoleLevel(cfg?.consoleLevel);
+  const level = normalizeConsoleLevel(cfg?.consoleLevel);
   const style = normalizeConsoleStyle(cfg?.consoleStyle);
   return { level, style };
 }

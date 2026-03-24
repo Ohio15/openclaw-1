@@ -1,12 +1,36 @@
-import { describe, expect, it } from "vitest";
-import { createSlackEditTestClient, installSlackBlockTestMocks } from "./blocks.test-helpers.js";
+import type { WebClient } from "@slack/web-api";
+import { describe, expect, it, vi } from "vitest";
 
-installSlackBlockTestMocks();
+vi.mock("../config/config.js", () => ({
+  loadConfig: () => ({}),
+}));
+
+vi.mock("./accounts.js", () => ({
+  resolveSlackAccount: () => ({
+    accountId: "default",
+    botToken: "xoxb-test",
+    botTokenSource: "config",
+    config: {},
+  }),
+}));
+
 const { editSlackMessage } = await import("./actions.js");
+
+function createClient() {
+  return {
+    chat: {
+      update: vi.fn(async () => ({ ok: true })),
+    },
+  } as unknown as WebClient & {
+    chat: {
+      update: ReturnType<typeof vi.fn>;
+    };
+  };
+}
 
 describe("editSlackMessage blocks", () => {
   it("updates with valid blocks", async () => {
-    const client = createSlackEditTestClient();
+    const client = createClient();
 
     await editSlackMessage("C123", "171234.567", "", {
       token: "xoxb-test",
@@ -25,7 +49,7 @@ describe("editSlackMessage blocks", () => {
   });
 
   it("uses image block text as edit fallback", async () => {
-    const client = createSlackEditTestClient();
+    const client = createClient();
 
     await editSlackMessage("C123", "171234.567", "", {
       token: "xoxb-test",
@@ -41,7 +65,7 @@ describe("editSlackMessage blocks", () => {
   });
 
   it("uses video block title as edit fallback", async () => {
-    const client = createSlackEditTestClient();
+    const client = createClient();
 
     await editSlackMessage("C123", "171234.567", "", {
       token: "xoxb-test",
@@ -65,7 +89,7 @@ describe("editSlackMessage blocks", () => {
   });
 
   it("uses generic file fallback text for file blocks", async () => {
-    const client = createSlackEditTestClient();
+    const client = createClient();
 
     await editSlackMessage("C123", "171234.567", "", {
       token: "xoxb-test",
@@ -81,7 +105,7 @@ describe("editSlackMessage blocks", () => {
   });
 
   it("rejects empty blocks arrays", async () => {
-    const client = createSlackEditTestClient();
+    const client = createClient();
 
     await expect(
       editSlackMessage("C123", "171234.567", "updated", {
@@ -95,7 +119,7 @@ describe("editSlackMessage blocks", () => {
   });
 
   it("rejects blocks missing a type", async () => {
-    const client = createSlackEditTestClient();
+    const client = createClient();
 
     await expect(
       editSlackMessage("C123", "171234.567", "updated", {
@@ -104,21 +128,6 @@ describe("editSlackMessage blocks", () => {
         blocks: [{} as { type: string }],
       }),
     ).rejects.toThrow(/non-empty string type/i);
-
-    expect(client.chat.update).not.toHaveBeenCalled();
-  });
-
-  it("rejects blocks arrays above Slack max count", async () => {
-    const client = createSlackEditTestClient();
-    const blocks = Array.from({ length: 51 }, () => ({ type: "divider" }));
-
-    await expect(
-      editSlackMessage("C123", "171234.567", "updated", {
-        token: "xoxb-test",
-        client,
-        blocks,
-      }),
-    ).rejects.toThrow(/cannot exceed 50 items/i);
 
     expect(client.chat.update).not.toHaveBeenCalled();
   });

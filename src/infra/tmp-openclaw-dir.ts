@@ -66,48 +66,35 @@ export function resolvePreferredOpenClawTmpDir(
     return path.join(base, suffix);
   };
 
-  const isTrustedPreferredDir = (st: {
-    isDirectory(): boolean;
-    isSymbolicLink(): boolean;
-    mode?: number;
-    uid?: number;
-  }): boolean => {
-    return st.isDirectory() && !st.isSymbolicLink() && isSecureDirForUser(st);
-  };
-
-  const resolvePreferredState = (
-    requireWritableAccess: boolean,
-  ): "available" | "missing" | "invalid" => {
-    try {
-      const preferred = lstatSync(POSIX_OPENCLAW_TMP_DIR);
-      if (!isTrustedPreferredDir(preferred)) {
-        return "invalid";
-      }
-      if (requireWritableAccess) {
-        accessSync(POSIX_OPENCLAW_TMP_DIR, fs.constants.W_OK | fs.constants.X_OK);
-      }
-      return "available";
-    } catch (err) {
-      if (isNodeErrorWithCode(err, "ENOENT")) {
-        return "missing";
-      }
-      return "invalid";
+  try {
+    const preferred = lstatSync(POSIX_OPENCLAW_TMP_DIR);
+    if (!preferred.isDirectory() || preferred.isSymbolicLink()) {
+      return fallback();
     }
-  };
-
-  const existingPreferredState = resolvePreferredState(true);
-  if (existingPreferredState === "available") {
+    accessSync(POSIX_OPENCLAW_TMP_DIR, fs.constants.W_OK | fs.constants.X_OK);
+    if (!isSecureDirForUser(preferred)) {
+      return fallback();
+    }
     return POSIX_OPENCLAW_TMP_DIR;
-  }
-  if (existingPreferredState === "invalid") {
-    return fallback();
+  } catch (err) {
+    if (!isNodeErrorWithCode(err, "ENOENT")) {
+      return fallback();
+    }
   }
 
   try {
     accessSync("/tmp", fs.constants.W_OK | fs.constants.X_OK);
     // Create with a safe default; subsequent callers expect it exists.
     mkdirSync(POSIX_OPENCLAW_TMP_DIR, { recursive: true, mode: 0o700 });
-    if (resolvePreferredState(true) !== "available") {
+    try {
+      const preferred = lstatSync(POSIX_OPENCLAW_TMP_DIR);
+      if (!preferred.isDirectory() || preferred.isSymbolicLink()) {
+        return fallback();
+      }
+      if (!isSecureDirForUser(preferred)) {
+        return fallback();
+      }
+    } catch {
       return fallback();
     }
     return POSIX_OPENCLAW_TMP_DIR;
