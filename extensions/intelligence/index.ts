@@ -17,7 +17,7 @@
  *   openclaw intel stats  — show aggregated feedback insights
  */
 
-import type { GatewayRequestHandlerOptions, OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import {
   IntelligenceControlPlane,
   type IntelligenceConfig,
@@ -275,9 +275,11 @@ const intelligencePlugin = {
     // Gateway Method: Dashboard Data
     // ========================================================================
 
+    api.logger.info("intelligence: registering gateway method intelligence.dashboard");
     api.registerGatewayMethod(
       "intelligence.dashboard",
-      async ({ respond }: GatewayRequestHandlerOptions) => {
+      async (opts: any) => {
+        const respond = opts.respond;
         try {
           const insights = await feedback.getInsights();
           const recentRaw = await feedback.getRecentEntries(20);
