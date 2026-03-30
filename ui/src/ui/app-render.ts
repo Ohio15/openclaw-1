@@ -181,12 +181,22 @@ export function renderApp(state: AppViewState) {
 
         ${
           state.tab === "overview"
-            ? renderIntelligenceDashboard({
-                connected: state.connected,
-                loading: state.intelligenceLoading,
-                stats: state.intelligenceStats,
-                onRefresh: () => state.loadIntelligenceStats(),
-              })
+            ? html`
+                <div style="padding: 20px; background: var(--card); border-radius: 8px; margin-bottom: 12px;">
+                  <h2 style="color: var(--text-strong); margin: 0 0 8px;">Intelligence Dashboard</h2>
+                  <div style="color: var(--text);">Connected: ${state.connected ? "Yes" : "No"}</div>
+                  <div style="color: var(--text);">Loading: ${state.intelligenceLoading ? "Yes" : "No"}</div>
+                  <div style="color: var(--text);">Has Stats: ${state.intelligenceStats ? "Yes" : "No"}</div>
+                  <div style="color: var(--text);">Config: ${state.intelligenceStats?.config ? JSON.stringify(state.intelligenceStats.config) : "null"}</div>
+                  <button class="btn" style="margin-top: 12px;" @click=${() => state.loadIntelligenceStats()}>Load Data</button>
+                </div>
+                ${state.intelligenceStats ? renderIntelligenceDashboard({
+                  connected: state.connected,
+                  loading: state.intelligenceLoading,
+                  stats: state.intelligenceStats,
+                  onRefresh: () => state.loadIntelligenceStats(),
+                }) : nothing}
+              `
             : nothing
         }
 
