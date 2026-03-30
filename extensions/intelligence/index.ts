@@ -275,8 +275,9 @@ const intelligencePlugin = {
     // Gateway Method: Dashboard Data
     // ========================================================================
 
-    api.logger.info("intelligence: registering gateway method intelligence.dashboard");
-    api.registerGatewayMethod(
+    api.logger.info(`intelligence: registerGatewayMethod type = ${typeof api.registerGatewayMethod}`);
+    try {
+      api.registerGatewayMethod(
       "intelligence.dashboard",
       async (opts: any) => {
         const respond = opts.respond;
@@ -316,6 +317,10 @@ const intelligencePlugin = {
         }
       },
     );
+    api.logger.info("intelligence: gateway method registered successfully");
+    } catch (regErr) {
+      api.logger.warn(`intelligence: gateway method registration FAILED: ${String(regErr)}`);
+    }
 
     api.registerService({
       id: "intelligence",
