@@ -456,8 +456,22 @@ export class OpenClawApp extends LitElement {
   async loadIntelligenceStats() {
     this.intelligenceLoading = true;
     try {
-      const result = await this.client?.request("intelligence.dashboard", {});
-      this.intelligenceStats = result ?? null;
+      // Use HTTP route instead of gateway WS method for reliability
+      const baseUrl = this.settings.gatewayUrl
+        .replace(/^ws:/, "http:")
+        .replace(/^wss:/, "https:")
+        .replace(/\/$/, "");
+      const headers: Record<string, string> = {};
+      if (this.settings.token) {
+        headers["Authorization"] = `Bearer ${this.settings.token}`;
+      }
+      const res = await fetch(`${baseUrl}/intelligence/dashboard`, { headers });
+      if (res.ok) {
+        this.intelligenceStats = await res.json();
+      } else {
+        console.warn("[intelligence-dashboard] HTTP", res.status);
+        this.intelligenceStats = null;
+      }
     } catch (err) {
       console.warn("[intelligence-dashboard] load failed:", err);
       this.intelligenceStats = null;

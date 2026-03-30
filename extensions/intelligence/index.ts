@@ -275,27 +275,25 @@ const intelligencePlugin = {
     // Gateway Method: Dashboard Data
     // ========================================================================
 
-    api.logger.info(`intelligence: registerGatewayMethod type = ${typeof api.registerGatewayMethod}`);
-    try {
-      api.registerGatewayMethod(
-      "intelligence.dashboard",
-      async (opts: any) => {
-        const respond = opts.respond;
+    // Dashboard data via HTTP route (more reliable than gateway WS method)
+    api.registerHttpRoute({
+      path: "/intelligence/dashboard",
+      handler: async (_req: any, res: any) => {
         try {
           const insights = await feedback.getInsights();
           const recentRaw = await feedback.getRecentEntries(20);
-          const recent = recentRaw.map((entry) => ({
-              timestamp: entry.timestamp,
-              category: entry.category ?? "general",
-              tier: entry.tier ?? "",
-              confidence: entry.confidence,
-              coherent: entry.coherent,
-              refusalDetected: entry.refusalDetected ?? false,
-              chainedExecution: entry.chainedExecution ?? false,
-              complexity: entry.complexity,
-            }));
+          const recent = recentRaw.map((entry: any) => ({
+            timestamp: entry.timestamp,
+            category: entry.category ?? "general",
+            tier: entry.tier ?? "",
+            confidence: entry.confidence,
+            coherent: entry.coherent,
+            refusalDetected: entry.refusalDetected ?? false,
+            chainedExecution: entry.chainedExecution ?? false,
+            complexity: entry.complexity,
+          }));
 
-          respond(true, {
+          const data = {
             config: {
               enabled,
               knowledgeSource: (cfg as any).knowledgeSource ?? "hybrid",
@@ -310,17 +308,18 @@ const intelligencePlugin = {
               recentEntries: recent,
             },
             budget: null,
-          });
+          };
+
+          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.end(JSON.stringify(data));
         } catch (err) {
-          api.logger.warn(`intelligence: dashboard method failed: ${String(err)}`);
-          respond(false, { error: err instanceof Error ? err.message : String(err) });
+          api.logger.warn(`intelligence: dashboard route failed: ${String(err)}`);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(err) }));
         }
       },
-    );
-    api.logger.info("intelligence: gateway method registered successfully");
-    } catch (regErr) {
-      api.logger.warn(`intelligence: gateway method registration FAILED: ${String(regErr)}`);
-    }
+    });
+    api.logger.info("intelligence: HTTP route /intelligence/dashboard registered");
 
     api.registerService({
       id: "intelligence",
