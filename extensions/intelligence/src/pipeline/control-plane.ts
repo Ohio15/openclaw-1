@@ -284,6 +284,7 @@ export class IntelligenceControlPlane {
     );
 
     // 6. Semantic knowledge retrieval (not gated by domain — any query gets searched)
+    //    Uses agentic RAG for complex queries (iterative/decomposed retrieval)
     const tierConfig = MODEL_TIERS[tierSelection.tier];
     const domainContext = await getSemanticKnowledge(
       userPrompt,
@@ -293,6 +294,11 @@ export class IntelligenceControlPlane {
         maxTokens: tierConfig?.maxTokens ?? 4096,
       },
       this.config.knowledgeSource,
+      {
+        complexity: complexityResult.complexity,
+        needsDecomposition: complexityResult.needsDecomposition,
+        indicators: complexityResult.indicators,
+      },
     );
 
     return {

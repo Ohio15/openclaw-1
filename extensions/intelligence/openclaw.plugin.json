@@ -42,6 +42,27 @@
         "type": "string",
         "enum": ["semantic", "static", "hybrid"],
         "default": "hybrid"
+      },
+      "ragMaxIterations": {
+        "type": "number",
+        "default": 3
+      },
+      "ragRelevanceThreshold": {
+        "type": "number",
+        "default": 0.6
+      },
+      "chainingEnabled": {
+        "type": "boolean",
+        "default": false
+      },
+      "chainingComplexityThreshold": {
+        "type": "number",
+        "default": 0.7
+      },
+      "tierModelMap": {
+        "type": "object",
+        "default": {},
+        "description": "Maps tier names to model/provider overrides. Example: {\"reasoning\": {\"model\": \"claude-opus-4-6\"}, \"tiny\": {\"model\": \"claude-haiku-4-5\"}}"
       }
     }
   },

@@ -36,6 +36,16 @@ export interface FeedbackEntry {
   domain?: string;
   /** Optional: list of issues found */
   issues?: string[];
+  /** Optional: whether this was a chained execution */
+  chainedExecution?: boolean;
+  /** Optional: number of sub-task steps in chained execution */
+  subTaskCount?: number;
+  /** Optional: per-step quality scores from chained execution */
+  subTaskScores?: Record<string, number>;
+  /** Optional: tools that were executed in a sandbox */
+  sandboxedTools?: string[];
+  /** Optional: number of sandbox security violations detected */
+  sandboxViolations?: number;
 }
 
 export interface CategoryInsight {

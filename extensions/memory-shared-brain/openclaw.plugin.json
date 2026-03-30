@@ -1,0 +1,33 @@
+{
+  "id": "memory-shared-brain",
+  "kind": "memory",
+  "name": "Memory (Shared Brain)",
+  "description": "Persistent memory backed by shared-brain MCP server. Provides semantic search, retrieval, and storage across all sessions.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "autoRecall": {
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically recall relevant memories before each agent run"
+      },
+      "autoCapture": {
+        "type": "boolean",
+        "default": true,
+        "description": "Automatically capture important information after each agent run"
+      },
+      "minRelevance": {
+        "type": "number",
+        "default": 0.5,
+        "description": "Minimum relevance score for recalled memories (0-1)"
+      },
+      "maxResults": {
+        "type": "number",
+        "default": 5,
+        "description": "Maximum number of memories to recall per query"
+      }
+    }
+  }
+}

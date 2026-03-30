@@ -23,6 +23,8 @@ import {
   type IntelligenceConfig,
 } from "./src/pipeline/control-plane.js";
 import { FeedbackLoop, type FeedbackEntry } from "./src/feedback/feedback-loop.js";
+import { SubAgentOrchestrator } from "./src/pipeline/sub-agent-orchestrator.js";
+import { ModelTierResolver } from "./src/pipeline/model-tier-resolver.js";
 
 // ============================================================================
 // Plugin Definition
@@ -44,7 +46,35 @@ const intelligencePlugin = {
       api.resolvePath(cfg.feedbackPath || "~/.openclaw/intelligence/feedback.jsonl"),
     );
 
+    const orchestrator = new SubAgentOrchestrator();
+    const tierResolver = new ModelTierResolver(
+      (cfg as any).tierModelMap ?? {},
+    );
+
     api.logger.info("intelligence: plugin registered");
+
+    // ========================================================================
+    // Hook: before_model_resolve
+    // Select model/provider override based on tier analysis
+    // ========================================================================
+
+    api.on("before_model_resolve", async (event) => {
+      if (!enabled) return;
+      try {
+        const messages = event.messages as unknown[];
+        if (!messages || messages.length === 0) return;
+        const analysis = await controlPlane.analyzeBeforeAgent(messages);
+        const override = tierResolver.resolve(analysis.tierSelection);
+        if (override?.modelOverride || override?.providerOverride) {
+          api.logger.info(
+            `intelligence: tier ${analysis.tierSelection.tier} → model override: ${override.modelOverride ?? "none"}, provider: ${override.providerOverride ?? "none"}`,
+          );
+          return override;
+        }
+      } catch (err) {
+        api.logger.warn(`intelligence: before_model_resolve failed: ${String(err)}`);
+      }
+    });
 
     // ========================================================================
     // Hook: before_prompt_build
@@ -68,7 +98,32 @@ const intelligencePlugin = {
           `knowledge=${analysis.domainContext ? "injected" : "none"}`,
         );
 
-        // Inject domain context into the prompt if available
+        // Chained execution for complex requests
+        const chainingEnabled = (cfg as any).chainingEnabled ?? false;
+        const chainingThreshold = (cfg as any).chainingComplexityThreshold ?? 0.7;
+
+        if (
+          chainingEnabled &&
+          analysis.complexity >= chainingThreshold &&
+          analysis.subTasks.length >= 2
+        ) {
+          const subTasks = analysis.subTasks.map((indicator, i) => ({
+            name: indicator,
+            description: `Address the "${indicator}" aspect of the request`,
+            priority: analysis.subTasks.length - i,
+            dependencies: i > 0 ? [analysis.subTasks[i - 1]] : [],
+          }));
+
+          const chainedPrompt = orchestrator.buildChainedPrompt(subTasks, analysis.domainContext);
+
+          api.logger.info(
+            `intelligence: chained execution activated (${subTasks.length} steps, complexity=${analysis.complexity.toFixed(2)})`,
+          );
+
+          return { prependContext: chainedPrompt };
+        }
+
+        // Original domain context injection (non-chained path)
         if (analysis.domainContext) {
           return { prependContext: analysis.domainContext };
         }
@@ -104,6 +159,24 @@ const intelligencePlugin = {
           ? await controlPlane.analyzeBeforeAgent(messages)
           : null;
 
+        // Check for chained execution output
+        const chainOutputs = orchestrator.extractSubTaskOutputs(response);
+        let chainedExecution = false;
+        let subTaskCount = 0;
+        let subTaskScores: Record<string, number> = {};
+
+        if (chainOutputs.size > 0) {
+          chainedExecution = true;
+          subTaskCount = chainOutputs.size;
+          // Simple per-step quality check
+          for (const [step, content] of chainOutputs) {
+            const hasContent = content.length > 0 ? 0.3 : 0;
+            const hasLength = content.length > 100 ? 0.2 : 0;
+            const hasCode = /```/.test(content) ? 0.2 : 0;
+            subTaskScores[step] = hasContent + hasLength + hasCode + 0.3; // base 0.3 for existing
+          }
+        }
+
         // Record feedback entry
         const entry: FeedbackEntry = {
           confidence: evaluation.confidenceScore,
@@ -115,6 +188,9 @@ const intelligencePlugin = {
           refusalDetected: evaluation.refusalDetected,
           complexity: analysis?.complexity,
           domain: analysis?.domain ?? undefined,
+          chainedExecution: chainedExecution || undefined,
+          subTaskCount: subTaskCount || undefined,
+          subTaskScores: Object.keys(subTaskScores).length > 0 ? subTaskScores : undefined,
         };
 
         await feedback.record(entry);

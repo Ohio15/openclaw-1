@@ -123,11 +123,23 @@ const THRESHOLDS = {
 } as const;
 
 /**
+ * Optional sandbox metadata for confidence scoring.
+ * When present, sandbox-related signals are included in scoring.
+ */
+export interface SandboxMetadata {
+  /** Whether all sandboxed tool executions succeeded */
+  executionSucceeded: boolean;
+  /** Number of security violations detected during sandbox execution */
+  violationCount: number;
+}
+
+/**
  * Score confidence of a response
  */
 export function scoreConfidence(
   response: string,
-  _request: Record<string, unknown> = {}
+  _request: Record<string, unknown> = {},
+  sandboxMetadata?: SandboxMetadata,
 ): ConfidenceResult {
   if (!response || typeof response !== 'string') {
     return {
@@ -159,6 +171,37 @@ export function scoreConfidence(
       weightedScore += config.weight;
     } else {
       concerns.push(config.name);
+    }
+  }
+
+  // Sandbox-specific signals (only when sandbox metadata is present)
+  if (sandboxMetadata) {
+    const sandboxSignals: Record<string, { weight: number; name: string; passed: boolean }> = {
+      sandboxExecutionSucceeded: {
+        weight: 0.1,
+        name: 'Sandbox execution succeeded',
+        passed: sandboxMetadata.executionSucceeded,
+      },
+      noSandboxViolations: {
+        weight: 0.05,
+        name: 'No sandbox violations',
+        passed: sandboxMetadata.violationCount === 0,
+      },
+    };
+
+    for (const [signalName, signal] of Object.entries(sandboxSignals)) {
+      signals[signalName] = {
+        passed: signal.passed,
+        weight: signal.weight,
+        name: signal.name,
+      };
+
+      totalWeight += signal.weight;
+      if (signal.passed) {
+        weightedScore += signal.weight;
+      } else {
+        concerns.push(signal.name);
+      }
     }
   }
 
