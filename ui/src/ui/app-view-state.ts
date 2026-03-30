@@ -40,7 +40,7 @@ export type AppViewState = {
   settings: UiSettings;
   password: string;
   tab: Tab;
-  settingsSubTab: "config" | "debug" | "logs" | "appearance";
+  settingsSubTab: "connection" | "config" | "debug" | "logs" | "appearance";
   onboarding: boolean;
   basePath: string;
   connected: boolean;
@@ -186,6 +186,8 @@ export type AppViewState = {
   usageLogFilterTools: string[];
   usageLogFilterHasTools: boolean;
   usageLogFilterQuery: string;
+  intelligenceLoading: boolean;
+  intelligenceStats: any;
   securityAuditReport: SecurityAuditReport | null;
   securityAuditLoading: boolean;
   securityAuditError: string | null;
@@ -238,6 +240,7 @@ export type AppViewState = {
   setTheme: (theme: ThemeMode, context?: ThemeTransitionContext) => void;
   applySettings: (next: UiSettings) => void;
   loadOverview: () => Promise<void>;
+  loadIntelligenceStats: () => Promise<void>;
   loadAssistantIdentity: () => Promise<void>;
   loadCron: () => Promise<void>;
   handleWhatsAppStart: (force: boolean) => Promise<void>;

@@ -189,6 +189,10 @@ export function setTheme(host: SettingsHost, next: ThemeMode, context?: ThemeTra
 export async function refreshActiveTab(host: SettingsHost) {
   if (host.tab === "overview") {
     await loadOverview(host);
+    const app = host as unknown as OpenClawApp;
+    if (typeof app.loadIntelligenceStats === "function") {
+      void app.loadIntelligenceStats();
+    }
   }
   if (host.tab === "channels") {
     await loadChannelsTab(host);

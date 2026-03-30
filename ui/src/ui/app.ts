@@ -116,7 +116,7 @@ export class OpenClawApp extends LitElement {
   }
   @state() password = "";
   @state() tab: Tab = "chat";
-  @state() settingsSubTab: "config" | "debug" | "logs" | "appearance" = "config";
+  @state() settingsSubTab: "connection" | "config" | "debug" | "logs" | "appearance" = "config";
   @state() onboarding = resolveOnboardingMode();
   @state() connected = false;
   @state() theme: ThemeMode = this.settings.theme ?? "system";
@@ -302,6 +302,9 @@ export class OpenClawApp extends LitElement {
   @state() securityExpandedToggleGroups: Set<string> = new Set(["sandbox", "tools"]);
   securityPollInterval: number | null = null;
 
+  @state() intelligenceLoading = false;
+  @state() intelligenceStats: any = null;
+
   @state() cronLoading = false;
   @state() cronJobs: CronJob[] = [];
   @state() cronStatus: CronStatus | null = null;
@@ -448,6 +451,18 @@ export class OpenClawApp extends LitElement {
 
   async loadCron() {
     await loadCronInternal(this as unknown as Parameters<typeof loadCronInternal>[0]);
+  }
+
+  async loadIntelligenceStats() {
+    this.intelligenceLoading = true;
+    try {
+      const result = await this.client?.request("intelligence.dashboard", {});
+      this.intelligenceStats = result ?? null;
+    } catch {
+      this.intelligenceStats = null;
+    } finally {
+      this.intelligenceLoading = false;
+    }
   }
 
   async handleAbortChat() {

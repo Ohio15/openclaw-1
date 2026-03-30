@@ -157,6 +157,16 @@ export class FeedbackLoop {
   }
 
   /**
+   * Return the most recent N feedback entries, newest first.
+   */
+  async getRecentEntries(limit = 20): Promise<FeedbackEntry[]> {
+    const entries = await this.readAll();
+    return entries
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, limit);
+  }
+
+  /**
    * Aggregate feedback entries into actionable insights.
    */
   async getInsights(): Promise<FeedbackInsights> {

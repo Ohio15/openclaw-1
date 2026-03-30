@@ -17,7 +17,7 @@
  *   openclaw intel stats  — show aggregated feedback insights
  */
 
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { GatewayRequestHandlerOptions, OpenClawPluginApi } from "openclaw/plugin-sdk";
 import {
   IntelligenceControlPlane,
   type IntelligenceConfig,
@@ -270,6 +270,50 @@ const intelligencePlugin = {
     // ========================================================================
     // Service Registration
     // ========================================================================
+
+    // ========================================================================
+    // Gateway Method: Dashboard Data
+    // ========================================================================
+
+    api.registerGatewayMethod(
+      "intelligence.dashboard",
+      async ({ respond }: GatewayRequestHandlerOptions) => {
+        try {
+          const insights = await feedback.getInsights();
+          const recentRaw = await feedback.getRecentEntries(20);
+          const recent = recentRaw.map((entry) => ({
+              timestamp: entry.timestamp,
+              category: entry.category ?? "general",
+              tier: entry.tier ?? "",
+              confidence: entry.confidence,
+              coherent: entry.coherent,
+              refusalDetected: entry.refusalDetected ?? false,
+              chainedExecution: entry.chainedExecution ?? false,
+              complexity: entry.complexity,
+            }));
+
+          respond(true, {
+            config: {
+              enabled,
+              knowledgeSource: (cfg as any).knowledgeSource ?? "hybrid",
+              chainingEnabled: (cfg as any).chainingEnabled ?? false,
+              chainingThreshold: (cfg as any).chainingComplexityThreshold ?? 0.7,
+              ragMaxIterations: (cfg as any).ragMaxIterations ?? 3,
+              ragRelevanceThreshold: (cfg as any).ragRelevanceThreshold ?? 0.6,
+              sandboxEnabled: false,
+            },
+            feedback: {
+              ...insights,
+              recentEntries: recent,
+            },
+            budget: null,
+          });
+        } catch (err) {
+          api.logger.warn(`intelligence: dashboard method failed: ${String(err)}`);
+          respond(false, { error: err instanceof Error ? err.message : String(err) });
+        }
+      },
+    );
 
     api.registerService({
       id: "intelligence",

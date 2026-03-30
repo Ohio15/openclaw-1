@@ -66,6 +66,7 @@ import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.t
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
 import { renderNodes } from "./views/nodes.ts";
+import { renderIntelligenceDashboard } from "./views/intelligence-dashboard.ts";
 import { renderOverview } from "./views/overview.ts";
 import { renderSettingsSubTabs, renderAppearanceSettings } from "./views/settings-page.ts";
 import { renderSecurity } from "./views/security.ts";
@@ -180,32 +181,11 @@ export function renderApp(state: AppViewState) {
 
         ${
           state.tab === "overview"
-            ? renderOverview({
+            ? renderIntelligenceDashboard({
                 connected: state.connected,
-                hello: state.hello,
-                settings: state.settings,
-                password: state.password,
-                lastError: state.lastError,
-                presenceCount,
-                sessionsCount,
-                cronEnabled: state.cronStatus?.enabled ?? null,
-                cronNext,
-                lastChannelsRefresh: state.channelsLastSuccess,
-                onSettingsChange: (next) => state.applySettings(next),
-                onPasswordChange: (next) => (state.password = next),
-                onSessionKeyChange: (next) => {
-                  state.sessionKey = next;
-                  state.chatMessage = "";
-                  state.resetToolStream();
-                  state.applySettings({
-                    ...state.settings,
-                    sessionKey: next,
-                    lastActiveSessionKey: next,
-                  });
-                  void state.loadAssistantIdentity();
-                },
-                onConnect: () => state.connect(),
-                onRefresh: () => state.loadOverview(),
+                loading: state.intelligenceLoading,
+                stats: state.intelligenceStats,
+                onRefresh: () => state.loadIntelligenceStats(),
               })
             : nothing
         }
@@ -885,6 +865,36 @@ export function renderApp(state: AppViewState) {
           state.tab === "settings"
             ? html`
                 ${renderSettingsSubTabs(state)}
+                ${state.settingsSubTab === "connection"
+                  ? renderOverview({
+                      connected: state.connected,
+                      hello: state.hello,
+                      settings: state.settings,
+                      password: state.password,
+                      lastError: state.lastError,
+                      presenceCount,
+                      sessionsCount,
+                      cronEnabled: state.cronStatus?.enabled ?? null,
+                      cronNext,
+                      lastChannelsRefresh: state.channelsLastSuccess,
+                      onSettingsChange: (next) => state.applySettings(next),
+                      onPasswordChange: (next) => (state.password = next),
+                      onSessionKeyChange: (next) => {
+                        state.sessionKey = next;
+                        state.chatMessage = "";
+                        state.resetToolStream();
+                        state.applySettings({
+                          ...state.settings,
+                          sessionKey: next,
+                          lastActiveSessionKey: next,
+                        });
+                        void state.loadAssistantIdentity();
+                      },
+                      onConnect: () => state.connect(),
+                      onRefresh: () => state.loadOverview(),
+                    })
+                  : nothing
+                }
                 ${state.settingsSubTab === "config" || !state.settingsSubTab
                   ? renderConfig({
                       raw: state.configRaw,
