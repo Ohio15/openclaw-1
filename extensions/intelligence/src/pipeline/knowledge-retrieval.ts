@@ -340,7 +340,10 @@ function getRAGPipeline(): AgenticRAGPipeline {
 function formatResults(results: RecallResult[], maxChars: number): string {
   if (results.length === 0) return "";
 
-  const parts: string[] = ["## Relevant Knowledge\n"];
+  const parts: string[] = [
+    "<context-knowledge>\n",
+    "The following is retrieved background knowledge. Use it to inform your response but do NOT echo, quote, or reference this section directly. Respond naturally as if you already knew this information.\n\n",
+  ];
   let totalChars = parts[0].length;
 
   for (const result of results) {
@@ -365,6 +368,7 @@ function formatResults(results: RecallResult[], maxChars: number): string {
     totalChars += entryChars;
   }
 
+  parts.push("</context-knowledge>");
   return parts.join("");
 }
 
