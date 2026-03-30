@@ -314,6 +314,17 @@ class SharedBrainClient {
   // ==========================================================================
 
   /**
+   * Call any MCP tool on the shared-brain server and return the raw result.
+   * Used by extended tool registrations to expose the full shared-brain API.
+   */
+  async callToolRaw(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    return this.callTool(toolName, args);
+  }
+
+  /**
    * Recall memories matching a query.
    * Returns ranked results with content, score, type, and tags.
    */
@@ -707,6 +718,212 @@ const memorySharedBrainPlugin = {
         },
       },
       { name: "memory_store" },
+    );
+
+    // ========================================================================
+    // Extended Shared-Brain Tools
+    // ========================================================================
+
+    // read_section — read a specific section from a brain file
+    api.registerTool(
+      {
+        name: "brain_read_section",
+        label: "Brain Read Section",
+        description:
+          "Read a specific section from a brain knowledge file by heading. Use when you need a particular part of a document rather than the whole file.",
+        parameters: Type.Object({
+          file_path: Type.String({ description: "Brain file name (e.g., 'project_sentinel.md')" }),
+          heading: Type.String({ description: "Section heading to extract" }),
+        }),
+        async execute(_toolCallId, params) {
+          const { file_path, heading } = params as { file_path: string; heading: string };
+          const result = await client.callToolRaw("read_section", { file_path, heading });
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "brain_read_section" },
+    );
+
+    // list_contents — list brain files and sections
+    api.registerTool(
+      {
+        name: "brain_list_contents",
+        label: "Brain List Contents",
+        description:
+          "List available brain knowledge files and their sections. Use to discover what knowledge exists in the shared-brain before searching.",
+        parameters: Type.Object({
+          file_path: Type.Optional(Type.String({ description: "Optional: list sections of a specific file" })),
+        }),
+        async execute(_toolCallId, params) {
+          const { file_path } = params as { file_path?: string };
+          const args: Record<string, unknown> = {};
+          if (file_path) args.file_path = file_path;
+          const result = await client.callToolRaw("list_contents", args);
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "brain_list_contents" },
+    );
+
+    // brain_manage — memory system operations
+    api.registerTool(
+      {
+        name: "brain_manage",
+        label: "Brain Manage",
+        description:
+          "Memory system operations: reflect (analyze patterns), set_priorities, get_priorities, reconcile (deduplicate), health (system status), get_scoring, set_scoring, get_alerts, ack_alert, preflight.",
+        parameters: Type.Object({
+          action: Type.String({
+            description: "Action: reflect, set_priorities, get_priorities, reconcile, health, get_scoring, set_scoring, get_alerts, ack_alert, preflight",
+          }),
+          params: Type.Optional(Type.Any({ description: "Action-specific parameters (call with wrong params to see schema)" })),
+        }),
+        async execute(_toolCallId, params) {
+          const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
+          const result = await client.callToolRaw("brain_manage", { action, params: actionParams });
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "brain_manage" },
+    );
+
+    // brain_incidents — incident tracking
+    api.registerTool(
+      {
+        name: "brain_incidents",
+        label: "Brain Incidents",
+        description:
+          "Track incidents and errors in shared-brain. Actions: create (new incident), resolve (close incident), add_note (update), search (find incidents), stats (summary).",
+        parameters: Type.Object({
+          action: Type.String({ description: "Action: create, resolve, add_note, search, stats" }),
+          params: Type.Optional(Type.Any({ description: "Action-specific parameters" })),
+        }),
+        async execute(_toolCallId, params) {
+          const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
+          const result = await client.callToolRaw("brain_incidents", { action, params: actionParams });
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "brain_incidents" },
+    );
+
+    // brain_decisions — architectural decision records
+    api.registerTool(
+      {
+        name: "brain_decisions",
+        label: "Brain Decisions",
+        description:
+          "Record and review architectural decisions. Actions: record (new ADR), get (by ID), search (find decisions), supersede (replace old decision), revisit (flag for review).",
+        parameters: Type.Object({
+          action: Type.String({ description: "Action: record, get, search, supersede, revisit" }),
+          params: Type.Optional(Type.Any({ description: "Action-specific parameters" })),
+        }),
+        async execute(_toolCallId, params) {
+          const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
+          const result = await client.callToolRaw("brain_decisions", { action, params: actionParams });
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "brain_decisions" },
+    );
+
+    // cortex_status — orchestrator status
+    api.registerTool(
+      {
+        name: "cortex_status",
+        label: "Cortex Status",
+        description:
+          "Get Cortex orchestrator status including queue depth, schedules, circuit breakers, Signal daemon connectivity, and system pause state.",
+        parameters: Type.Object({}),
+        async execute() {
+          const result = await client.callToolRaw("cortex_status", {});
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "cortex_status" },
+    );
+
+    // cortex_run — trigger a capability on-demand
+    api.registerTool(
+      {
+        name: "cortex_run",
+        label: "Cortex Run",
+        description:
+          "Trigger a Cortex capability on-demand. Enqueues a task and returns the task ID. Use dry_run to preview. Use force to bypass deduplication.",
+        parameters: Type.Object({
+          capability: Type.String({ description: "Capability name (e.g., 'self-maintenance', 'sentinel-monitor')" }),
+          payload: Type.Optional(Type.Any({ description: "Optional payload for the capability" })),
+          dry_run: Type.Optional(Type.Boolean({ description: "Preview mode — don't actually execute" })),
+          priority: Type.Optional(Type.Number({ description: "Priority 1=highest, 10=lowest (default 3)" })),
+          force: Type.Optional(Type.Boolean({ description: "Skip deduplication" })),
+        }),
+        async execute(_toolCallId, params) {
+          const { capability, payload, dry_run, priority, force } = params as {
+            capability: string; payload?: unknown; dry_run?: boolean; priority?: number; force?: boolean;
+          };
+          const args: Record<string, unknown> = { capability };
+          if (payload !== undefined) args.payload = payload;
+          if (dry_run !== undefined) args.dry_run = dry_run;
+          if (priority !== undefined) args.priority = priority;
+          if (force !== undefined) args.force = force;
+          const result = await client.callToolRaw("cortex_run", args);
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "cortex_run" },
+    );
+
+    // cortex_schedules — view/modify capability schedules
+    api.registerTool(
+      {
+        name: "cortex_schedules",
+        label: "Cortex Schedules",
+        description:
+          "View or modify Cortex capability schedules. Use 'list' to see all schedules, 'update' to change cron expression, enable/disable, or default payload.",
+        parameters: Type.Object({
+          action: Type.String({ description: "Action: list or update" }),
+          capability: Type.Optional(Type.String({ description: "Capability name (required for update)" })),
+          cron: Type.Optional(Type.String({ description: "New cron expression (5-field)" })),
+          enabled: Type.Optional(Type.Boolean({ description: "Enable or disable schedule" })),
+          payload: Type.Optional(Type.Any({ description: "New default payload" })),
+        }),
+        async execute(_toolCallId, params) {
+          const { action, capability, cron, enabled, payload } = params as {
+            action: string; capability?: string; cron?: string; enabled?: boolean; payload?: unknown;
+          };
+          const args: Record<string, unknown> = { action };
+          if (capability !== undefined) args.capability = capability;
+          if (cron !== undefined) args.cron = cron;
+          if (enabled !== undefined) args.enabled = enabled;
+          if (payload !== undefined) args.payload = payload;
+          const result = await client.callToolRaw("cortex_schedules", args);
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "cortex_schedules" },
+    );
+
+    // cortex_costs — cost and usage summary
+    api.registerTool(
+      {
+        name: "cortex_costs",
+        label: "Cortex Costs",
+        description:
+          "Get Cortex cost and usage summary by capability. Shows total runs, cost, tokens, success/failure counts, and average duration.",
+        parameters: Type.Object({
+          period: Type.Optional(Type.String({ description: "Time window: '1 hour', '1 day', '7 days', '30 days' (default: '1 day')" })),
+          capability: Type.Optional(Type.String({ description: "Filter to a specific capability" })),
+        }),
+        async execute(_toolCallId, params) {
+          const { period, capability } = params as { period?: string; capability?: string };
+          const args: Record<string, unknown> = {};
+          if (period !== undefined) args.period = period;
+          if (capability !== undefined) args.capability = capability;
+          const result = await client.callToolRaw("cortex_costs", args);
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+        },
+      },
+      { name: "cortex_costs" },
     );
 
     // ========================================================================
