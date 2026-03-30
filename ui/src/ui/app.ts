@@ -458,7 +458,8 @@ export class OpenClawApp extends LitElement {
     try {
       const result = await this.client?.request("intelligence.dashboard", {});
       this.intelligenceStats = result ?? null;
-    } catch {
+    } catch (err) {
+      console.warn("[intelligence-dashboard] load failed:", err);
       this.intelligenceStats = null;
     } finally {
       this.intelligenceLoading = false;
