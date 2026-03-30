@@ -20,8 +20,13 @@ import { detectRefusal } from "./refusal-detector.js";
 import { buildKnowledgeContext } from "./domain-knowledge.js";
 import { getOutputFormatter } from "./output-formatter.js";
 import {
+  getSemanticKnowledge,
+  complexityBasedMaxResults,
+} from "./knowledge-retrieval.js";
+import {
   selectTier,
   selectPipeline,
+  MODEL_TIERS,
   type TierSelection,
   type PipelineSelection,
 } from "../config/routing-authority.js";
@@ -44,6 +49,8 @@ export interface IntelligenceConfig {
     maxSimpleRequirements?: number;
   };
   feedbackPath?: string;
+  /** Knowledge source: "semantic" (shared-brain), "static" (hardcoded), "hybrid" (semantic + static fallback) */
+  knowledgeSource?: "semantic" | "static" | "hybrid";
 }
 
 export interface Message {
@@ -239,6 +246,7 @@ export class IntelligenceControlPlane {
         maxSimpleRequirements: config.pipelineRules?.maxSimpleRequirements ?? 3,
       },
       feedbackPath: config.feedbackPath,
+      knowledgeSource: config.knowledgeSource ?? "hybrid",
     };
   }
 
@@ -247,15 +255,18 @@ export class IntelligenceControlPlane {
    *
    * Called from the `before_prompt_build` hook. Returns complexity analysis,
    * pipeline selection, and optional domain context to prepend.
+   *
+   * Queries shared-brain for semantically relevant knowledge (not gated by
+   * domain detection). Falls back to static domain-knowledge.ts in hybrid mode.
    */
-  analyzeBeforeAgent(messages: unknown[]): BeforeAgentAnalysis {
+  async analyzeBeforeAgent(messages: unknown[]): Promise<BeforeAgentAnalysis> {
     const userPrompt = extractUserPrompt(messages);
 
     // 1. Complexity decomposition
     const complexityResult = analyzeComplexity(userPrompt);
     const complexity = complexityResult.complexity;
 
-    // 2. Domain detection
+    // 2. Domain detection (still used for tier routing, not for knowledge gating)
     const domain = detectDomain(userPrompt);
 
     // 3. Requirement count
@@ -272,8 +283,17 @@ export class IntelligenceControlPlane {
       userPrompt,
     );
 
-    // 6. Domain knowledge lookup (returns context string or null)
-    const domainContext = domain ? buildKnowledgeContext(userPrompt) : null;
+    // 6. Semantic knowledge retrieval (not gated by domain — any query gets searched)
+    const tierConfig = MODEL_TIERS[tierSelection.tier];
+    const domainContext = await getSemanticKnowledge(
+      userPrompt,
+      {
+        maxResults: complexityBasedMaxResults(complexity),
+        minRelevance: 0.4,
+        maxTokens: tierConfig?.maxTokens ?? 4096,
+      },
+      this.config.knowledgeSource,
+    );
 
     return {
       complexity,

@@ -37,6 +37,11 @@
       },
       "feedbackPath": {
         "type": "string"
+      },
+      "knowledgeSource": {
+        "type": "string",
+        "enum": ["semantic", "static", "hybrid"],
+        "default": "hybrid"
       }
     }
   },
@@ -58,6 +63,10 @@
       "label": "Feedback Log Path",
       "placeholder": "~/.openclaw/intelligence/feedback.jsonl",
       "advanced": true
+    },
+    "knowledgeSource": {
+      "label": "Knowledge Source",
+      "help": "Where to retrieve domain knowledge: semantic (shared-brain), static (hardcoded), hybrid (semantic with static fallback)"
     }
   }
 }

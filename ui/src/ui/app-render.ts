@@ -54,7 +54,7 @@ import {
   updateSkillEnabled,
 } from "./controllers/skills.ts";
 import { icons } from "./icons.ts";
-import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
+import { normalizeBasePath, SIDEBAR_TABS, subtitleForTab, titleForTab } from "./navigation.ts";
 import { renderAgents } from "./views/agents.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
@@ -67,6 +67,7 @@ import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
 import { renderNodes } from "./views/nodes.ts";
 import { renderOverview } from "./views/overview.ts";
+import { renderSettingsSubTabs, renderAppearanceSettings } from "./views/settings-page.ts";
 import { renderSecurity } from "./views/security.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
@@ -141,36 +142,12 @@ export function renderApp(state: AppViewState) {
             <span>${t("common.health")}</span>
             <span class="mono">${state.connected ? t("common.ok") : t("common.offline")}</span>
           </div>
-          ${renderThemeToggle(state)}
         </div>
       </header>
       <aside class="nav ${state.settings.navCollapsed ? "nav--collapsed" : ""}">
-        ${TAB_GROUPS.map((group) => {
-          const isGroupCollapsed = state.settings.navGroupsCollapsed[group.label] ?? false;
-          const hasActiveTab = group.tabs.some((tab) => tab === state.tab);
-          return html`
-            <div class="nav-group ${isGroupCollapsed && !hasActiveTab ? "nav-group--collapsed" : ""}">
-              <button
-                class="nav-label"
-                @click=${() => {
-                  const next = { ...state.settings.navGroupsCollapsed };
-                  next[group.label] = !isGroupCollapsed;
-                  state.applySettings({
-                    ...state.settings,
-                    navGroupsCollapsed: next,
-                  });
-                }}
-                aria-expanded=${!isGroupCollapsed}
-              >
-                <span class="nav-label__text">${t(`nav.${group.label}`)}</span>
-                <span class="nav-label__chevron">${isGroupCollapsed ? "+" : "−"}</span>
-              </button>
-              <div class="nav-group__items">
-                ${group.tabs.map((tab) => renderTab(state, tab))}
-              </div>
-            </div>
-          `;
-        })}
+        <div class="nav-group__items">
+          ${SIDEBAR_TABS.map((tab) => renderTab(state, tab))}
+        </div>
         <div class="nav-group nav-group--links">
           <div class="nav-label nav-label--static">
             <span class="nav-label__text">${t("common.resources")}</span>
@@ -905,86 +882,92 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "config"
-            ? renderConfig({
-                raw: state.configRaw,
-                originalRaw: state.configRawOriginal,
-                valid: state.configValid,
-                issues: state.configIssues,
-                loading: state.configLoading,
-                saving: state.configSaving,
-                applying: state.configApplying,
-                updating: state.updateRunning,
-                connected: state.connected,
-                schema: state.configSchema,
-                schemaLoading: state.configSchemaLoading,
-                uiHints: state.configUiHints,
-                formMode: state.configFormMode,
-                formValue: state.configForm,
-                originalValue: state.configFormOriginal,
-                searchQuery: state.configSearchQuery,
-                activeSection: state.configActiveSection,
-                activeSubsection: state.configActiveSubsection,
-                onRawChange: (next) => {
-                  state.configRaw = next;
-                },
-                onFormModeChange: (mode) => (state.configFormMode = mode),
-                onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
-                onSearchChange: (query) => (state.configSearchQuery = query),
-                onSectionChange: (section) => {
-                  state.configActiveSection = section;
-                  state.configActiveSubsection = null;
-                },
-                onSubsectionChange: (section) => (state.configActiveSubsection = section),
-                onReload: () => loadConfig(state),
-                onSave: () => saveConfig(state),
-                onApply: () => applyConfig(state),
-                onUpdate: () => runUpdate(state),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "debug"
-            ? renderDebug({
-                loading: state.debugLoading,
-                status: state.debugStatus,
-                health: state.debugHealth,
-                models: state.debugModels,
-                heartbeat: state.debugHeartbeat,
-                eventLog: state.eventLog,
-                callMethod: state.debugCallMethod,
-                callParams: state.debugCallParams,
-                callResult: state.debugCallResult,
-                callError: state.debugCallError,
-                onCallMethodChange: (next) => (state.debugCallMethod = next),
-                onCallParamsChange: (next) => (state.debugCallParams = next),
-                onRefresh: () => loadDebug(state),
-                onCall: () => callDebugMethod(state),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "logs"
-            ? renderLogs({
-                loading: state.logsLoading,
-                error: state.logsError,
-                file: state.logsFile,
-                entries: state.logsEntries,
-                filterText: state.logsFilterText,
-                levelFilters: state.logsLevelFilters,
-                autoFollow: state.logsAutoFollow,
-                truncated: state.logsTruncated,
-                onFilterTextChange: (next) => (state.logsFilterText = next),
-                onLevelToggle: (level, enabled) => {
-                  state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
-                },
-                onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
-                onRefresh: () => loadLogs(state, { reset: true }),
-                onExport: (lines, label) => state.exportLogs(lines, label),
-                onScroll: (event) => state.handleLogsScroll(event),
-              })
+          state.tab === "settings"
+            ? html`
+                ${renderSettingsSubTabs(state)}
+                ${state.settingsSubTab === "config" || !state.settingsSubTab
+                  ? renderConfig({
+                      raw: state.configRaw,
+                      originalRaw: state.configRawOriginal,
+                      valid: state.configValid,
+                      issues: state.configIssues,
+                      loading: state.configLoading,
+                      saving: state.configSaving,
+                      applying: state.configApplying,
+                      updating: state.updateRunning,
+                      connected: state.connected,
+                      schema: state.configSchema,
+                      schemaLoading: state.configSchemaLoading,
+                      uiHints: state.configUiHints,
+                      formMode: state.configFormMode,
+                      formValue: state.configForm,
+                      originalValue: state.configFormOriginal,
+                      searchQuery: state.configSearchQuery,
+                      activeSection: state.configActiveSection,
+                      activeSubsection: state.configActiveSubsection,
+                      onRawChange: (next) => {
+                        state.configRaw = next;
+                      },
+                      onFormModeChange: (mode) => (state.configFormMode = mode),
+                      onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
+                      onSearchChange: (query) => (state.configSearchQuery = query),
+                      onSectionChange: (section) => {
+                        state.configActiveSection = section;
+                        state.configActiveSubsection = null;
+                      },
+                      onSubsectionChange: (section) => (state.configActiveSubsection = section),
+                      onReload: () => loadConfig(state),
+                      onSave: () => saveConfig(state),
+                      onApply: () => applyConfig(state),
+                      onUpdate: () => runUpdate(state),
+                    })
+                  : nothing
+                }
+                ${state.settingsSubTab === "debug"
+                  ? renderDebug({
+                      loading: state.debugLoading,
+                      status: state.debugStatus,
+                      health: state.debugHealth,
+                      models: state.debugModels,
+                      heartbeat: state.debugHeartbeat,
+                      eventLog: state.eventLog,
+                      callMethod: state.debugCallMethod,
+                      callParams: state.debugCallParams,
+                      callResult: state.debugCallResult,
+                      callError: state.debugCallError,
+                      onCallMethodChange: (next) => (state.debugCallMethod = next),
+                      onCallParamsChange: (next) => (state.debugCallParams = next),
+                      onRefresh: () => loadDebug(state),
+                      onCall: () => callDebugMethod(state),
+                    })
+                  : nothing
+                }
+                ${state.settingsSubTab === "logs"
+                  ? renderLogs({
+                      loading: state.logsLoading,
+                      error: state.logsError,
+                      file: state.logsFile,
+                      entries: state.logsEntries,
+                      filterText: state.logsFilterText,
+                      levelFilters: state.logsLevelFilters,
+                      autoFollow: state.logsAutoFollow,
+                      truncated: state.logsTruncated,
+                      onFilterTextChange: (next) => (state.logsFilterText = next),
+                      onLevelToggle: (level, enabled) => {
+                        state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
+                      },
+                      onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
+                      onRefresh: () => loadLogs(state, { reset: true }),
+                      onExport: (lines, label) => state.exportLogs(lines, label),
+                      onScroll: (event) => state.handleLogsScroll(event),
+                    })
+                  : nothing
+                }
+                ${state.settingsSubTab === "appearance"
+                  ? renderAppearanceSettings(state)
+                  : nothing
+                }
+              `
             : nothing
         }
       </main>

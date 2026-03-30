@@ -8,14 +8,20 @@ services:
       CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
       CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
       CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+      SHARED_BRAIN_URL: ${SHARED_BRAIN_URL:-http://shared-brain-mcp:3100}
+      SHARED_BRAIN_API_KEY: ${SHARED_BRAIN_API_KEY}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
+      - ${SIGNAL_CLI_DATA_DIR}:/home/node/.local/share/signal-cli
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
     init: true
     restart: unless-stopped
+    networks:
+      - default
+      - shared-brain
     command:
       [
         "node",
@@ -37,6 +43,8 @@ services:
       CLAUDE_AI_SESSION_KEY: ${CLAUDE_AI_SESSION_KEY}
       CLAUDE_WEB_SESSION_KEY: ${CLAUDE_WEB_SESSION_KEY}
       CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
+      SHARED_BRAIN_URL: ${SHARED_BRAIN_URL:-http://shared-brain-mcp:3100}
+      SHARED_BRAIN_API_KEY: ${SHARED_BRAIN_API_KEY}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
@@ -44,3 +52,8 @@ services:
     tty: true
     init: true
     entrypoint: ["node", "dist/index.js"]
+
+networks:
+  shared-brain:
+    external: true
+    name: shared-brain-mcp_default

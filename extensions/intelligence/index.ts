@@ -58,13 +58,14 @@ const intelligencePlugin = {
       if (!messages || messages.length === 0) return;
 
       try {
-        const analysis = controlPlane.analyzeBeforeAgent(messages);
+        const analysis = await controlPlane.analyzeBeforeAgent(messages);
 
         api.logger.info(
           `intelligence: complexity=${analysis.complexity.toFixed(2)}, ` +
           `tier=${analysis.tierSelection.tier}, ` +
           `pipeline=${analysis.pipelineSelection.pipeline}, ` +
-          `domain=${analysis.domain ?? "none"}`,
+          `domain=${analysis.domain ?? "none"}, ` +
+          `knowledge=${analysis.domainContext ? "injected" : "none"}`,
         );
 
         // Inject domain context into the prompt if available
@@ -98,9 +99,9 @@ const intelligencePlugin = {
         );
 
         // Run the before-agent analysis again to get tier/pipeline/domain for feedback
-        // (cheap — all synchronous in-memory operations)
+        // (triggers shared-brain recall but results are only used for metadata)
         const analysis = messages && messages.length > 0
-          ? controlPlane.analyzeBeforeAgent(messages)
+          ? await controlPlane.analyzeBeforeAgent(messages)
           : null;
 
         // Record feedback entry

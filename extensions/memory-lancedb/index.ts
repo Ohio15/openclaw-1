@@ -9,7 +9,6 @@
 import { randomUUID } from "node:crypto";
 import type * as LanceDB from "@lancedb/lancedb";
 import { Type } from "@sinclair/typebox";
-import OpenAI from "openai";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import {
   DEFAULT_CAPTURE_MAX_CHARS,
@@ -161,21 +160,32 @@ class MemoryDB {
 // ============================================================================
 
 class Embeddings {
-  private client: OpenAI;
+  private apiKey: string;
+  private model: string;
+  private baseUrl: string;
 
-  constructor(
-    apiKey: string,
-    private model: string,
-  ) {
-    this.client = new OpenAI({ apiKey });
+  constructor(apiKey: string, model: string, baseUrl?: string) {
+    this.apiKey = apiKey;
+    this.model = model;
+    this.baseUrl = baseUrl || "https://api.openai.com/v1";
   }
 
   async embed(text: string): Promise<number[]> {
-    const response = await this.client.embeddings.create({
-      model: this.model,
-      input: text,
+    const response = await fetch(`${this.baseUrl}/embeddings`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(this.apiKey !== "ollama" ? { Authorization: `Bearer ${this.apiKey}` } : {}),
+      },
+      body: JSON.stringify({ model: this.model, input: text }),
     });
-    return response.data[0].embedding;
+
+    if (!response.ok) {
+      throw new Error(`Embedding request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
+    return data.data[0].embedding;
   }
 }
 
@@ -295,7 +305,7 @@ const memoryPlugin = {
     const resolvedDbPath = api.resolvePath(cfg.dbPath!);
     const vectorDim = vectorDimsForModel(cfg.embedding.model ?? "text-embedding-3-small");
     const db = new MemoryDB(resolvedDbPath, vectorDim);
-    const embeddings = new Embeddings(cfg.embedding.apiKey, cfg.embedding.model!);
+    const embeddings = new Embeddings(cfg.embedding.apiKey, cfg.embedding.model!, cfg.embedding.baseUrl);
 
     api.logger.info(`memory-lancedb: plugin registered (db: ${resolvedDbPath}, lazy init)`);
 

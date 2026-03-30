@@ -2104,3 +2104,57 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ===========================================
+   Settings Page - Sub-tab Navigation
+   =========================================== */
+
+.settings-subtabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-accent);
+  border-radius: var(--radius-lg);
+  margin-bottom: 24px;
+}
+
+.settings-subtab {
+  flex: 1;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.settings-subtab:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+
+.settings-subtab--active {
+  color: var(--text-strong);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-appearance {
+  max-width: 600px;
+}
+
+.settings-appearance__theme-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+}
+
+.settings-appearance__label {
+  font-size: 14px;
+  color: var(--text);
+}

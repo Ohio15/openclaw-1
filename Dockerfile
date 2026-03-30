@@ -36,6 +36,24 @@ RUN if [ -n "$OPENCLAW_INSTALL_BROWSER" ]; then \
       rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
     fi
 
+# Optionally install signal-cli native binary for Signal channel support.
+# Build with: docker build --build-arg OPENCLAW_INSTALL_SIGNAL_CLI=1 ...
+# Adds ~150MB but enables native signal-cli daemon inside the container.
+ARG OPENCLAW_INSTALL_SIGNAL_CLI=""
+ARG SIGNAL_CLI_VERSION="0.14.1"
+RUN if [ -n "$OPENCLAW_INSTALL_SIGNAL_CLI" ]; then \
+      ARCH=$(dpkg --print-architecture) && \
+      if [ "$ARCH" = "amd64" ]; then ARCH_LABEL="Linux-native"; \
+      elif [ "$ARCH" = "arm64" ]; then ARCH_LABEL="Linux-native-aarch64"; \
+      else echo "Unsupported arch: $ARCH" && exit 1; fi && \
+      curl -fsSL "https://github.com/AsamK/signal-cli/releases/download/v${SIGNAL_CLI_VERSION}/signal-cli-${SIGNAL_CLI_VERSION}-${ARCH_LABEL}.tar.gz" \
+        -o /tmp/signal-cli.tar.gz && \
+      tar xf /tmp/signal-cli.tar.gz -C /usr/local/bin/ && \
+      chmod +x /usr/local/bin/signal-cli && \
+      rm /tmp/signal-cli.tar.gz && \
+      signal-cli --version; \
+    fi
+
 COPY . .
 RUN pnpm build
 # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)

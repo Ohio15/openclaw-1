@@ -190,6 +190,34 @@
   height: 12px;
 }
 
+.nav-group--standalone {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.nav-item--theme {
+  padding: 8px 12px;
+  margin-top: 4px;
+}
+
+.nav-item--theme .theme-toggle {
+  --theme-item: 28px;
+  --theme-gap: 2px;
+  --theme-pad: 3px;
+  width: 100%;
+}
+
+.nav-item--theme .theme-toggle__track {
+  width: 100%;
+  justify-content: center;
+}
+
+.nav-item--theme .theme-icon {
+  width: 14px;
+  height: 14px;
+}
+
 /* ===========================================
    Navigation Sidebar
    =========================================== */

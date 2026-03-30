@@ -40,6 +40,7 @@ export type AppViewState = {
   settings: UiSettings;
   password: string;
   tab: Tab;
+  settingsSubTab: "config" | "debug" | "logs" | "appearance";
   onboarding: boolean;
   basePath: string;
   connected: boolean;
