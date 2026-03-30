@@ -106,34 +106,11 @@ export function renderIntelligenceDashboard(props: IntelligenceDashboardProps) {
     `;
   }
 
-  if (props.loading && !props.stats) {
-    return html`
-      <section class="card" style="text-align: center; padding: 48px 24px;">
-        <div class="card-title" style="font-size: 1.25rem;">Intelligence Dashboard</div>
-        <div class="muted" style="margin-top: 12px;">Loading pipeline data...</div>
-      </section>
-    `;
-  }
-
-  if (!props.stats) {
-    return html`
-      <section class="card" style="text-align: center; padding: 48px 24px;">
-        <div class="card-title" style="font-size: 1.25rem;">Intelligence Dashboard</div>
-        <div class="muted" style="margin-top: 12px;">
-          No intelligence data available yet. The pipeline will collect metrics as requests are processed.
-        </div>
-        <button
-          class="btn"
-          style="margin-top: 16px;"
-          @click=${() => props.onRefresh()}
-        >
-          Refresh
-        </button>
-      </section>
-    `;
-  }
-
-  const { config, feedback, budget } = props.stats;
+  const hasStats = !!props.stats;
+  const config = props.stats?.config ?? null;
+  const feedback = props.stats?.feedback ?? null;
+  const budget = props.stats?.budget ?? null;
+  const skeleton = !hasStats || props.loading;
 
   return html`
     <!-- Header -->
@@ -152,19 +129,65 @@ export function renderIntelligenceDashboard(props: IntelligenceDashboardProps) {
     </div>
 
     <!-- Section 1: Pipeline Status -->
-    ${renderPipelineStatus(config)}
+    ${renderPipelineStatus(config, skeleton)}
 
     <!-- Section 2: Quality Metrics -->
-    ${renderQualityMetrics(feedback)}
+    ${renderQualityMetrics(feedback, skeleton)}
 
     <!-- Section 3: Tier Distribution -->
-    ${renderTierDistribution(feedback.byTier)}
+    ${renderTierDistribution(feedback?.byTier ?? {}, skeleton)}
 
     <!-- Section 4: Recent Activity -->
-    ${renderRecentActivity(feedback.recentEntries)}
+    ${renderRecentActivity(feedback?.recentEntries ?? [], skeleton)}
 
     <!-- Section 5: Budget Status -->
-    ${budget ? renderBudgetStatus(budget) : nothing}
+    ${renderBudgetStatus(budget, skeleton)}
+  `;
+}
+
+// ============================================================================
+// Skeleton helpers
+// ============================================================================
+
+function skel(width: string, height = "14px") {
+  return html`<span style="
+    display: inline-block;
+    width: ${width};
+    height: ${height};
+    background: var(--border);
+    border-radius: 4px;
+    animation: skeleton-pulse 1.8s ease-in-out infinite;
+  "></span>`;
+}
+
+function skelBlock(height = "24px") {
+  return html`<div style="
+    width: 100%;
+    height: ${height};
+    background: var(--border);
+    border-radius: 4px;
+    animation: skeleton-pulse 1.8s ease-in-out infinite;
+  "></div>`;
+}
+
+function renderSkeletonStyles() {
+  return html`<style>
+    @keyframes skeleton-pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 0.8; }
+    }
+  </style>`;
+}
+
+function statusRow(label: string, value: unknown, skeleton: boolean, colorClass = "") {
+  return html`
+    <div class="row" style="justify-content: space-between;">
+      <span class="muted">${label}</span>
+      ${skeleton
+        ? skel("70px")
+        : html`<span class="${colorClass}" style="font-family: var(--mono);">${value}</span>`
+      }
+    </div>
   `;
 }
 
@@ -172,35 +195,18 @@ export function renderIntelligenceDashboard(props: IntelligenceDashboardProps) {
 // Section 1: Pipeline Status
 // ============================================================================
 
-function renderPipelineStatus(config: IntelligenceStats["config"]) {
+function renderPipelineStatus(config: IntelligenceStats["config"] | null, skeleton: boolean) {
   return html`
+    ${renderSkeletonStyles()}
     <section class="grid grid-cols-2" style="margin-bottom: 18px;">
       <div class="card">
         <div class="card-title">Pipeline Status</div>
         <div class="card-sub">Current intelligence pipeline state</div>
         <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
-          <div class="row" style="justify-content: space-between;">
-            <span class="muted">Intelligence</span>
-            <span class="${config.enabled ? "ok" : "danger"}" style="font-family: var(--mono);">
-              ${config.enabled ? "Enabled" : "Disabled"}
-            </span>
-          </div>
-          <div class="row" style="justify-content: space-between;">
-            <span class="muted">Knowledge Source</span>
-            <span style="font-family: var(--mono);">${config.knowledgeSource}</span>
-          </div>
-          <div class="row" style="justify-content: space-between;">
-            <span class="muted">Chaining</span>
-            <span class="${config.chainingEnabled ? "ok" : "muted"}" style="font-family: var(--mono);">
-              ${config.chainingEnabled ? "Enabled" : "Disabled"}
-            </span>
-          </div>
-          <div class="row" style="justify-content: space-between;">
-            <span class="muted">Sandbox</span>
-            <span class="${config.sandboxEnabled ? "ok" : "muted"}" style="font-family: var(--mono);">
-              ${config.sandboxEnabled ? "Enabled" : "Disabled"}
-            </span>
-          </div>
+          ${statusRow("Intelligence", config?.enabled ? "Enabled" : "Disabled", !config, config?.enabled ? "ok" : "danger")}
+          ${statusRow("Knowledge Source", config?.knowledgeSource ?? "--", !config)}
+          ${statusRow("Chaining", config?.chainingEnabled ? "Enabled" : "Disabled", !config, config?.chainingEnabled ? "ok" : "muted")}
+          ${statusRow("Sandbox", config?.sandboxEnabled ? "Enabled" : "Disabled", !config, config?.sandboxEnabled ? "ok" : "muted")}
         </div>
       </div>
 
@@ -208,18 +214,9 @@ function renderPipelineStatus(config: IntelligenceStats["config"]) {
         <div class="card-title">Active Configuration</div>
         <div class="card-sub">Runtime parameters and thresholds</div>
         <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
-          <div class="row" style="justify-content: space-between;">
-            <span class="muted">RAG Max Iterations</span>
-            <span style="font-family: var(--mono);">${config.ragMaxIterations}</span>
-          </div>
-          <div class="row" style="justify-content: space-between;">
-            <span class="muted">RAG Relevance Threshold</span>
-            <span style="font-family: var(--mono);">${config.ragRelevanceThreshold}</span>
-          </div>
-          <div class="row" style="justify-content: space-between;">
-            <span class="muted">Chaining Complexity Threshold</span>
-            <span style="font-family: var(--mono);">${config.chainingThreshold}</span>
-          </div>
+          ${statusRow("RAG Max Iterations", config?.ragMaxIterations ?? "--", !config)}
+          ${statusRow("RAG Relevance Threshold", config?.ragRelevanceThreshold ?? "--", !config)}
+          ${statusRow("Chaining Complexity Threshold", config?.chainingThreshold ?? "--", !config)}
         </div>
       </div>
     </section>
@@ -230,57 +227,31 @@ function renderPipelineStatus(config: IntelligenceStats["config"]) {
 // Section 2: Quality Metrics
 // ============================================================================
 
-function renderQualityMetrics(feedback: IntelligenceStats["feedback"]) {
-  const hasData = feedback.totalEntries > 0;
+function renderQualityMetrics(feedback: IntelligenceStats["feedback"] | null, skeleton: boolean) {
+  const hasData = feedback && feedback.totalEntries > 0;
+  const noData = !skeleton && !hasData;
+
+  function metricCard(label: string, value: string, colorClass: string) {
+    return html`
+      <div class="card" style="text-align: center; padding: 20px 12px;">
+        <div class="stat-label">${label}</div>
+        <div style="font-size: 1.75rem; font-family: var(--mono); margin-top: 8px;">
+          ${skeleton
+            ? skel("60px", "28px")
+            : html`<span class="stat-value ${colorClass}">${value}</span>`
+          }
+        </div>
+        ${noData ? html`<div class="muted" style="font-size: 0.75rem; margin-top: 4px;">awaiting data</div>` : nothing}
+      </div>
+    `;
+  }
 
   return html`
-    <section
-      style="
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-        margin-bottom: 18px;
-      "
-    >
-      <div class="card" style="text-align: center; padding: 20px 12px;">
-        <div class="stat-label">Avg Confidence</div>
-        <div
-          class="stat-value ${hasData ? confidenceColor(feedback.avgConfidence) : ""}"
-          style="font-size: 1.75rem; font-family: var(--mono); margin-top: 8px;"
-        >
-          ${hasData ? pct(feedback.avgConfidence) : "--"}
-        </div>
-      </div>
-
-      <div class="card" style="text-align: center; padding: 20px 12px;">
-        <div class="stat-label">Coherence Rate</div>
-        <div
-          class="stat-value ${hasData ? confidenceColor(feedback.coherenceRate) : ""}"
-          style="font-size: 1.75rem; font-family: var(--mono); margin-top: 8px;"
-        >
-          ${hasData ? pct(feedback.coherenceRate) : "--"}
-        </div>
-      </div>
-
-      <div class="card" style="text-align: center; padding: 20px 12px;">
-        <div class="stat-label">Refusal Rate</div>
-        <div
-          class="stat-value ${hasData ? refusalColor(feedback.refusalRate) : ""}"
-          style="font-size: 1.75rem; font-family: var(--mono); margin-top: 8px;"
-        >
-          ${hasData ? pct(feedback.refusalRate) : "--"}
-        </div>
-      </div>
-
-      <div class="card" style="text-align: center; padding: 20px 12px;">
-        <div class="stat-label">Total Evaluations</div>
-        <div
-          class="stat-value"
-          style="font-size: 1.75rem; font-family: var(--mono); margin-top: 8px;"
-        >
-          ${feedback.totalEntries.toLocaleString()}
-        </div>
-      </div>
+    <section style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px;">
+      ${metricCard("Avg Confidence", hasData ? pct(feedback!.avgConfidence) : "--", hasData ? confidenceColor(feedback!.avgConfidence) : "")}
+      ${metricCard("Coherence Rate", hasData ? pct(feedback!.coherenceRate) : "--", hasData ? confidenceColor(feedback!.coherenceRate) : "")}
+      ${metricCard("Refusal Rate", hasData ? pct(feedback!.refusalRate) : "--", hasData ? refusalColor(feedback!.refusalRate) : "")}
+      ${metricCard("Total Evaluations", hasData ? feedback!.totalEntries.toLocaleString() : "0", "")}
     </section>
   `;
 }
@@ -291,21 +262,33 @@ function renderQualityMetrics(feedback: IntelligenceStats["feedback"]) {
 
 function renderTierDistribution(
   byTier: Record<string, { count: number; avgConfidence: number }>,
+  skeleton: boolean,
 ) {
   const tiers = Object.keys(byTier);
-  if (tiers.length === 0) {
+  const tierOrder = ["tiny", "small", "medium", "large", "reasoning"];
+  const showSkeleton = skeleton || tiers.length === 0;
+
+  if (showSkeleton) {
     return html`
       <section class="card" style="margin-bottom: 18px;">
         <div class="card-title">Tier Distribution</div>
         <div class="card-sub">Model tier usage breakdown</div>
-        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0;">
-          No tier data recorded yet.
+        <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+          ${tierOrder.map((tier) => html`
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="width: 80px; flex-shrink: 0; font-family: var(--mono); font-size: 0.85rem; color: var(--muted);">${tier}</span>
+              <div style="flex: 1; height: 24px; background: var(--border); border-radius: 4px; overflow: hidden;">
+                <div style="width: ${skeleton ? "0" : "0"}%; height: 100%; background: var(--border); border-radius: 4px;"></div>
+              </div>
+              <span style="width: 50px; flex-shrink: 0; text-align: right;">${skeleton ? skel("30px") : html`<span class="muted" style="font-family: var(--mono); font-size: 0.85rem;">0</span>`}</span>
+              <span style="width: 55px; flex-shrink: 0; text-align: right;">${skeleton ? skel("35px") : html`<span class="muted" style="font-family: var(--mono); font-size: 0.85rem;">--</span>`}</span>
+            </div>
+          `)}
         </div>
       </section>
     `;
   }
 
-  const tierOrder = ["tiny", "small", "medium", "large", "reasoning"];
   const sortedTiers = tiers.sort(
     (a, b) => (tierOrder.indexOf(a) === -1 ? 99 : tierOrder.indexOf(a)) -
               (tierOrder.indexOf(b) === -1 ? 99 : tierOrder.indexOf(b)),
@@ -391,14 +374,43 @@ function renderTierDistribution(
 
 function renderRecentActivity(
   entries: IntelligenceStats["feedback"]["recentEntries"],
+  skeleton: boolean,
 ) {
-  if (!entries || entries.length === 0) {
+  const showSkeleton = skeleton || !entries || entries.length === 0;
+
+  if (showSkeleton) {
+    const placeholderRows = [1, 2, 3, 4, 5];
     return html`
       <section class="card" style="margin-bottom: 18px;">
         <div class="card-title">Recent Activity</div>
         <div class="card-sub">Latest pipeline evaluations</div>
-        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0;">
-          No recent activity recorded yet.
+        <div style="margin-top: 16px; overflow-x: auto;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead>
+              <tr style="border-bottom: 1px solid var(--border);">
+                <th style="text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500;">Time</th>
+                <th style="text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500;">Category</th>
+                <th style="text-align: left; padding: 6px 8px; color: var(--muted); font-weight: 500;">Tier</th>
+                <th style="text-align: right; padding: 6px 8px; color: var(--muted); font-weight: 500;">Confidence</th>
+                <th style="text-align: center; padding: 6px 8px; color: var(--muted); font-weight: 500;">Coherent</th>
+                <th style="text-align: center; padding: 6px 8px; color: var(--muted); font-weight: 500;">Refusal</th>
+                <th style="text-align: center; padding: 6px 8px; color: var(--muted); font-weight: 500;">Chained</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${placeholderRows.map(() => html`
+                <tr style="border-bottom: 1px solid var(--border);">
+                  <td style="padding: 6px 8px;">${skeleton ? skel("100px") : html`<span class="muted">--</span>`}</td>
+                  <td style="padding: 6px 8px;">${skeleton ? skel("80px") : html`<span class="muted">--</span>`}</td>
+                  <td style="padding: 6px 8px;">${skeleton ? skel("55px") : html`<span class="muted">--</span>`}</td>
+                  <td style="padding: 6px 8px; text-align: right;">${skeleton ? skel("45px") : html`<span class="muted">--</span>`}</td>
+                  <td style="padding: 6px 8px; text-align: center;">${skeleton ? skel("20px") : html`<span class="muted">--</span>`}</td>
+                  <td style="padding: 6px 8px; text-align: center;">${skeleton ? skel("20px") : html`<span class="muted">--</span>`}</td>
+                  <td style="padding: 6px 8px; text-align: center;">${skeleton ? skel("20px") : html`<span class="muted">--</span>`}</td>
+                </tr>
+              `)}
+            </tbody>
+          </table>
         </div>
       </section>
     `;
@@ -467,7 +479,54 @@ function renderRecentActivity(
 // Section 5: Budget Status
 // ============================================================================
 
-function renderBudgetStatus(budget: NonNullable<IntelligenceStats["budget"]>) {
+function renderBudgetStatus(budget: IntelligenceStats["budget"] | null, skeleton: boolean) {
+  if (!budget && !skeleton) return nothing;
+
+  if (!budget) {
+    return html`
+      <section class="grid grid-cols-2" style="margin-bottom: 18px;">
+        <div class="card">
+          <div class="card-title">Budget Status</div>
+          <div class="card-sub">Token and cost usage tracking</div>
+          <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 14px;">
+            <div>
+              <div class="row" style="justify-content: space-between; margin-bottom: 4px;">
+                <span class="muted">Daily Cost</span>
+                ${skel("90px")}
+              </div>
+              <div style="height: 8px; background: var(--border); border-radius: 4px;"></div>
+            </div>
+            <div>
+              <div class="row" style="justify-content: space-between; margin-bottom: 4px;">
+                <span class="muted">Session Cost</span>
+                ${skel("90px")}
+              </div>
+              <div style="height: 8px; background: var(--border); border-radius: 4px;"></div>
+            </div>
+            <div class="row" style="justify-content: space-between;">
+              <span class="muted">Daily Tokens</span>
+              ${skel("60px")}
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Usage by Tier</div>
+          <div class="card-sub">Token consumption per model tier</div>
+          <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+            ${["tiny", "small", "medium", "large", "reasoning"].map((tier) => html`
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="width: 70px; flex-shrink: 0; font-family: var(--mono); font-size: 0.85rem; color: var(--muted);">${tier}</span>
+                <div style="flex: 1; height: 20px; background: var(--border); border-radius: 4px;"></div>
+                <span style="width: 80px; flex-shrink: 0; text-align: right;">${skel("40px")}</span>
+                <span style="width: 60px; flex-shrink: 0; text-align: right;">${skel("35px")}</span>
+              </div>
+            `)}
+          </div>
+        </div>
+      </section>
+    `;
+  }
+
   const tierKeys = Object.keys(budget.byTier);
   const maxTokens = tierKeys.reduce(
     (max, key) => Math.max(max, budget.byTier[key].tokens),
