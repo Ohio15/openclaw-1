@@ -144,9 +144,22 @@ const intelligencePlugin = {
       if (!enabled || !event.success) return;
 
       const messages = event.messages as unknown[];
-      const response = typeof event.response === "string"
-        ? event.response
-        : String(event.response ?? "");
+      if (!messages || messages.length === 0) return;
+
+      // Extract the last assistant response from the messages array
+      // (agent_end event provides messages but not a separate response field)
+      let response = "";
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i] as Record<string, unknown> | null;
+        if (!msg || msg.role !== "assistant") continue;
+        if (typeof msg.content === "string") { response = msg.content; break; }
+        if (Array.isArray(msg.content)) {
+          const texts = (msg.content as Array<Record<string, unknown>>)
+            .filter((b) => b.type === "text" && typeof b.text === "string")
+            .map((b) => b.text as string);
+          if (texts.length > 0) { response = texts.join("\n"); break; }
+        }
+      }
 
       if (!response) return;
 
