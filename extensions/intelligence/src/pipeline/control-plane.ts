@@ -162,8 +162,8 @@ function detectDomain(text: string): string | null {
   const lower = text.toLowerCase();
 
   const domainPatterns: Array<[string, RegExp]> = [
-    ["auth", /\b(auth|authentication|authorization|login|session|token)\b/],
-    ["security", /\b(security|encryption|hash|csrf|xss|injection)\b/],
+    ["auth", /\b(authentication|authorization|oauth|jwt|login.?flow|auth.?middleware)\b/],
+    ["security", /\b(security.?audit|encryption|hash|csrf|xss|injection|vulnerability)\b/],
     ["jwt", /\bjwt\b/],
     ["oauth", /\boauth\b/],
     ["rate_limiter", /\brate.?limit/],

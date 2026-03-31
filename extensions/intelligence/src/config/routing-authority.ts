@@ -181,12 +181,14 @@ export function selectTier(
   domain: string | null = null,
   taskType: string | null = null,
 ): TierSelection {
-  // Domain escalation takes precedence
-  if (domain && DOMAIN_ESCALATIONS[domain]) {
+  // Domain escalation — only when complexity justifies it.
+  // A simple question mentioning "auth" (complexity 0.2) shouldn't route to
+  // the large tier. Escalation applies when complexity >= 0.3 (non-trivial).
+  if (domain && DOMAIN_ESCALATIONS[domain] && complexity >= 0.3) {
     const tier = DOMAIN_ESCALATIONS[domain];
     return {
       tier,
-      reason: `Domain escalation: ${domain} -> ${tier}`,
+      reason: `Domain escalation: ${domain} -> ${tier} (complexity ${complexity.toFixed(2)})`,
     };
   }
 
