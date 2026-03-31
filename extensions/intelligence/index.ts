@@ -18,8 +18,10 @@
  */
 
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { CortexAdapter } from "./src/pipeline/cortex-adapter.js";
-import type { IntelligenceConfig } from "./src/pipeline/control-plane.js";
+import {
+  IntelligenceControlPlane,
+  type IntelligenceConfig,
+} from "./src/pipeline/control-plane.js";
 import { FeedbackLoop, type FeedbackEntry } from "./src/feedback/feedback-loop.js";
 import { SubAgentOrchestrator } from "./src/pipeline/sub-agent-orchestrator.js";
 import { ModelTierResolver } from "./src/pipeline/model-tier-resolver.js";
@@ -39,7 +41,7 @@ const intelligencePlugin = {
     const enabled = cfg.enabled ?? true;
 
     // Initialize core components
-    const controlPlane = new CortexAdapter({
+    const controlPlane = new IntelligenceControlPlane({
       enabled: cfg.enabled,
       knowledgeSource: (cfg as any).knowledgeSource,
       brainUrl: (cfg as any).brainUrl,
