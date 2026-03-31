@@ -56,7 +56,7 @@ const intelligencePlugin = {
       (cfg as any).tierModelMap ?? {},
     );
 
-    api.logger.info("intelligence: plugin registered");
+    api.logger.info("intelligence: plugin registered, registering hooks...");
 
     // ========================================================================
     // Hook: before_model_resolve
@@ -86,7 +86,9 @@ const intelligencePlugin = {
     // Analyze complexity, detect domain, inject domain knowledge context
     // ========================================================================
 
+    api.logger.info("intelligence: before_prompt_build hook registering");
     api.on("before_prompt_build", async (event) => {
+      api.logger.info("intelligence: before_prompt_build FIRED");
       if (!enabled) return;
 
       const messages = event.messages as unknown[];
