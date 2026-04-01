@@ -63,6 +63,60 @@
         "type": "object",
         "default": {},
         "description": "Maps tier names to model/provider overrides. Example: {\"reasoning\": {\"model\": \"claude-opus-4-6\"}, \"tiny\": {\"model\": \"claude-haiku-4-5\"}}"
+      },
+      "enhancedCompaction": {
+        "type": "object",
+        "description": "DeerFlow-inspired progressive conversation summarization with configurable triggers",
+        "properties": {
+          "enabled": { "type": "boolean", "default": false },
+          "triggers": {
+            "type": "object",
+            "properties": {
+              "tokenCountThreshold": { "type": "number", "default": 50000, "description": "Summarize when estimated tokens exceed this" },
+              "messageCountThreshold": { "type": "number", "default": 30, "description": "Summarize when message count exceeds this" },
+              "capacityFraction": { "type": "number", "default": 0.35, "description": "Summarize when estimated tokens / context window exceeds this" }
+            }
+          },
+          "recentWindowSize": { "type": "number", "default": 6, "description": "Number of recent messages to preserve untouched" },
+          "skipComplexShortConversations": { "type": "boolean", "default": true, "description": "Skip summarization for short but complex conversations" },
+          "complexityThresholdForSkip": { "type": "number", "default": 0.7, "description": "Avg complexity above which short conversations are not summarized" },
+          "shortConversationLimit": { "type": "number", "default": 15, "description": "Conversations below this message count are considered short" }
+        }
+      },
+      "codingAgentDelegation": {
+        "type": "object",
+        "description": "DeerFlow ACP-inspired delegation of coding tasks to external AI agents (Claude Code CLI, etc.)",
+        "properties": {
+          "enabled": { "type": "boolean", "default": false },
+          "defaultAgent": { "type": "string", "default": "claude-code", "description": "Which agent backend to use by default" },
+          "delegationComplexityThreshold": { "type": "number", "default": 0.8, "description": "Complexity threshold above which the agent is hinted to delegate" },
+          "maxConcurrentDelegations": { "type": "number", "default": 2, "description": "Maximum number of concurrent external agent processes" },
+          "agents": {
+            "type": "object",
+            "default": {
+              "claude-code": {
+                "command": "claude",
+                "args": ["-p"],
+                "timeoutMs": 300000,
+                "maxOutputChars": 100000,
+                "promptTemplate": "{task}"
+              }
+            },
+            "description": "Agent backend definitions. Each key is an agent ID with command, args, env, timeoutMs, maxOutputChars, workingDir, promptTemplate"
+          }
+        }
+      },
+      "enhancedLoopDetection": {
+        "type": "object",
+        "description": "DeerFlow-inspired enhanced loop detection with early triggers, fuzzy matching, and actionable steering guidance",
+        "properties": {
+          "enabled": { "type": "boolean", "default": false },
+          "earlyDetectionThreshold": { "type": "number", "default": 5, "description": "Identical tool+params repeat count before blocking (core default is 10)" },
+          "fuzzyMatchThreshold": { "type": "number", "default": 0.85, "description": "Jaccard similarity threshold (0-1) for fuzzy param matching" },
+          "responseLevelDetection": { "type": "boolean", "default": true, "description": "Detect when the agent generates near-identical responses repeatedly" },
+          "responseSimilarityThreshold": { "type": "number", "default": 0.9, "description": "Text similarity threshold (0-1) for response repetition detection" },
+          "maxResponseHistory": { "type": "number", "default": 10, "description": "Number of recent responses to track" }
+        }
       }
     }
   },

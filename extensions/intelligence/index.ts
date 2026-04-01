@@ -8,13 +8,26 @@
  * - Domain knowledge injection
  * - Output formatting/cleaning
  * - Feedback recording for continuous improvement
+ * - Enhanced loop detection (DeerFlow-inspired) — early triggers, fuzzy matching, steering guidance
+ * - Progressive conversation summarization (DeerFlow-inspired) — configurable triggers, recent window
+ * - Coding agent delegation (DeerFlow ACP-inspired) — delegate to Claude Code CLI or similar
  *
  * Hook points:
- *   before_prompt_build  — analyze complexity, inject domain context
+ *   before_model_resolve — tier-based model selection
+ *   before_prompt_build  — analyze complexity, inject domain context, progressive summary, loop steering
  *   agent_end            — score confidence, validate coherence, record feedback
+ *   before_tool_call     — enhanced loop detection (priority 10)
+ *   after_tool_call      — record tool outcomes for loop analysis
+ *   llm_output           — response-level repetition detection
+ *   before/after_compaction — observe and track core compaction events
+ *   session_end          — cleanup per-session state
+ *
+ * Tools:
+ *   delegate_to_coding_agent — delegate complex coding tasks to external AI agents
  *
  * CLI commands:
- *   openclaw intel stats  — show aggregated feedback insights
+ *   openclaw intel stats    — show aggregated feedback insights
+ *   openclaw intel summary  — show a brief quality summary
  */
 
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
@@ -25,6 +38,20 @@ import {
 import { FeedbackLoop, type FeedbackEntry } from "./src/feedback/feedback-loop.js";
 import { SubAgentOrchestrator } from "./src/pipeline/sub-agent-orchestrator.js";
 import { ModelTierResolver } from "./src/pipeline/model-tier-resolver.js";
+import {
+  EnhancedLoopDetector,
+  type EnhancedLoopConfig,
+} from "./src/pipeline/enhanced-loop-detection.js";
+import {
+  EnhancedCompactionManager,
+  type EnhancedCompactionConfig,
+} from "./src/pipeline/enhanced-compaction.js";
+import {
+  CodingAgentDelegator,
+  type CodingAgentConfig,
+  CONFIG_DEFAULTS as DELEGATION_DEFAULTS,
+} from "./src/tools/coding-agent-delegator.js";
+import { createDelegateCodingAgentTool } from "./src/tools/delegate-coding-agent-tool.js";
 
 // ============================================================================
 // Plugin Definition
@@ -56,6 +83,24 @@ const intelligencePlugin = {
       (cfg as any).tierModelMap ?? {},
     );
 
+    // Enhanced loop detection (DeerFlow-inspired)
+    const loopCfg = ((cfg as any).enhancedLoopDetection ?? {}) as Partial<EnhancedLoopConfig>;
+    const loopDetector = new EnhancedLoopDetector(loopCfg);
+    const loopEnabled = loopCfg.enabled ?? false;
+
+    // Enhanced conversation summarization (DeerFlow-inspired)
+    const compactionCfg = ((cfg as any).enhancedCompaction ?? {}) as Partial<EnhancedCompactionConfig>;
+    const compactionMgr = new EnhancedCompactionManager(compactionCfg);
+    const compactionEnabled = compactionCfg.enabled ?? false;
+
+    // Coding agent delegation (DeerFlow ACP-inspired)
+    const delegationCfg = {
+      ...DELEGATION_DEFAULTS,
+      ...((cfg as any).codingAgentDelegation ?? {}),
+    } as CodingAgentConfig;
+    const delegationEnabled = delegationCfg.enabled ?? false;
+    const delegator = new CodingAgentDelegator(delegationCfg);
+
     api.logger.info("intelligence: plugin registered");
 
     // ========================================================================
@@ -86,7 +131,7 @@ const intelligencePlugin = {
     // Analyze complexity, detect domain, inject domain knowledge context
     // ========================================================================
 
-    api.on("before_prompt_build", async (event) => {
+    api.on("before_prompt_build", async (event, ctx) => {
       if (!enabled) return;
 
       const messages = event.messages as unknown[];
@@ -129,8 +174,35 @@ const intelligencePlugin = {
         }
 
         // Original domain context injection (non-chained path)
+        let prependParts: string[] = [];
         if (analysis.domainContext) {
-          return { prependContext: analysis.domainContext };
+          prependParts.push(analysis.domainContext);
+        }
+
+        // Check for response-level loop steering (from llm_output hook)
+        const sessionKey = ctx.sessionKey ?? ctx.agentId ?? "default";
+        if (loopEnabled) {
+          const responseLoopMsg = loopDetector.consumeResponseLoopFlag(sessionKey);
+          if (responseLoopMsg) {
+            prependParts.push(responseLoopMsg);
+            api.logger.warn("intelligence: injecting response-level loop steering");
+          }
+        }
+
+        // Enhanced progressive summarization
+        if (compactionEnabled) {
+          compactionMgr.recordComplexity(sessionKey, analysis.complexity);
+          const summary = compactionMgr.checkAndSummarize(messages, sessionKey);
+          if (summary) {
+            prependParts.push(summary);
+            api.logger.info(
+              `intelligence: progressive summary injected (${summary.length} chars)`,
+            );
+          }
+        }
+
+        if (prependParts.length > 0) {
+          return { prependContext: prependParts.join("\n\n") };
         }
       } catch (err) {
         api.logger.warn(`intelligence: before_prompt_build failed: ${String(err)}`);
@@ -221,6 +293,88 @@ const intelligencePlugin = {
       } catch (err) {
         api.logger.warn(`intelligence: agent_end evaluation failed: ${String(err)}`);
       }
+    });
+
+    // ========================================================================
+    // Hook: before_tool_call (Enhanced Loop Detection)
+    // Priority 10 — runs before core's default-priority (0) loop detection
+    // ========================================================================
+
+    api.on(
+      "before_tool_call",
+      async (event, ctx) => {
+        if (!loopEnabled) return;
+        const sessionKey = ctx.sessionKey ?? ctx.agentId ?? "default";
+        const result = loopDetector.check(event.toolName, event.params, sessionKey);
+        if (result.detected) {
+          api.logger.warn(
+            `intelligence: enhanced loop detected — category=${result.category}, ` +
+            `tool=${event.toolName}, count=${result.count}`,
+          );
+          return { block: true, blockReason: result.guidance };
+        }
+      },
+      { priority: 10 },
+    );
+
+    // ========================================================================
+    // Hook: after_tool_call (Record outcome for no-progress tracking)
+    // ========================================================================
+
+    api.on("after_tool_call", async (event, ctx) => {
+      if (!loopEnabled) return;
+      const sessionKey = ctx.sessionKey ?? ctx.agentId ?? "default";
+      loopDetector.recordOutcome(
+        event.toolName,
+        event.params,
+        event.result,
+        event.error,
+        sessionKey,
+      );
+    });
+
+    // ========================================================================
+    // Hook: llm_output (Response-level loop detection)
+    // ========================================================================
+
+    api.on("llm_output", async (event, ctx) => {
+      if (!loopEnabled) return;
+      const sessionKey = ctx.sessionKey ?? ctx.agentId ?? "default";
+      loopDetector.trackResponse(event.assistantTexts, sessionKey);
+    });
+
+    // ========================================================================
+    // Hook: before_compaction (Observe core compaction for metrics)
+    // ========================================================================
+
+    api.on("before_compaction", async (event, ctx) => {
+      if (!compactionEnabled) return;
+      const sessionKey = ctx.sessionKey ?? ctx.agentId ?? "default";
+      const snapshot = compactionMgr.logCompactionEvent(sessionKey, event as any);
+      api.logger.info(
+        `intelligence: core compaction triggered — msgs=${snapshot.metricsSnapshot.messageCount}, ` +
+        `tokens=${snapshot.metricsSnapshot.estimatedTokens}`,
+      );
+    });
+
+    // ========================================================================
+    // Hook: after_compaction (Invalidate cache after core compaction)
+    // ========================================================================
+
+    api.on("after_compaction", async (_event, ctx) => {
+      if (!compactionEnabled) return;
+      const sessionKey = ctx.sessionKey ?? ctx.agentId ?? "default";
+      compactionMgr.invalidateCache(sessionKey);
+    });
+
+    // ========================================================================
+    // Hook: session_end (Cleanup state)
+    // ========================================================================
+
+    api.on("session_end", async (_event, ctx) => {
+      const sessionKey = ctx.sessionId ?? ctx.agentId ?? "default";
+      if (loopEnabled) loopDetector.clearSession(sessionKey);
+      if (compactionEnabled) compactionMgr.clearSession(sessionKey);
     });
 
     // ========================================================================
@@ -342,8 +496,24 @@ const intelligencePlugin = {
     api.registerService({
       id: "intelligence",
       start: () => api.logger.info("intelligence: pipeline active"),
-      stop: () => api.logger.info("intelligence: pipeline stopped"),
+      stop: () => {
+        delegator.killAll();
+        api.logger.info("intelligence: pipeline stopped");
+      },
     });
+
+    // ========================================================================
+    // Tool: delegate_to_coding_agent (ACP-style external agent delegation)
+    // ========================================================================
+
+    if (delegationEnabled) {
+      api.registerTool(
+        createDelegateCodingAgentTool(delegator, delegationCfg, api.logger),
+      );
+      api.logger.info(
+        `intelligence: coding agent delegation enabled (agents: ${Object.keys(delegationCfg.agents).join(", ")})`,
+      );
+    }
   },
 };
 
