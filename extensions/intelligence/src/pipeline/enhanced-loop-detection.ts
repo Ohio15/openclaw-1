@@ -227,8 +227,9 @@ export class EnhancedLoopDetector {
     const hash = simpleHash(flat);
 
     // Strategy 1: Early identical detection
+    // identicalCount is from history; +1 includes the current call
     const identicalCount = this.countIdentical(state, toolName, hash);
-    if (identicalCount >= this.config.earlyDetectionThreshold) {
+    if (identicalCount + 1 >= this.config.earlyDetectionThreshold) {
       const category = this.categorizeIdentical(state, toolName, hash);
       return {
         detected: true,
@@ -405,7 +406,7 @@ export class EnhancedLoopDetector {
       }
     }
 
-    if (fuzzyCount >= detectionThreshold) {
+    if (fuzzyCount + 1 >= detectionThreshold) {
       return {
         detected: true,
         category: "fuzzy_repeat",
