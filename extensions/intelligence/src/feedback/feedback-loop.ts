@@ -82,23 +82,6 @@ export interface FeedbackInsights {
 // Helpers
 // ============================================================================
 
-/**
- * Detect request category from keywords (mirrors AICodeAssistant's detectCategory).
- */
-export function detectCategory(text: string): string {
-  const lower = text.toLowerCase();
-
-  if (/algorithm|data structure|sort|search|tree|graph|heap/.test(lower)) return "algorithm";
-  if (/security|auth|jwt|oauth|csrf|xss/.test(lower)) return "security";
-  if (/react|vue|angular|frontend|component|hook/.test(lower)) return "frontend";
-  if (/express|api|backend|server|endpoint|rest/.test(lower)) return "backend";
-  if (/docker|kubernetes|ci\/cd|deploy/.test(lower)) return "devops";
-  if (/mongodb|postgres|database|prisma|sql/.test(lower)) return "database";
-  if (/test|jest|vitest|playwright/.test(lower)) return "testing";
-  if (/websocket|realtime|socket/.test(lower)) return "realtime";
-
-  return "general";
-}
 
 // ============================================================================
 // FeedbackLoop Class

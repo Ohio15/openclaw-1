@@ -1,8 +1,8 @@
 {
   "name": "@openclaw/intelligence",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "Intelligence pipeline extension: complexity decomposition, confidence scoring, self-review, multi-pass generation",
+  "description": "Intelligence pipeline extension: complexity decomposition, quality gating, domain knowledge injection",
   "type": "module",
   "devDependencies": {
     "openclaw": "workspace:*"

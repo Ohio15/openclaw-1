@@ -1,24 +1,16 @@
 /**
- * IntelligenceControlPlane - OpenClaw hook-oriented intelligence pipeline
+ * IntelligenceControlPlane — Pre-agent analysis for OpenClaw lifecycle hooks.
  *
- * NOT a direct port of AICodeAssistant's ControlPlane. This is a reimagining
- * that exposes the intelligence pipeline as OpenClaw lifecycle hooks:
+ * Provides complexity analysis, domain detection, tier routing, and
+ * knowledge retrieval. Post-agent quality assessment is handled separately
+ * by quality-gate.ts.
  *
- *   before_prompt_build  ->  analyzeBeforeAgent()
- *   agent_end            ->  evaluateAfterAgent()
- *
- * Internally orchestrates: ComplexityDecomposer, ConfidenceScorer,
- * CoherenceGate, RefusalDetector, DomainKnowledge, OutputFormatter.
+ *   before_model_resolve / before_prompt_build  ->  analyzeBeforeAgent()
  *
  * @module control-plane
  */
 
 import { analyzeComplexity } from "./complexity-decomposer.js";
-import { scoreConfidence } from "./confidence-scorer.js";
-import { getCoherenceGate } from "./coherence-gate.js";
-import { detectRefusal } from "./refusal-detector.js";
-import { buildKnowledgeContext } from "./domain-knowledge.js";
-import { getOutputFormatter } from "./output-formatter.js";
 import {
   getSemanticKnowledge,
   complexityBasedMaxResults,
@@ -37,13 +29,6 @@ import {
 
 export interface IntelligenceConfig {
   enabled: boolean;
-  selfReviewEnabled: boolean;
-  multiPassEnabled: boolean;
-  qualityThresholds?: {
-    min?: number;
-    good?: number;
-    high?: number;
-  };
   pipelineRules?: {
     complexityThreshold?: number;
     maxSimpleRequirements?: number;
@@ -51,11 +36,6 @@ export interface IntelligenceConfig {
   feedbackPath?: string;
   /** Knowledge source: "semantic" (shared-brain), "static" (hardcoded), "hybrid" (semantic + static fallback) */
   knowledgeSource?: "semantic" | "static" | "hybrid";
-}
-
-export interface Message {
-  role: string;
-  content: string | unknown[];
 }
 
 export interface BeforeAgentAnalysis {
@@ -75,60 +55,16 @@ export interface BeforeAgentAnalysis {
   requirementCount: number;
 }
 
-export interface AfterAgentEvaluation {
-  /** Confidence score 0-1 */
-  confidenceScore: number;
-  /** Whether the response passes the coherence gate */
-  isCoherent: boolean;
-  /** Whether a refusal was detected in the response */
-  refusalDetected: boolean;
-  /** Formatted/cleaned response content */
-  formattedContent: string;
-  /** Detected task type for output formatting */
-  taskType: string;
-}
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-/**
- * Extract the text content from a message array (handles string and content-block formats).
- */
-function extractText(messages: unknown[]): string {
-  const parts: string[] = [];
-
-  for (const msg of messages) {
-    if (!msg || typeof msg !== "object") continue;
-    const m = msg as Record<string, unknown>;
-
-    const content = m.content;
-    if (typeof content === "string") {
-      parts.push(content);
-      continue;
-    }
-
-    if (Array.isArray(content)) {
-      for (const block of content) {
-        if (
-          block &&
-          typeof block === "object" &&
-          (block as Record<string, unknown>).type === "text" &&
-          typeof (block as Record<string, unknown>).text === "string"
-        ) {
-          parts.push((block as Record<string, unknown>).text as string);
-        }
-      }
-    }
-  }
-
-  return parts.join("\n");
-}
 
 /**
  * Extract user prompt from messages (last user message).
  */
-function extractUserPrompt(messages: unknown[]): string {
+export function extractUserPrompt(messages: unknown[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (!msg || typeof msg !== "object") continue;
@@ -155,36 +91,46 @@ function extractUserPrompt(messages: unknown[]): string {
 }
 
 /**
- * Detect domain from text using keyword patterns.
+ * Detect domain from text using keyword patterns with priority-based matching.
+ * Returns the most specific matching domain (highest priority wins).
  * Mirrors DOMAIN_ESCALATIONS keys for consistency.
  */
-function detectDomain(text: string): string | null {
+export function detectDomain(text: string): string | null {
   const lower = text.toLowerCase();
 
-  const domainPatterns: Array<[string, RegExp]> = [
-    ["auth", /\b(authentication|authorization|oauth|jwt|login.?flow|auth.?middleware)\b/],
-    ["security", /\b(security.?audit|encryption|hash|csrf|xss|injection|vulnerability)\b/],
-    ["jwt", /\bjwt\b/],
-    ["oauth", /\boauth\b/],
-    ["rate_limiter", /\brate.?limit/],
-    ["token_bucket", /\btoken.?bucket/],
-    ["sliding_window", /\bsliding.?window/],
-    ["circuit_breaker", /\bcircuit.?breaker/],
-    ["cache", /\b(cache|caching|lru|memoiz)/],
-    ["tree", /\b(binary.?tree|b-tree|avl|red.?black)\b/],
-    ["graph", /\b(graph|dijkstra|bfs|dfs|shortest.?path)\b/],
-    ["heap", /\b(heap|priority.?queue)\b/],
-    ["trie", /\btrie\b/],
-    ["database", /\b(database|sql|postgres|mysql|mongo|prisma|query)\b/],
-    ["api", /\b(api|endpoint|rest|graphql|grpc)\b/],
-    ["middleware", /\bmiddleware\b/],
+  // [domain, pattern, priority] — higher priority = more specific
+  const domainPatterns: Array<[string, RegExp, number]> = [
+    // Most specific domains (high priority)
+    ["token_bucket", /\btoken.?bucket/, 10],
+    ["sliding_window", /\bsliding.?window/, 10],
+    ["circuit_breaker", /\bcircuit.?breaker/, 10],
+    ["rate_limiter", /\brate.?limit/, 9],
+    ["jwt", /\bjwt\b/, 9],
+    ["oauth", /\boauth\b/, 9],
+    ["trie", /\btrie\b/, 8],
+    ["heap", /\b(heap|priority.?queue)\b/, 8],
+    ["tree", /\b(binary.?tree|b-tree|avl|red.?black)\b/, 8],
+    ["graph", /\b(graph|dijkstra|bfs|dfs|shortest.?path)\b/, 8],
+    // Broad categories (lower priority)
+    ["security", /\b(security.?audit|encryption|hash|csrf|xss|injection|vulnerability)\b/, 5],
+    ["auth", /\b(authentication|authorization|login.?flow|auth.?middleware)\b/, 5],
+    ["cache", /\b(cache|caching|lru|memoiz)/, 5],
+    ["database", /\b(database|sql|postgres|mysql|mongo|prisma)\b/, 4],
+    ["middleware", /\bmiddleware\b/, 3],
+    ["api", /\b(api|endpoint|rest|graphql|grpc)\b/, 3],
   ];
 
-  for (const [domain, pattern] of domainPatterns) {
-    if (pattern.test(lower)) return domain;
+  let bestDomain: string | null = null;
+  let bestPriority = -1;
+
+  for (const [domain, pattern, priority] of domainPatterns) {
+    if (pattern.test(lower) && priority > bestPriority) {
+      bestDomain = domain;
+      bestPriority = priority;
+    }
   }
 
-  return null;
+  return bestDomain;
 }
 
 /**
@@ -234,13 +180,6 @@ export class IntelligenceControlPlane {
   constructor(config: Partial<IntelligenceConfig> = {}) {
     this.config = {
       enabled: config.enabled ?? true,
-      selfReviewEnabled: config.selfReviewEnabled ?? true,
-      multiPassEnabled: config.multiPassEnabled ?? false,
-      qualityThresholds: {
-        min: config.qualityThresholds?.min ?? 0.65,
-        good: config.qualityThresholds?.good ?? 0.75,
-        high: config.qualityThresholds?.high ?? 0.85,
-      },
       pipelineRules: {
         complexityThreshold: config.pipelineRules?.complexityThreshold ?? 0.4,
         maxSimpleRequirements: config.pipelineRules?.maxSimpleRequirements ?? 3,
@@ -314,48 +253,4 @@ export class IntelligenceControlPlane {
     };
   }
 
-  /**
-   * Evaluate the agent's response AFTER it completes.
-   *
-   * Called from the `agent_end` hook. Scores confidence, checks coherence,
-   * detects refusals, and formats output.
-   */
-  async evaluateAfterAgent(
-    messages: unknown[],
-    response: string,
-    metadata?: Record<string, unknown>,
-  ): Promise<AfterAgentEvaluation> {
-    const userPrompt = extractUserPrompt(messages);
-    const taskType = detectTaskType(userPrompt);
-
-    // 1. Confidence scoring
-    const confidenceResult = scoreConfidence(response, {
-      taskType,
-      promptLength: userPrompt.length,
-      hasCode: /```/.test(response),
-    });
-
-    // 2. Coherence check (does the response actually address the prompt?)
-    const coherenceGate = getCoherenceGate();
-    const coherenceResult = await coherenceGate.validate(
-      response,
-      { prompt: userPrompt, intent: taskType },
-    );
-
-    // 3. Refusal detection
-    const refusalResult = detectRefusal(response);
-
-    // 4. Output formatting/cleaning
-    const formatter = getOutputFormatter();
-    const formatted = formatter.format({ content: response, taskType });
-    const formattedContent = formatted.content;
-
-    return {
-      confidenceScore: confidenceResult.score,
-      isCoherent: coherenceResult.pass ?? coherenceResult.coherent ?? true,
-      refusalDetected: refusalResult.isRefusal,
-      formattedContent,
-      taskType,
-    };
-  }
 }

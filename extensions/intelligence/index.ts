@@ -3,19 +3,17 @@
  *
  * Augments AI responses with:
  * - Complexity decomposition and pipeline selection
- * - Confidence scoring and coherence checking
- * - Refusal detection
- * - Domain knowledge injection
- * - Output formatting/cleaning
+ * - Quality gating (placeholder/refusal/truncation detection with actionable verdicts)
+ * - Domain knowledge injection via shared-brain
  * - Feedback recording for continuous improvement
  * - Enhanced loop detection (DeerFlow-inspired) — early triggers, fuzzy matching, steering guidance
  * - Progressive conversation summarization (DeerFlow-inspired) — configurable triggers, recent window
  * - Coding agent delegation (DeerFlow ACP-inspired) — delegate to Claude Code CLI or similar
  *
  * Hook points:
- *   before_model_resolve — tier-based model selection
- *   before_prompt_build  — analyze complexity, inject domain context, progressive summary, loop steering
- *   agent_end            — score confidence, validate coherence, record feedback
+ *   before_model_resolve — tier-based model selection (cached)
+ *   before_prompt_build  — analyze complexity, inject domain context, progressive summary, loop steering (cached)
+ *   agent_end            — quality gate, record feedback (uses cached analysis)
  *   before_tool_call     — enhanced loop detection (priority 10)
  *   after_tool_call      — record tool outcomes for loop analysis
  *   llm_output           — response-level repetition detection
@@ -34,10 +32,14 @@ import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 import {
   IntelligenceControlPlane,
   type IntelligenceConfig,
+  extractUserPrompt,
 } from "./src/pipeline/control-plane.js";
 import { FeedbackLoop, type FeedbackEntry } from "./src/feedback/feedback-loop.js";
 import { SubAgentOrchestrator } from "./src/pipeline/sub-agent-orchestrator.js";
 import { ModelTierResolver } from "./src/pipeline/model-tier-resolver.js";
+import { assessQuality } from "./src/pipeline/quality-gate.js";
+import { AnalysisCache, promptHash } from "./src/pipeline/analysis-cache.js";
+import type { BeforeAgentAnalysis } from "./src/pipeline/control-plane.js";
 import {
   EnhancedLoopDetector,
   type EnhancedLoopConfig,
@@ -61,7 +63,7 @@ const intelligencePlugin = {
   id: "intelligence",
   name: "Intelligence Pipeline",
   description:
-    "Response quality augmentation: complexity decomposition, confidence scoring, self-review, multi-pass generation, domain knowledge injection",
+    "Response quality augmentation: complexity decomposition, quality gating, domain knowledge injection",
 
   register(api: OpenClawPluginApi) {
     const cfg = (api.pluginConfig ?? {}) as Partial<IntelligenceConfig>;
@@ -82,6 +84,26 @@ const intelligencePlugin = {
     const tierResolver = new ModelTierResolver(
       (cfg as any).tierModelMap ?? {},
     );
+
+    // Analysis cache — prevents triple-computation across hooks
+    const analysisCache = new AnalysisCache<BeforeAgentAnalysis>(60_000);
+
+    /**
+     * Get or compute the before-agent analysis, using cache to avoid
+     * redundant shared-brain HTTP calls across hooks in the same request.
+     */
+    async function getCachedAnalysis(
+      messages: unknown[],
+    ): Promise<BeforeAgentAnalysis> {
+      const userPrompt = extractUserPrompt(messages);
+      const key = promptHash(userPrompt);
+      const cached = analysisCache.get(key);
+      if (cached) return cached;
+
+      const result = await controlPlane.analyzeBeforeAgent(messages);
+      analysisCache.set(key, result);
+      return result;
+    }
 
     // Enhanced loop detection (DeerFlow-inspired)
     const loopCfg = ((cfg as any).enhancedLoopDetection ?? {}) as Partial<EnhancedLoopConfig>;
@@ -105,7 +127,7 @@ const intelligencePlugin = {
 
     // ========================================================================
     // Hook: before_model_resolve
-    // Select model/provider override based on tier analysis
+    // Select model/provider override based on tier analysis (CACHED)
     // ========================================================================
 
     api.on("before_model_resolve", async (event) => {
@@ -113,7 +135,7 @@ const intelligencePlugin = {
       try {
         const messages = event.messages as unknown[];
         if (!messages || messages.length === 0) return;
-        const analysis = await controlPlane.analyzeBeforeAgent(messages);
+        const analysis = await getCachedAnalysis(messages);
         const override = tierResolver.resolve(analysis.tierSelection);
         if (override?.modelOverride || override?.providerOverride) {
           api.logger.info(
@@ -128,7 +150,7 @@ const intelligencePlugin = {
 
     // ========================================================================
     // Hook: before_prompt_build
-    // Analyze complexity, detect domain, inject domain knowledge context
+    // Analyze complexity, detect domain, inject domain knowledge context (CACHED)
     // ========================================================================
 
     api.on("before_prompt_build", async (event, ctx) => {
@@ -138,7 +160,7 @@ const intelligencePlugin = {
       if (!messages || messages.length === 0) return;
 
       try {
-        const analysis = await controlPlane.analyzeBeforeAgent(messages);
+        const analysis = await getCachedAnalysis(messages);
 
         api.logger.info(
           `intelligence: complexity=${analysis.complexity.toFixed(2)}, ` +
@@ -211,7 +233,7 @@ const intelligencePlugin = {
 
     // ========================================================================
     // Hook: agent_end
-    // Score confidence, validate coherence, detect refusals, record feedback
+    // Quality gate assessment, record feedback (uses CACHED analysis)
     // ========================================================================
 
     api.on("agent_end", async (event) => {
@@ -221,7 +243,6 @@ const intelligencePlugin = {
       if (!messages || messages.length === 0) return;
 
       // Extract the last assistant response from the messages array
-      // (agent_end event provides messages but not a separate response field)
       let response = "";
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i] as Record<string, unknown> | null;
@@ -238,15 +259,12 @@ const intelligencePlugin = {
       if (!response) return;
 
       try {
-        const evaluation = await controlPlane.evaluateAfterAgent(
-          messages ?? [],
-          response,
-        );
+        // Quality gate — actionable assessment
+        const qualityResult = assessQuality(response);
 
-        // Run the before-agent analysis again to get tier/pipeline/domain for feedback
-        // (triggers shared-brain recall but results are only used for metadata)
-        const analysis = messages && messages.length > 0
-          ? await controlPlane.analyzeBeforeAgent(messages)
+        // Get cached analysis for metadata (no recomputation)
+        const analysis = messages.length > 0
+          ? await getCachedAnalysis(messages)
           : null;
 
         // Check for chained execution output
@@ -258,24 +276,23 @@ const intelligencePlugin = {
         if (chainOutputs.size > 0) {
           chainedExecution = true;
           subTaskCount = chainOutputs.size;
-          // Simple per-step quality check
           for (const [step, content] of chainOutputs) {
             const hasContent = content.length > 0 ? 0.3 : 0;
             const hasLength = content.length > 100 ? 0.2 : 0;
             const hasCode = /```/.test(content) ? 0.2 : 0;
-            subTaskScores[step] = hasContent + hasLength + hasCode + 0.3; // base 0.3 for existing
+            subTaskScores[step] = hasContent + hasLength + hasCode + 0.3;
           }
         }
 
         // Record feedback entry
         const entry: FeedbackEntry = {
-          confidence: evaluation.confidenceScore,
-          coherent: evaluation.isCoherent,
+          confidence: qualityResult.score,
+          coherent: qualityResult.verdict !== "retry",
           timestamp: Date.now(),
-          category: evaluation.taskType,
+          category: "general",
           tier: analysis?.tierSelection.tier,
           pipeline: analysis?.pipelineSelection.pipeline,
-          refusalDetected: evaluation.refusalDetected,
+          refusalDetected: qualityResult.issues.some((i) => i.type === "explicit_refusal"),
           complexity: analysis?.complexity,
           domain: analysis?.domain ?? undefined,
           chainedExecution: chainedExecution || undefined,
@@ -286,9 +303,10 @@ const intelligencePlugin = {
         await feedback.record(entry);
 
         api.logger.info(
-          `intelligence: confidence=${evaluation.confidenceScore.toFixed(2)}, ` +
-          `coherent=${evaluation.isCoherent}, ` +
-          `refusal=${evaluation.refusalDetected}`,
+          `intelligence: verdict=${qualityResult.verdict}, ` +
+          `score=${qualityResult.score.toFixed(2)}, ` +
+          `issues=${qualityResult.issues.length}, ` +
+          `refusal=${entry.refusalDetected}`,
         );
       } catch (err) {
         api.logger.warn(`intelligence: agent_end evaluation failed: ${String(err)}`);
@@ -375,6 +393,7 @@ const intelligencePlugin = {
       const sessionKey = ctx.sessionId ?? ctx.agentId ?? "default";
       if (loopEnabled) loopDetector.clearSession(sessionKey);
       if (compactionEnabled) compactionMgr.clearSession(sessionKey);
+      analysisCache.clear(); // Sweep all — session is done
     });
 
     // ========================================================================
@@ -440,14 +459,9 @@ const intelligencePlugin = {
     );
 
     // ========================================================================
-    // Service Registration
-    // ========================================================================
-
-    // ========================================================================
     // Gateway Method: Dashboard Data
     // ========================================================================
 
-    // Dashboard data via HTTP route (more reliable than gateway WS method)
     api.registerHttpRoute({
       path: "/intelligence/dashboard",
       handler: async (_req: any, res: any) => {
@@ -492,6 +506,10 @@ const intelligencePlugin = {
       },
     });
     api.logger.info("intelligence: HTTP route /intelligence/dashboard registered");
+
+    // ========================================================================
+    // Service Registration
+    // ========================================================================
 
     api.registerService({
       id: "intelligence",
