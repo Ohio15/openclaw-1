@@ -55,6 +55,8 @@ type BrainRecallResult = {
     sim: number;
     ty: string;
     tg: string[];
+    age_days?: number;
+    freshness_note?: string | null;
   }>;
 };
 
@@ -490,11 +492,11 @@ function escapeForPrompt(text: string): string {
  * Format recalled memories as a context block for prompt injection.
  */
 function formatMemoriesContext(
-  memories: Array<{ content: string; type: string; score: number; tags: string[] }>,
+  memories: Array<{ content: string; type: string; score: number; tags: string[]; freshness_note?: string | null }>,
 ): string {
   const lines = memories.map(
     (m, i) =>
-      `${i + 1}. [${m.type}${m.tags.length > 0 ? ` | ${m.tags.join(", ")}` : ""}] ${escapeForPrompt(m.content)} (relevance: ${(m.score * 100).toFixed(0)}%)`,
+      `${i + 1}. [${m.type}${m.tags.length > 0 ? ` | ${m.tags.join(", ")}` : ""}] ${escapeForPrompt(m.content)} (relevance: ${(m.score * 100).toFixed(0)}%)${m.freshness_note ? ` \u26a0\ufe0f ${m.freshness_note}` : ""}`,
   );
   return [
     "<relevant-memories>",
@@ -586,7 +588,7 @@ const memorySharedBrainPlugin = {
           const text = filtered
             .map(
               (r, i) =>
-                `${i + 1}. [${r.ty}${r.tg.length > 0 ? ` | ${r.tg.join(", ")}` : ""}] ${r.c} (${(r.score * 100).toFixed(0)}% relevance)`,
+                `${i + 1}. [${r.ty}${r.tg.length > 0 ? ` | ${r.tg.join(", ")}` : ""}] ${r.c} (${(r.score * 100).toFixed(0)}% relevance)${r.freshness_note ? ` \u26a0\ufe0f ${r.freshness_note}` : ""}`,
             )
             .join("\n");
 
@@ -606,6 +608,8 @@ const memorySharedBrainPlugin = {
                 similarity: r.sim,
                 type: r.ty,
                 tags: r.tg,
+                ...(r.age_days !== undefined ? { age_days: r.age_days } : {}),
+                ...(r.freshness_note ? { freshness_note: r.freshness_note } : {}),
               })),
             },
           };
@@ -959,6 +963,7 @@ const memorySharedBrainPlugin = {
               type: r.ty,
               score: r.score,
               tags: r.tg,
+              freshness_note: r.freshness_note,
             })),
           );
 
@@ -1085,6 +1090,8 @@ const memorySharedBrainPlugin = {
                     similarity: r.sim,
                     type: r.ty,
                     tags: r.tg,
+                    ...(r.age_days !== undefined ? { age_days: r.age_days } : {}),
+                    ...(r.freshness_note ? { freshness_note: r.freshness_note } : {}),
                   })),
                   null,
                   2,

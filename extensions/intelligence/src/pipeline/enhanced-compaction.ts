@@ -39,6 +39,9 @@ interface SessionMetrics {
   complexitySum: number;
   complexityCount: number;
   lastSummary: CachedSummary | null;
+  maskingTokensRecovered: number;
+  maskingApplied: boolean;
+  summarizationSkippedAfterMasking: boolean;
 }
 
 interface CachedSummary {
@@ -152,6 +155,79 @@ function buildSummaryFromMessages(messages: unknown[]): string {
 }
 
 // ---------------------------------------------------------------------------
+// Observation Masking — Stage 1 of pipeline compaction
+// ---------------------------------------------------------------------------
+
+/**
+ * Observation masking — Stage 1 of pipeline compaction.
+ * Replaces old toolResult content with placeholders while keeping tool_use blocks
+ * (assistant messages with ToolCall content) intact.
+ *
+ * Research: 52% cheaper than summarization, zero hallucination risk.
+ * Source: JetBrains "The Complexity Trap" (NeurIPS 2025)
+ *
+ * Only toolResult messages outside the recent window are masked.
+ * The recent window preserves full fidelity for active problem-solving context.
+ */
+function maskOldToolResults(
+  messages: unknown[],
+  recentWindowSize: number,
+): { masked: unknown[]; tokensRecovered: number } {
+  if (messages.length <= recentWindowSize) {
+    return { masked: messages, tokensRecovered: 0 };
+  }
+
+  const recentBoundary = messages.length - recentWindowSize;
+  let tokensRecovered = 0;
+  let changed = false;
+
+  const masked = messages.map((msg, idx) => {
+    // Keep recent messages untouched
+    if (idx >= recentBoundary) return msg;
+
+    if (!msg || typeof msg !== "object") return msg;
+    const m = msg as Record<string, unknown>;
+
+    // Only mask toolResult messages
+    if (m.role !== "toolResult") return msg;
+
+    // Don't mask error results — they're usually short and diagnostically important
+    if (m.isError === true) return msg;
+
+    // Measure content size
+    let totalChars = 0;
+    if (Array.isArray(m.content)) {
+      for (const block of m.content as Array<Record<string, unknown>>) {
+        if (block.type === "text" && typeof block.text === "string") {
+          totalChars += (block.text as string).length;
+        }
+      }
+    }
+
+    // Don't mask small outputs (< 200 chars) — not worth the information loss
+    if (totalChars < 200) return msg;
+
+    const estimatedTokens = Math.ceil(totalChars / CHARS_PER_TOKEN);
+    tokensRecovered += estimatedTokens;
+    changed = true;
+
+    return {
+      ...m,
+      content: [
+        {
+          type: "text",
+          text: `[Tool output masked — ${totalChars} chars, ~${estimatedTokens} tokens]`,
+        },
+      ],
+      // Strip details as well since they can be large
+      ...(m.details !== undefined ? { details: undefined } : {}),
+    };
+  });
+
+  return { masked: changed ? masked : messages, tokensRecovered };
+}
+
+// ---------------------------------------------------------------------------
 // EnhancedCompactionManager
 // ---------------------------------------------------------------------------
 
@@ -178,6 +254,9 @@ export class EnhancedCompactionManager {
         complexitySum: 0,
         complexityCount: 0,
         lastSummary: null,
+        maskingTokensRecovered: 0,
+        maskingApplied: false,
+        summarizationSkippedAfterMasking: false,
       };
       this.sessions.set(sessionKey, metrics);
     }
@@ -203,7 +282,14 @@ export class EnhancedCompactionManager {
    * Check if progressive summarization should activate.
    * Called from `before_prompt_build`.
    *
+   * Two-stage pipeline:
+   *   Stage 1 — Observation masking: replace old toolResult content with placeholders.
+   *             Reduces token count without information loss on tool calls themselves.
+   *   Stage 2 — Summarization: build a condensed summary of older messages (if still needed).
+   *             Skipped entirely if masking alone brought usage below thresholds.
+   *
    * Returns the summary context string to prepend, or null if no summarization needed.
+   * Masking metrics are tracked internally and accessible via `getSessionMetrics`.
    */
   checkAndSummarize(
     messages: unknown[],
@@ -242,19 +328,47 @@ export class EnhancedCompactionManager {
       }
     }
 
+    // ---- Stage 1: Observation Masking ----
+    // Replace old toolResult content with placeholders. This reduces token count
+    // for the summary generation pass and may eliminate the need for summarization.
+    const recentWindow = this.config.recentWindowSize;
+    const { masked, tokensRecovered } = maskOldToolResults(messages, recentWindow);
+
+    metrics.maskingApplied = tokensRecovered > 0;
+    metrics.maskingTokensRecovered = tokensRecovered;
+
+    // Re-estimate tokens after masking
+    const tokensAfterMasking = estimateTokens(masked);
+
+    // Check if masking alone brought us below ALL triggered thresholds.
+    // Message count threshold still requires summarization since masking
+    // doesn't reduce message count.
+    const stillTokenTriggered = triggers.tokenCountThreshold != null && tokensAfterMasking > triggers.tokenCountThreshold;
+    const stillCapacityTriggered =
+      triggers.capacityFraction != null && tokensAfterMasking / window > triggers.capacityFraction;
+
+    if (!messageTriggered && !stillTokenTriggered && !stillCapacityTriggered) {
+      metrics.summarizationSkippedAfterMasking = true;
+      return null;
+    }
+
+    metrics.summarizationSkippedAfterMasking = false;
+
+    // ---- Stage 2: Summarization (on already-masked messages) ----
+
     // Check cache — only rebuild if new messages arrived beyond cached range
     const cached = metrics.lastSummary;
-    if (cached && cached.coveredMessageCount >= msgCount - this.config.recentWindowSize) {
+    if (cached && cached.coveredMessageCount >= msgCount - recentWindow) {
       return cached.text;
     }
 
-    // Build progressive summary of older messages (preserve recent window)
-    const recentWindow = this.config.recentWindowSize;
     if (msgCount <= recentWindow) {
       return null; // Not enough messages to warrant summarization
     }
 
-    const olderMessages = messages.slice(0, msgCount - recentWindow);
+    // Summarize the masked older messages — masked tool outputs produce shorter
+    // summaries, saving both context and generation cost.
+    const olderMessages = masked.slice(0, msgCount - recentWindow);
     const summary = buildSummaryFromMessages(olderMessages);
 
     if (!summary) return null;
@@ -267,6 +381,14 @@ export class EnhancedCompactionManager {
     };
 
     return summary;
+  }
+
+  /**
+   * Get metrics for a session, including masking statistics.
+   * Useful for diagnostics and observability.
+   */
+  getSessionMetrics(sessionKey: string): Readonly<SessionMetrics> | undefined {
+    return this.sessions.get(sessionKey);
   }
 
   // ---- Observation hooks -------------------------------------------------

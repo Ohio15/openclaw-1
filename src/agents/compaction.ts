@@ -387,3 +387,83 @@ export function pruneHistoryForContextShare(params: {
 export function resolveContextWindowTokens(model?: ExtensionContext["model"]): number {
   return Math.max(1, Math.floor(model?.contextWindow ?? DEFAULT_CONTEXT_TOKENS));
 }
+
+// ---------------------------------------------------------------------------
+// Observation Masking — Stage 1 of pipeline compaction
+// ---------------------------------------------------------------------------
+
+/**
+ * Observation masking — Stage 1 of pipeline compaction.
+ * Replaces old toolResult content with placeholders while keeping tool_use blocks
+ * (assistant messages with ToolCall content) intact.
+ *
+ * Research: 52% cheaper than summarization, zero hallucination risk.
+ * Source: JetBrains "The Complexity Trap" (NeurIPS 2025)
+ *
+ * Only toolResult messages outside the recent window are masked.
+ * The recent window preserves full fidelity for active problem-solving context.
+ */
+export function maskOldToolResults(
+  messages: AgentMessage[],
+  recentWindowSize: number = 6,
+): { masked: AgentMessage[]; tokensRecovered: number } {
+  if (messages.length <= recentWindowSize) {
+    return { masked: messages, tokensRecovered: 0 };
+  }
+
+  const recentBoundary = messages.length - recentWindowSize;
+  let tokensRecovered = 0;
+  let changed = false;
+
+  const masked = messages.map((msg, idx) => {
+    // Keep recent messages untouched
+    if (idx >= recentBoundary) return msg;
+
+    // Only mask toolResult messages (role === "toolResult")
+    if (!msg || typeof msg !== "object" || (msg as { role?: unknown }).role !== "toolResult") {
+      return msg;
+    }
+
+    const toolResultMsg = msg as {
+      role: "toolResult";
+      toolCallId: string;
+      toolName: string;
+      content: Array<{ type: string; text?: string }>;
+      details?: unknown;
+      isError: boolean;
+      timestamp: number;
+    };
+
+    // Don't mask error results — they're usually short and diagnostically important
+    if (toolResultMsg.isError) return msg;
+
+    // Don't mask if content is already small (< 200 chars total)
+    const totalChars = toolResultMsg.content.reduce((sum, block) => {
+      if (block.type === "text" && typeof block.text === "string") {
+        return sum + block.text.length;
+      }
+      return sum;
+    }, 0);
+
+    if (totalChars < 200) return msg;
+
+    // Mask: replace content with a placeholder preserving tool identity
+    const estimatedTokens = Math.ceil(totalChars / 4);
+    tokensRecovered += estimatedTokens;
+    changed = true;
+
+    return {
+      ...toolResultMsg,
+      content: [
+        {
+          type: "text" as const,
+          text: `[Tool output masked — ${totalChars} chars, ~${estimatedTokens} tokens]`,
+        },
+      ],
+      // Strip details as well since they can be large
+      ...(toolResultMsg.details !== undefined ? { details: undefined } : {}),
+    } as AgentMessage;
+  });
+
+  return { masked: changed ? masked : messages, tokensRecovered };
+}

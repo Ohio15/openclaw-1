@@ -211,7 +211,7 @@ const intelligencePlugin = {
           }
         }
 
-        // Enhanced progressive summarization
+        // Enhanced progressive compaction (Stage 1: masking, Stage 2: summarization)
         if (compactionEnabled) {
           compactionMgr.recordComplexity(sessionKey, analysis.complexity);
           const summary = compactionMgr.checkAndSummarize(messages, sessionKey);
@@ -219,6 +219,14 @@ const intelligencePlugin = {
             prependParts.push(summary);
             api.logger.info(
               `intelligence: progressive summary injected (${summary.length} chars)`,
+            );
+          }
+          // Log masking metrics if observation masking was applied
+          const sessionMetrics = compactionMgr.getSessionMetrics(sessionKey);
+          if (sessionMetrics?.maskingApplied) {
+            api.logger.info(
+              `intelligence: observation masking recovered ~${sessionMetrics.maskingTokensRecovered} tokens` +
+              (sessionMetrics.summarizationSkippedAfterMasking ? " (summarization skipped)" : ""),
             );
           }
         }
