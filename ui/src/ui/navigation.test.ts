@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  TAB_GROUPS,
+  SIDEBAR_TABS,
   iconForTab,
   inferBasePathFromPathname,
   normalizeBasePath,
@@ -12,8 +12,8 @@ import {
   type Tab,
 } from "./navigation.ts";
 
-/** All valid tab identifiers derived from TAB_GROUPS */
-const ALL_TABS: Tab[] = TAB_GROUPS.flatMap((group) => group.tabs) as Tab[];
+/** All valid tab identifiers derived from SIDEBAR_TABS */
+const ALL_TABS: readonly Tab[] = SIDEBAR_TABS;
 
 describe("iconForTab", () => {
   it("returns a non-empty string for every tab", () => {
@@ -172,18 +172,16 @@ describe("inferBasePathFromPathname", () => {
   });
 });
 
-describe("TAB_GROUPS", () => {
-  it("contains all expected groups", () => {
-    const labels = TAB_GROUPS.map((g) => g.label);
-    expect(labels).toContain("Chat");
-    expect(labels).toContain("Control");
-    expect(labels).toContain("Agent");
-    expect(labels).toContain("Settings");
+describe("SIDEBAR_TABS", () => {
+  it("contains expected tabs", () => {
+    expect(SIDEBAR_TABS).toContain("chat");
+    expect(SIDEBAR_TABS).toContain("overview");
+    expect(SIDEBAR_TABS).toContain("sessions");
+    expect(SIDEBAR_TABS).toContain("settings");
   });
 
   it("all tabs are unique", () => {
-    const allTabs = TAB_GROUPS.flatMap((g) => g.tabs);
-    const uniqueTabs = new Set(allTabs);
-    expect(uniqueTabs.size).toBe(allTabs.length);
+    const uniqueTabs = new Set(SIDEBAR_TABS);
+    expect(uniqueTabs.size).toBe(SIDEBAR_TABS.length);
   });
 });

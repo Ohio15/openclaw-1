@@ -34,6 +34,9 @@ function createState(): ConfigState {
     connected: false,
     lastError: null,
     updateRunning: false,
+    configHistoryEntries: [],
+    configHistoryVisible: false,
+    configHistorySelectedIndex: null,
   };
 }
 

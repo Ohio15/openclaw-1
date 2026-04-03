@@ -35,6 +35,7 @@ const createHost = (tab: Tab): SettingsHost => ({
   themeMediaHandler: null,
   logsPollInterval: null,
   debugPollInterval: null,
+  unreadChatCount: 0,
 });
 
 describe("setTabFromRoute", () => {

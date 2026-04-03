@@ -12,6 +12,7 @@ import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
 import type { ThemeMode } from "./theme.ts";
 import type { SessionsListResult } from "./types.ts";
+import { renderBadge } from "./views/notification-badge.ts";
 
 type SessionDefaultsSnapshot = {
   mainSessionKey?: string;
@@ -79,6 +80,7 @@ export function renderTab(state: AppViewState, tab: Tab) {
     >
       <span class="nav-item__icon" aria-hidden="true">${icons[iconForTab(tab)]}</span>
       <span class="nav-item__text">${titleForTab(tab)}</span>
+      ${tab === "chat" && state.unreadChatCount > 0 ? renderBadge(state.unreadChatCount) : nothing}
     </a>
   `;
 }

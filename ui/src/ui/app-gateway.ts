@@ -61,6 +61,7 @@ type GatewayHost = {
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
   securityActivityEntries: SecurityActivityEntry[];
+  unreadChatCount: number;
 };
 
 type SessionDefaultsSnapshot = {
@@ -242,6 +243,9 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
     }
     if (state === "final") {
       void loadChatHistory(host as unknown as OpenClawApp);
+      if (host.tab !== "chat") {
+        host.unreadChatCount++;
+      }
     }
     return;
   }

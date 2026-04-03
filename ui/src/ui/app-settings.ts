@@ -23,6 +23,7 @@ import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { loadSessions } from "./controllers/sessions.ts";
+import { fetchPresets } from "./controllers/presets.ts";
 import { loadSkills } from "./controllers/skills.ts";
 import {
   inferBasePathFromPathname,
@@ -57,6 +58,7 @@ type SettingsHost = {
   themeMedia: MediaQueryList | null;
   themeMediaHandler: ((event: MediaQueryListEvent) => void) | null;
   pendingGatewayUrl?: string | null;
+  unreadChatCount: number;
 };
 
 export function applySettings(host: SettingsHost, next: UiSettings) {
@@ -152,6 +154,7 @@ export function setTab(host: SettingsHost, next: Tab) {
   }
   if (next === "chat") {
     host.chatHasAutoScrolled = false;
+    host.unreadChatCount = 0;
   }
   if (next === "logs") {
     startLogsPolling(host as unknown as Parameters<typeof startLogsPolling>[0]);
@@ -235,6 +238,32 @@ export async function refreshActiveTab(host: SettingsHost) {
     await loadConfig(host as unknown as OpenClawApp);
     await loadSecurityAudit(host as unknown as OpenClawApp);
     await loadSessions(host as unknown as OpenClawApp);
+  }
+  if (host.tab === "presets") {
+    await fetchPresets(host as unknown as OpenClawApp);
+  }
+  if (host.tab === "routing") {
+    const app = host as unknown as OpenClawApp;
+    if (typeof app.loadIntelligenceStats === "function") {
+      void app.loadIntelligenceStats();
+    }
+  }
+  if (host.tab === "metrics") {
+    void loadChannels(host as unknown as OpenClawApp, false);
+    const app = host as unknown as OpenClawApp;
+    if (typeof app.loadIntelligenceStats === "function") {
+      void app.loadIntelligenceStats();
+    }
+  }
+  if (host.tab === "agents-graph") {
+    await loadAgents(host as unknown as OpenClawApp);
+    await loadConfig(host as unknown as OpenClawApp);
+    void loadChannels(host as unknown as OpenClawApp, false);
+    await loadSessions(host as unknown as OpenClawApp);
+    const agentIds = host.agentsList?.agents?.map((entry) => entry.id) ?? [];
+    if (agentIds.length > 0) {
+      void loadAgentIdentities(host as unknown as OpenClawApp, agentIds);
+    }
   }
   if (host.tab === "nodes") {
     await loadNodes(host as unknown as OpenClawApp);

@@ -28,6 +28,7 @@ import {
   handleFirstUpdated,
   handleUpdated,
 } from "./app-lifecycle.ts";
+import { setupChatGestures, teardownChatGestures } from "./app-gestures.ts";
 import { renderApp } from "./app-render.ts";
 import {
   exportLogs as exportLogsInternal,
@@ -320,6 +321,23 @@ export class OpenClawApp extends LitElement {
   @state() cronRuns: CronRunLogEntry[] = [];
   @state() cronBusy = false;
 
+  @state() presetsLoading = false;
+  @state() presets: import("./controllers/presets.ts").PresetSummary[] = [];
+  @state() presetsError: string | null = null;
+  @state() presetsDetailCache = new Map<string, import("./controllers/presets.ts").PresetDetail>();
+  @state() presetsDetailLoading: string | null = null;
+  @state() presetsRunning: string | null = null;
+  @state() presetsReloading = false;
+  @state() presetsFilter = "";
+  @state() presetsExpandedPreset: string | null = null;
+  @state() presetsExpandedDetail: import("./controllers/presets.ts").PresetDetail | null = null;
+
+  @state() routingLoading = false;
+  @state() routingStats: any = null;
+  @state() routingError: string | null = null;
+
+  @state() unreadChatCount = 0;
+
   @state() skillsLoading = false;
   @state() skillsReport: SkillStatusReport | null = null;
   @state() skillsError: string | null = null;
@@ -385,9 +403,14 @@ export class OpenClawApp extends LitElement {
 
   protected firstUpdated() {
     handleFirstUpdated(this as unknown as Parameters<typeof handleFirstUpdated>[0]);
+    setupChatGestures(this as any, () => {
+      this.resetToolStream();
+      void this.loadAssistantIdentity();
+    });
   }
 
   disconnectedCallback() {
+    teardownChatGestures();
     handleDisconnected(this as unknown as Parameters<typeof handleDisconnected>[0]);
     super.disconnectedCallback();
   }

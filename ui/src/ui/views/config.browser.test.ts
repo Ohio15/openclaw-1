@@ -35,6 +35,13 @@ describe("config view", () => {
     onApply: vi.fn(),
     onUpdate: vi.fn(),
     onSubsectionChange: vi.fn(),
+    historyEntries: [],
+    historyVisible: false,
+    historySelectedIndex: null,
+    onHistoryToggle: vi.fn(),
+    onHistorySelect: vi.fn(),
+    onHistoryRestore: vi.fn(),
+    onHistoryClear: vi.fn(),
   });
 
   it("allows save when form is unsafe", () => {
