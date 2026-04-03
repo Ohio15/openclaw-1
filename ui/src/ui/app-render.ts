@@ -146,6 +146,7 @@ export function renderApp(state: AppViewState) {
               <div class="brand-sub">Gateway Dashboard</div>
             </div>
           </div>
+          <span class="statusDot ${state.connected ? "ok" : ""}" title="${state.connected ? t("common.ok") : t("common.offline")}"></span>
         </div>
         <div class="topbar-status">
           <div class="pill">
@@ -154,6 +155,17 @@ export function renderApp(state: AppViewState) {
             <span class="mono">${state.connected ? t("common.ok") : t("common.offline")}</span>
           </div>
         </div>
+        ${isChat ? html`
+          <button
+            class="topbar-new-session"
+            ?disabled=${!state.connected}
+            @click=${() => (state as unknown as OpenClawApp).handleSendChat("/new", { restoreDraft: true })}
+            title="New session"
+            aria-label="New session"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+        ` : nothing}
       </header>
       <aside class="nav ${state.settings.navCollapsed ? "nav--collapsed" : ""}">
         <div class="nav-group__items">

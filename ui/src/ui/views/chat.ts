@@ -207,7 +207,7 @@ export function renderChat(props: ChatProps) {
     ? "Type a message — it will be queued and sent when reconnected"
     : hasAttachments
       ? "Add a message or paste more images..."
-      : "Message (↩ to send, Shift+↩ for line breaks, paste images)";
+      : "Message";
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
@@ -290,6 +290,7 @@ export function renderChat(props: ChatProps) {
           `
           : nothing
       }
+
 
       <div
         class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}"
@@ -408,13 +409,14 @@ export function renderChat(props: ChatProps) {
             ></textarea>
           </label>
           <div class="chat-compose__actions">
-            <button
-              class="btn"
-              ?disabled=${isDisconnected || (!canAbort && props.sending)}
-              @click=${canAbort ? props.onAbort : props.onNewSession}
-            >
-              ${canAbort ? "Stop" : "New session"}
-            </button>
+            ${canAbort ? html`
+              <button
+                class="btn"
+                @click=${props.onAbort}
+              >
+                Stop
+              </button>
+            ` : nothing}
             <button
               class="btn primary"
               @click=${props.onSend}

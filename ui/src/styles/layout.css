@@ -190,6 +190,40 @@
   height: 12px;
 }
 
+/* Inline status dot next to brand (visible on mobile) */
+.topbar-left > .statusDot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+}
+
+/* New session button in topbar (far right) */
+.topbar-new-session {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.topbar-new-session:hover {
+  color: var(--fg);
+}
+
+.topbar-new-session:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .nav-group--standalone {
   margin-top: auto;
   padding-top: 8px;

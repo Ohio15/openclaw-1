@@ -75,22 +75,6 @@
   }
 
   .topbar-status {
-    gap: 6px;
-    width: auto;
-    flex-wrap: nowrap;
-  }
-
-  .topbar-status .pill {
-    padding: 4px 8px;
-    font-size: 11px;
-    gap: 4px;
-  }
-
-  .topbar-status .pill .mono {
-    display: none;
-  }
-
-  .topbar-status .pill span:nth-child(2) {
     display: none;
   }
 
