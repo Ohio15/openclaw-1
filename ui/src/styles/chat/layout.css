@@ -450,6 +450,10 @@
   }
 
   .chat-controls__session {
-    min-width: 120px;
+    min-width: 0;
+  }
+
+  .chat-controls__agent {
+    min-width: 0;
   }
 }
