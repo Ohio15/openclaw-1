@@ -10,6 +10,6 @@ export function buildControlUiCspHeader(): string {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self'",
-    "connect-src 'self' ws: wss:",
+    "connect-src 'self'",
   ].join("; ");
 }

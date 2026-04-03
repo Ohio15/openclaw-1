@@ -285,11 +285,10 @@ export async function startGatewayServer(
   let hooksConfig = runtimeConfig.hooksConfig;
   const canvasHostEnabled = runtimeConfig.canvasHostEnabled;
 
-  // Create auth rate limiter only when explicitly configured.
+  // Create auth rate limiter — enabled by default with sensible defaults.
   const rateLimitConfig = cfgAtStart.gateway?.auth?.rateLimit;
-  const authRateLimiter: AuthRateLimiter | undefined = rateLimitConfig
-    ? createAuthRateLimiter(rateLimitConfig)
-    : undefined;
+  const authRateLimiter: AuthRateLimiter | undefined =
+    createAuthRateLimiter(rateLimitConfig ?? {});
 
   let controlUiRootState: ControlUiRootState | undefined;
   if (controlUiRootOverride) {
