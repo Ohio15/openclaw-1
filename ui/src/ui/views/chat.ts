@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import { ref } from "lit/directives/ref.js";
 import { repeat } from "lit/directives/repeat.js";
+import { resolveSessionChannel } from "../chat/channel-badge.ts";
 import {
   renderMessageGroup,
   renderReadingIndicatorGroup,
@@ -187,11 +188,14 @@ function renderAttachmentPreview(props: ChatProps) {
 }
 
 export function renderChat(props: ChatProps) {
-  const canCompose = props.connected;
+  const canCompose = true; // Always allow composing; messages queue when disconnected
+  const isDisconnected = !props.connected;
   const isBusy = props.sending || props.stream !== null;
   const canAbort = Boolean(props.canAbort && props.onAbort);
   const activeSession = props.sessions?.sessions?.find((row) => row.key === props.sessionKey);
   const reasoningLevel = activeSession?.reasoningLevel ?? "off";
+  const sessionModelName = activeSession?.model ?? null;
+  const sessionChannel = resolveSessionChannel(activeSession?.surface, props.sessionKey);
   const showReasoning = props.showThinking && reasoningLevel !== "off";
   const assistantIdentity = {
     name: props.assistantName,
@@ -199,11 +203,11 @@ export function renderChat(props: ChatProps) {
   };
 
   const hasAttachments = (props.attachments?.length ?? 0) > 0;
-  const composePlaceholder = props.connected
-    ? hasAttachments
+  const composePlaceholder = isDisconnected
+    ? "Type a message — it will be queued and sent when reconnected"
+    : hasAttachments
       ? "Add a message or paste more images..."
-      : "Message (↩ to send, Shift+↩ for line breaks, paste images)"
-    : "Connect to the gateway to start chatting…";
+      : "Message (↩ to send, Shift+↩ for line breaks, paste images)";
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
@@ -254,6 +258,8 @@ export function renderChat(props: ChatProps) {
               showReasoning,
               assistantName: props.assistantName,
               assistantAvatar: assistantIdentity.avatar,
+              modelName: sessionModelName,
+              sessionChannel,
             });
           }
 
@@ -377,7 +383,6 @@ export function renderChat(props: ChatProps) {
               ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
               .value=${props.draft}
               dir=${detectTextDirection(props.draft)}
-              ?disabled=${!props.connected}
               @keydown=${(e: KeyboardEvent) => {
                 if (e.key !== "Enter") {
                   return;
@@ -388,9 +393,6 @@ export function renderChat(props: ChatProps) {
                 if (e.shiftKey) {
                   return;
                 } // Allow Shift+Enter for line breaks
-                if (!props.connected) {
-                  return;
-                }
                 e.preventDefault();
                 if (canCompose) {
                   props.onSend();
@@ -408,17 +410,16 @@ export function renderChat(props: ChatProps) {
           <div class="chat-compose__actions">
             <button
               class="btn"
-              ?disabled=${!props.connected || (!canAbort && props.sending)}
+              ?disabled=${isDisconnected || (!canAbort && props.sending)}
               @click=${canAbort ? props.onAbort : props.onNewSession}
             >
               ${canAbort ? "Stop" : "New session"}
             </button>
             <button
               class="btn primary"
-              ?disabled=${!props.connected}
               @click=${props.onSend}
             >
-              ${isBusy ? "Queue" : "Send"}<kbd class="btn-kbd">↵</kbd>
+              ${isDisconnected ? "Queue" : isBusy ? "Queue" : "Send"}<kbd class="btn-kbd">↵</kbd>
             </button>
           </div>
         </div>

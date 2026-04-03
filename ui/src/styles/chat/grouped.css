@@ -54,6 +54,58 @@
   opacity: 0.7;
 }
 
+.chat-model-badge {
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--muted);
+  opacity: 0.6;
+  background: var(--bg-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  display: inline-block;
+  vertical-align: baseline;
+  line-height: 1.4;
+}
+
+/* Channel source badge */
+.chat-channel-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--muted);
+  background: var(--bg-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  vertical-align: baseline;
+  line-height: 1.4;
+  opacity: 0.7;
+  transition: opacity var(--duration-fast) ease-out;
+}
+
+.chat-channel-badge:hover {
+  opacity: 1;
+}
+
+.chat-channel-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.chat-channel-badge__label {
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
 /* Chat divider (e.g., compaction marker) */
 .chat-divider {
   display: flex;

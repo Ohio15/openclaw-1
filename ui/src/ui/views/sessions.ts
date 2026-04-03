@@ -1,8 +1,14 @@
 import { html, nothing } from "lit";
 import { formatRelativeTimestamp } from "../format.ts";
+import type { GatewayBrowserClient } from "../gateway.ts";
 import { pathForTab } from "../navigation.ts";
 import { formatSessionTokens } from "../presenter.ts";
 import type { GatewaySessionRow, SessionsListResult } from "../types.ts";
+import {
+  type SessionTranscriptState,
+  renderSessionTranscript,
+  toggleSessionTranscript,
+} from "./session-transcript.ts";
 
 export type SessionsProps = {
   loading: boolean;
@@ -13,6 +19,12 @@ export type SessionsProps = {
   includeGlobal: boolean;
   includeUnknown: boolean;
   basePath: string;
+  /** Gateway client used to fetch transcript previews. */
+  client: GatewayBrowserClient | null;
+  /** Shared transcript expansion state managed by the parent. */
+  transcriptState: SessionTranscriptState;
+  /** Called after transcript state mutates so the host can re-render. */
+  requestUpdate: () => void;
   onFiltersChange: (next: {
     activeMinutes: string;
     limit: string;
@@ -205,9 +217,10 @@ export function renderSessions(props: SessionsProps) {
             ? html`
                 <div class="muted">No sessions found.</div>
               `
-            : rows.map((row) =>
-                renderRow(row, props.basePath, props.onPatch, props.onDelete, props.loading),
-              )
+            : rows.map((row) => html`
+                ${renderRow(row, props.basePath, props.onPatch, props.onDelete, props.loading, props.client, props.transcriptState, props.requestUpdate)}
+                ${renderSessionTranscript({ row, state: props.transcriptState })}
+              `)
         }
       </div>
     </section>
@@ -220,6 +233,9 @@ function renderRow(
   onPatch: SessionsProps["onPatch"],
   onDelete: SessionsProps["onDelete"],
   disabled: boolean,
+  client: GatewayBrowserClient | null,
+  transcriptState: SessionTranscriptState,
+  requestUpdate: () => void,
 ) {
   const updated = row.updatedAt ? formatRelativeTimestamp(row.updatedAt) : "n/a";
   const rawThinking = row.thinkingLevel ?? "";
@@ -311,7 +327,14 @@ function renderRow(
           )}
         </select>
       </div>
-      <div>
+      <div style="display: flex; gap: 6px;">
+        <button
+          class="btn btn--view ${transcriptState.expandedKey === row.key ? "active" : ""}"
+          ?disabled=${disabled}
+          @click=${() => void toggleSessionTranscript(transcriptState, row.key, client, requestUpdate)}
+        >
+          ${transcriptState.expandedKey === row.key ? "Hide" : "View"}
+        </button>
         <button class="btn danger" ?disabled=${disabled} @click=${() => onDelete(row.key)}>
           Delete
         </button>

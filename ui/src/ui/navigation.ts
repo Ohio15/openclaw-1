@@ -12,8 +12,12 @@ export const SIDEBAR_TABS: readonly Tab[] = [
   "sessions",
   "usage",
   "cron",
+  "presets",
+  "routing",
+  "metrics",
   "security",
   "agents",
+  "agents-graph",
   "skills",
   "nodes",
   "settings",
@@ -21,12 +25,16 @@ export const SIDEBAR_TABS: readonly Tab[] = [
 
 export type Tab =
   | "agents"
+  | "agents-graph"
   | "overview"
   | "channels"
   | "instances"
   | "sessions"
   | "usage"
   | "cron"
+  | "presets"
+  | "routing"
+  | "metrics"
   | "security"
   | "skills"
   | "nodes"
@@ -40,12 +48,16 @@ export type SettingsSubTab = "config" | "debug" | "logs" | "appearance";
 
 const TAB_PATHS: Record<Tab, string> = {
   agents: "/agents",
+  "agents-graph": "/agents-graph",
   overview: "/overview",
   channels: "/channels",
   instances: "/instances",
   sessions: "/sessions",
   usage: "/usage",
   cron: "/cron",
+  presets: "/presets",
+  routing: "/routing",
+  metrics: "/metrics",
   security: "/security",
   skills: "/skills",
   nodes: "/nodes",
@@ -161,6 +173,14 @@ export function iconForTab(tab: Tab): IconName {
       return "zap";
     case "nodes":
       return "monitor";
+    case "presets":
+      return "zap";
+    case "routing":
+      return "radio";
+    case "metrics":
+      return "barChart";
+    case "agents-graph":
+      return "folder";
     case "settings":
       return "settings";
     case "config":

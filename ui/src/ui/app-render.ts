@@ -5,6 +5,7 @@ import { refreshChatAvatar } from "./app-chat.ts";
 import { renderUsageTab } from "./app-render-usage-tab.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
 import type { AppViewState } from "./app-view-state.ts";
+import type { OpenClawApp } from "./app.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
@@ -13,7 +14,9 @@ import { loadChannels } from "./controllers/channels.ts";
 import { loadChatHistory } from "./controllers/chat.ts";
 import {
   applyConfig,
+  clearConfigHistory,
   loadConfig,
+  restoreConfigHistoryEntry,
   runUpdate,
   saveConfig,
   updateConfigFormValue,
@@ -72,6 +75,13 @@ import { renderSettingsSubTabs, renderAppearanceSettings } from "./views/setting
 import { renderSecurity } from "./views/security.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
+import { renderPresets } from "./views/presets.ts";
+import { fetchPreset, fetchPresets, reloadPresets, runPreset } from "./controllers/presets.ts";
+import { renderRoutingDashboard } from "./views/routing-dashboard.ts";
+import { renderMetricsDashboard } from "./views/metrics-dashboard.ts";
+import { buildMetricsDashboardData } from "./controllers/metrics.ts";
+import { renderAgentsGraph } from "./views/agents-graph.ts";
+import { compileAgentGraphData } from "./controllers/agent-graph.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -252,6 +262,9 @@ export function renderApp(state: AppViewState) {
                 includeGlobal: state.sessionsIncludeGlobal,
                 includeUnknown: state.sessionsIncludeUnknown,
                 basePath: state.basePath,
+                client: state.client,
+                transcriptState: state.sessionsTranscriptState,
+                requestUpdate: () => (state as unknown as OpenClawApp).requestUpdate(),
                 onFiltersChange: (next) => {
                   state.sessionsFilterActive = next.activeMinutes;
                   state.sessionsFilterLimit = next.limit;
@@ -292,6 +305,76 @@ export function renderApp(state: AppViewState) {
                 onRun: (job) => runCronJob(state, job),
                 onRemove: (job) => removeCronJob(state, job),
                 onLoadRuns: (jobId) => loadCronRuns(state, jobId),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "presets"
+            ? renderPresets({
+                loading: state.presetsLoading,
+                presets: state.presets,
+                error: state.presetsError,
+                filter: state.presetsFilter,
+                expandedPreset: state.presetsExpandedPreset,
+                expandedDetail: state.presetsExpandedDetail,
+                detailLoading: state.presetsDetailLoading,
+                running: state.presetsRunning,
+                reloading: state.presetsReloading,
+                onFilterChange: (value: string) => { (state as any).presetsFilter = value; },
+                onReload: () => reloadPresets(state as any),
+                onRun: (name: string) => runPreset(state as any, name),
+                onToggleExpand: async (name: string) => {
+                  if (state.presetsExpandedPreset === name) {
+                    (state as any).presetsExpandedPreset = null;
+                    (state as any).presetsExpandedDetail = null;
+                  } else {
+                    (state as any).presetsExpandedPreset = name;
+                    (state as any).presetsExpandedDetail = null;
+                    const detail = await fetchPreset(state as any, name);
+                    if (state.presetsExpandedPreset === name) {
+                      (state as any).presetsExpandedDetail = detail;
+                    }
+                  }
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "routing"
+            ? renderRoutingDashboard({
+                connected: state.connected,
+                loading: state.routingLoading,
+                stats: state.routingStats,
+                error: state.routingError,
+                onRefresh: () => state.loadIntelligenceStats(),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "metrics"
+            ? renderMetricsDashboard({
+                connected: state.connected,
+                loading: state.channelsLoading || state.usageLoading || state.intelligenceLoading,
+                data: buildMetricsDashboardData({
+                  connected: state.connected,
+                  hello: state.hello,
+                  presenceEntries: state.presenceEntries,
+                  sessionsCount: state.sessionsResult?.count ?? null,
+                  channelsSnapshot: state.channelsSnapshot,
+                  usageResult: state.usageResult,
+                  usageCostSummary: state.usageCostSummary,
+                  intelligenceStats: state.intelligenceStats,
+                  cronStatus: state.cronStatus,
+                  cronJobs: state.cronJobs,
+                  logsEntries: state.logsEntries,
+                }),
+                onRefresh: () => {
+                  void loadChannels(state, false);
+                  void state.loadIntelligenceStats();
+                },
               })
             : nothing
         }
@@ -683,6 +766,22 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
+          state.tab === "agents-graph"
+            ? renderAgentsGraph({
+                loading: state.agentsLoading,
+                error: state.agentsError,
+                graphData: compileAgentGraphData({
+                  agentsList: state.agentsList,
+                  configForm: state.configForm,
+                  channelsSnapshot: state.channelsSnapshot,
+                  sessionsResult: state.sessionsResult,
+                  agentIdentityById: state.agentIdentityById,
+                }),
+              })
+            : nothing
+        }
+
+        ${
           state.tab === "skills"
             ? renderSkills({
                 loading: state.skillsLoading,
@@ -930,6 +1029,19 @@ export function renderApp(state: AppViewState) {
                       onSave: () => saveConfig(state),
                       onApply: () => applyConfig(state),
                       onUpdate: () => runUpdate(state),
+                      historyEntries: state.configHistoryEntries,
+                      historyVisible: state.configHistoryVisible,
+                      historySelectedIndex: state.configHistorySelectedIndex,
+                      onHistoryToggle: () => {
+                        state.configHistoryVisible = !state.configHistoryVisible;
+                        state.configHistorySelectedIndex = null;
+                      },
+                      onHistorySelect: (index) => {
+                        state.configHistorySelectedIndex =
+                          state.configHistorySelectedIndex === index ? null : index;
+                      },
+                      onHistoryRestore: (index) => restoreConfigHistoryEntry(state, index),
+                      onHistoryClear: () => clearConfigHistory(state),
                     })
                   : nothing
                 }

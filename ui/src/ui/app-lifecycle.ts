@@ -19,7 +19,9 @@ import {
   syncThemeWithSettings,
 } from "./app-settings.ts";
 import { loadControlUiBootstrapConfig } from "./controllers/control-ui-bootstrap.ts";
+import { getAllQueueItems } from "./db.ts";
 import type { Tab } from "./navigation.ts";
+import type { ChatQueueItem } from "./ui-types.ts";
 
 type LifecycleHost = {
   basePath: string;
@@ -33,14 +35,46 @@ type LifecycleHost = {
   chatMessages: unknown[];
   chatToolMessages: unknown[];
   chatStream: string;
+  chatQueue: ChatQueueItem[];
   logsAutoFollow: boolean;
   logsAtBottom: boolean;
   logsEntries: unknown[];
   popStateHandler: () => void;
   topbarObserver: ResizeObserver | null;
+  _viewportResizeHandler: (() => void) | null;
 };
 
+function registerServiceWorker() {
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch((err) => {
+      console.warn("[sw] service worker registration failed:", err);
+    });
+  }
+}
+
+function loadPersistedQueue(host: LifecycleHost) {
+  getAllQueueItems()
+    .then((items) => {
+      if (items.length > 0 && host.chatQueue.length === 0) {
+        host.chatQueue = items;
+      }
+    })
+    .catch((err) => {
+      console.warn("[chat-queue] failed to load persisted queue from IndexedDB:", err);
+    });
+}
+
+export function captureInstallPrompt() {
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    (window as any).__openclawInstallPrompt = e;
+  });
+}
+
 export function handleConnected(host: LifecycleHost) {
+  captureInstallPrompt();
+  registerServiceWorker();
+  loadPersistedQueue(host);
   host.basePath = inferBasePath();
   void loadControlUiBootstrapConfig(host);
   applySettingsFromUrl(host as unknown as Parameters<typeof applySettingsFromUrl>[0]);
@@ -59,6 +93,26 @@ export function handleConnected(host: LifecycleHost) {
   if (host.tab === "security") {
     startSecurityPolling(host as unknown as Parameters<typeof startSecurityPolling>[0]);
   }
+
+  // Track virtual keyboard height via visualViewport API so the chat
+  // compose area can shift above the on-screen keyboard on mobile.
+  if (window.visualViewport) {
+    const updateKeyboardHeight = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) return;
+      const keyboardHeight = Math.max(0, window.innerHeight - viewport.height);
+      document.documentElement.style.setProperty(
+        "--keyboard-height",
+        `${keyboardHeight}px`,
+      );
+    };
+    host._viewportResizeHandler = updateKeyboardHeight;
+    window.visualViewport.addEventListener("resize", updateKeyboardHeight);
+    // Set initial value
+    updateKeyboardHeight();
+  } else {
+    host._viewportResizeHandler = null;
+  }
 }
 
 export function handleFirstUpdated(host: LifecycleHost) {
@@ -74,6 +128,13 @@ export function handleDisconnected(host: LifecycleHost) {
   detachThemeListener(host as unknown as Parameters<typeof detachThemeListener>[0]);
   host.topbarObserver?.disconnect();
   host.topbarObserver = null;
+
+  // Clean up visualViewport listener
+  if (host._viewportResizeHandler && window.visualViewport) {
+    window.visualViewport.removeEventListener("resize", host._viewportResizeHandler);
+    host._viewportResizeHandler = null;
+    document.documentElement.style.removeProperty("--keyboard-height");
+  }
 }
 
 export function handleUpdated(host: LifecycleHost, changed: Map<PropertyKey, unknown>) {

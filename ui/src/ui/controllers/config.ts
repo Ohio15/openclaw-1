@@ -1,5 +1,6 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ConfigSchemaResponse, ConfigSnapshot, ConfigUiHints } from "../types.ts";
+import type { ConfigHistoryEntry } from "../views/config-history.ts";
 import type { JsonSchema } from "../views/config-form.shared.ts";
 import { coerceFormValues } from "./config/form-coerce.ts";
 import {
@@ -33,6 +34,9 @@ export type ConfigState = {
   configSearchQuery: string;
   configActiveSection: string | null;
   configActiveSubsection: string | null;
+  configHistoryEntries: ConfigHistoryEntry[];
+  configHistoryVisible: boolean;
+  configHistorySelectedIndex: number | null;
   lastError: string | null;
 };
 
@@ -143,6 +147,7 @@ export async function saveConfig(state: ConfigState) {
     await state.client.request("config.set", { raw, baseHash });
     state.configFormDirty = false;
     await loadConfig(state);
+    recordConfigHistory(state);
   } catch (err) {
     state.lastError = String(err);
   } finally {
@@ -170,6 +175,7 @@ export async function applyConfig(state: ConfigState) {
     });
     state.configFormDirty = false;
     await loadConfig(state);
+    recordConfigHistory(state);
   } catch (err) {
     state.lastError = String(err);
   } finally {
@@ -215,5 +221,127 @@ export function removeConfigFormValue(state: ConfigState, path: Array<string | n
   state.configFormDirty = true;
   if (state.configFormMode === "form") {
     state.configRaw = serializeConfigForm(base);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Config History (localStorage-backed)
+// ---------------------------------------------------------------------------
+
+const CONFIG_HISTORY_KEY = "openclaw:config-history";
+const CONFIG_HISTORY_MAX_ENTRIES = 20;
+
+/**
+ * Load config history entries from localStorage.
+ */
+export function loadConfigHistory(state: ConfigState): void {
+  try {
+    const raw = localStorage.getItem(CONFIG_HISTORY_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        state.configHistoryEntries = parsed as ConfigHistoryEntry[];
+        return;
+      }
+    }
+  } catch {
+    // Corrupted data -- reset
+  }
+  state.configHistoryEntries = [];
+}
+
+/**
+ * Persist current history entries to localStorage.
+ */
+function persistHistory(entries: ConfigHistoryEntry[]): void {
+  try {
+    localStorage.setItem(CONFIG_HISTORY_KEY, JSON.stringify(entries));
+  } catch {
+    // Storage full or unavailable -- silently ignore
+  }
+}
+
+/**
+ * Compute top-level changed field names between two config objects.
+ */
+function computeChangedFields(
+  prev: Record<string, unknown> | null,
+  next: Record<string, unknown> | null,
+): string[] {
+  if (!prev || !next) {
+    return Object.keys(next ?? {});
+  }
+  const allKeys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+  const changed: string[] = [];
+  for (const key of allKeys) {
+    if (JSON.stringify(prev[key]) !== JSON.stringify(next[key])) {
+      changed.push(key);
+    }
+  }
+  return changed;
+}
+
+/**
+ * Record a config snapshot into history. Called after a successful save or apply.
+ * Compares against the previous history entry (or the pre-save original) to detect changed fields.
+ */
+export function recordConfigHistory(state: ConfigState): void {
+  const snapshot = state.configSnapshot;
+  if (!snapshot?.config || !snapshot.hash) {
+    return;
+  }
+
+  // Avoid duplicate entries for the same hash
+  if (state.configHistoryEntries.length > 0 && state.configHistoryEntries[0].hash === snapshot.hash) {
+    return;
+  }
+
+  const previousConfig =
+    state.configHistoryEntries.length > 0
+      ? state.configHistoryEntries[0].config
+      : null;
+
+  const changedFields = computeChangedFields(previousConfig, snapshot.config);
+
+  const entry: ConfigHistoryEntry = {
+    timestamp: Date.now(),
+    hash: snapshot.hash,
+    config: cloneConfigObject(snapshot.config),
+    label: changedFields.length > 0 ? `Changed: ${changedFields.join(", ")}` : "Config saved",
+    changedFields,
+  };
+
+  const entries = [entry, ...state.configHistoryEntries].slice(0, CONFIG_HISTORY_MAX_ENTRIES);
+  state.configHistoryEntries = entries;
+  persistHistory(entries);
+}
+
+/**
+ * Restore a past config version into the editor. Does NOT save automatically.
+ * The user can review and then click Save/Apply.
+ */
+export function restoreConfigHistoryEntry(state: ConfigState, index: number): void {
+  const entry = state.configHistoryEntries[index];
+  if (!entry) {
+    return;
+  }
+  const restored = cloneConfigObject(entry.config);
+  state.configForm = restored;
+  state.configRaw = serializeConfigForm(restored);
+  state.configFormDirty = true;
+  state.configHistorySelectedIndex = null;
+  state.configHistoryVisible = false;
+}
+
+/**
+ * Clear all config history.
+ */
+export function clearConfigHistory(state: ConfigState): void {
+  state.configHistoryEntries = [];
+  state.configHistorySelectedIndex = null;
+  try {
+    localStorage.removeItem(CONFIG_HISTORY_KEY);
+  } catch {
+    // Ignore
   }
 }

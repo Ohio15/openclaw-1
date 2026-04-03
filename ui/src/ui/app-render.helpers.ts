@@ -1,5 +1,6 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
+import { parseAgentSessionKey } from "../../../src/sessions/session-key-utils.js";
 import { t } from "../i18n/index.ts";
 import { refreshChat } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
@@ -127,6 +128,10 @@ export function renderChatControls(state: AppViewState) {
       <circle cx="12" cy="12" r="3"></circle>
     </svg>
   `;
+  const agents = state.agentsList?.agents ?? [];
+  const parsed = parseAgentSessionKey(state.sessionKey);
+  const currentAgentId = parsed?.agentId ?? state.agentsList?.defaultId ?? "main";
+
   return html`
     <div class="chat-controls">
       <label class="field chat-controls__session">
@@ -166,6 +171,50 @@ export function renderChatControls(state: AppViewState) {
           )}
         </select>
       </label>
+      ${agents.length > 1
+        ? html`
+          <label class="field chat-controls__agent">
+            <select
+              .value=${currentAgentId}
+              ?disabled=${!state.connected}
+              @change=${(e: Event) => {
+                const agentId = (e.target as HTMLSelectElement).value;
+                const rest = parsed?.rest ?? "main";
+                const nextSessionKey = `agent:${agentId}:${rest}`;
+                state.sessionKey = nextSessionKey;
+                state.chatMessage = "";
+                state.chatStream = null;
+                (state as unknown as OpenClawApp).chatStreamStartedAt = null;
+                state.chatRunId = null;
+                (state as unknown as OpenClawApp).resetToolStream();
+                (state as unknown as OpenClawApp).resetChatScroll();
+                state.applySettings({
+                  ...state.settings,
+                  sessionKey: nextSessionKey,
+                  lastActiveSessionKey: nextSessionKey,
+                });
+                void state.loadAssistantIdentity();
+                syncUrlWithSessionKey(
+                  state as unknown as Parameters<typeof syncUrlWithSessionKey>[0],
+                  nextSessionKey,
+                  true,
+                );
+                void loadChatHistory(state as unknown as ChatState);
+              }}
+            >
+              ${repeat(
+                agents,
+                (agent) => agent.id,
+                (agent) =>
+                  html`<option value=${agent.id} title=${agent.id}>
+                    ${agent.identity?.name ?? agent.name ?? agent.id}
+                  </option>`,
+              )}
+            </select>
+          </label>
+        `
+        : nothing
+      }
       <button
         class="btn btn--sm btn--icon"
         ?disabled=${state.chatLoading || !state.connected}

@@ -115,11 +115,14 @@
   }
 
   .nav-item {
-    padding: 6px 10px;
+    min-height: 44px;
+    padding: 8px 12px;
     font-size: 12px;
     border-radius: var(--radius-md);
     white-space: nowrap;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
   }
 
   /* Content */
@@ -176,15 +179,22 @@
   .field input,
   .field textarea,
   .field select {
-    padding: 8px 10px;
+    min-height: 44px;
+    padding: 10px 12px;
     border-radius: var(--radius-md);
     font-size: 14px;
   }
 
   /* Buttons */
   .btn {
-    padding: 8px 12px;
+    min-height: 44px;
+    padding: 10px 16px;
     font-size: 12px;
+  }
+
+  .btn--sm {
+    min-height: 40px;
+    padding: 8px 14px;
   }
 
   /* Pills */
@@ -230,6 +240,7 @@
 
   .chat-compose {
     gap: 8px;
+    padding-bottom: calc(4px + var(--keyboard-height, 0px));
   }
 
   .chat-compose__field textarea {
@@ -370,5 +381,168 @@
   .theme-icon {
     width: 11px;
     height: 11px;
+  }
+}
+
+/* Ultra-narrow: 360px and below */
+@media (max-width: 360px) {
+  .shell {
+    --shell-pad: 2px;
+    --shell-gap: 4px;
+  }
+
+  .topbar {
+    padding: 6px 8px;
+  }
+
+  .brand-title {
+    font-size: 12px;
+  }
+
+  .nav {
+    padding: 4px 6px;
+    gap: 2px;
+  }
+
+  .nav-item {
+    min-height: 40px;
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .content {
+    padding: 2px 2px 10px;
+    gap: 8px;
+  }
+
+  /* Cards - tighter on ultra-narrow */
+  .card {
+    padding: 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .card-title {
+    font-size: 12px;
+  }
+
+  /* Stats - single column on ultra-narrow */
+  .stat-grid {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .stat {
+    padding: 6px;
+  }
+
+  .stat-value {
+    font-size: 14px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+  }
+
+  /* Chat - full-width bubbles */
+  .chat-msg {
+    max-width: 100%;
+  }
+
+  .chat-bubble {
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+  }
+
+  .chat-thread {
+    padding: 8px 2px;
+  }
+
+  .chat-compose__field textarea {
+    min-height: 44px;
+    padding: 8px;
+    font-size: 13px;
+  }
+
+  .chat-compose {
+    padding: 8px 2px 2px;
+    padding-bottom: calc(2px + var(--keyboard-height, 0px));
+    gap: 6px;
+  }
+
+  /* Buttons */
+  .btn {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 11px;
+  }
+
+  .btn--sm {
+    min-height: 36px;
+    padding: 6px 10px;
+  }
+
+  /* Forms */
+  .field input,
+  .field textarea,
+  .field select {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  /* Pills */
+  .pill {
+    padding: 3px 6px;
+    font-size: 10px;
+  }
+
+  .topbar-status .pill {
+    padding: 2px 4px;
+    font-size: 9px;
+  }
+
+  /* Lists */
+  .list-item {
+    padding: 8px;
+  }
+
+  .list-title {
+    font-size: 12px;
+  }
+
+  .list-sub {
+    font-size: 10px;
+  }
+
+  /* Code blocks */
+  .code-block {
+    padding: 6px;
+    font-size: 10px;
+  }
+
+  /* Log stream */
+  .log-stream {
+    max-height: 300px;
+  }
+
+  .log-row {
+    padding: 6px;
+  }
+
+  .log-message {
+    font-size: 11px;
+  }
+
+  /* Theme toggle */
+  .theme-toggle {
+    --theme-item: 20px;
+    --theme-gap: 1px;
+    --theme-pad: 2px;
+  }
+
+  .theme-icon {
+    width: 10px;
+    height: 10px;
   }
 }

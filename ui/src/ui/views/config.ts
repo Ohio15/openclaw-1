@@ -2,6 +2,12 @@ import { html, nothing } from "lit";
 import type { ConfigUiHints } from "../types.ts";
 import { hintForPath, humanize, schemaType, type JsonSchema } from "./config-form.shared.ts";
 import { analyzeConfigSchema, renderConfigForm, SECTION_META } from "./config-form.ts";
+import {
+  renderConfigHistoryPanel,
+  renderConfigHistoryToggle,
+  type ConfigHistoryEntry,
+  type ConfigHistoryProps,
+} from "./config-history.ts";
 
 export type ConfigProps = {
   raw: string;
@@ -32,6 +38,13 @@ export type ConfigProps = {
   onSave: () => void;
   onApply: () => void;
   onUpdate: () => void;
+  historyEntries: ConfigHistoryEntry[];
+  historyVisible: boolean;
+  historySelectedIndex: number | null;
+  onHistoryToggle: () => void;
+  onHistorySelect: (index: number) => void;
+  onHistoryRestore: (index: number) => void;
+  onHistoryClear: () => void;
 };
 
 // SVG Icons for sidebar (Lucide-style)
@@ -428,6 +441,17 @@ export function renderConfig(props: ConfigProps) {
   const hasRawChanges = props.formMode === "raw" && props.raw !== props.originalRaw;
   const hasChanges = props.formMode === "form" ? diff.length > 0 : hasRawChanges;
 
+  // History panel props
+  const historyProps: ConfigHistoryProps = {
+    entries: props.historyEntries,
+    visible: props.historyVisible,
+    selectedIndex: props.historySelectedIndex,
+    onToggle: props.onHistoryToggle,
+    onSelect: props.onHistorySelect,
+    onRestore: props.onHistoryRestore,
+    onClear: props.onHistoryClear,
+  };
+
   // Save/apply buttons require actual changes to be enabled.
   // Note: formUnsafe warns about unsupported schema paths but shouldn't block saving.
   const canSaveForm = Boolean(props.formValue) && !props.loading && Boolean(analysis.schema);
@@ -517,6 +541,7 @@ export function renderConfig(props: ConfigProps) {
 
         <!-- Mode toggle at bottom -->
         <div class="config-sidebar__footer">
+          ${renderConfigHistoryToggle(historyProps)}
           <div class="config-mode-toggle">
             <button
               class="config-mode-toggle__btn ${props.formMode === "form" ? "active" : ""}"
@@ -739,6 +764,9 @@ ${JSON.stringify(props.issues, null, 2)}</pre
             : nothing
         }
       </main>
+
+      <!-- History sidebar panel -->
+      ${renderConfigHistoryPanel(historyProps)}
     </div>
   `;
 }

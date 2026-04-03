@@ -61,6 +61,7 @@ import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import type { ResolvedTheme, ThemeMode } from "./theme.ts";
+import type { ConfigHistoryEntry } from "./views/config-history.ts";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
@@ -82,6 +83,7 @@ import type {
 } from "./types.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import { createSessionTranscriptState } from "./views/session-transcript.ts";
 
 declare global {
   interface Window {
@@ -192,6 +194,9 @@ export class OpenClawApp extends LitElement {
   @state() configSearchQuery = "";
   @state() configActiveSection: string | null = null;
   @state() configActiveSubsection: string | null = null;
+  @state() configHistoryEntries: ConfigHistoryEntry[] = [];
+  @state() configHistoryVisible = false;
+  @state() configHistorySelectedIndex: number | null = null;
 
   @state() channelsLoading = false;
   @state() channelsSnapshot: ChannelsStatusSnapshot | null = null;
@@ -237,6 +242,7 @@ export class OpenClawApp extends LitElement {
   @state() sessionsFilterLimit = "120";
   @state() sessionsIncludeGlobal = true;
   @state() sessionsIncludeUnknown = false;
+  @state() sessionsTranscriptState = createSessionTranscriptState();
 
   @state() usageLoading = false;
   @state() usageResult: import("./types.js").SessionsUsageResult | null = null;

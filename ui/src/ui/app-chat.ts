@@ -5,6 +5,7 @@ import { resetToolStream } from "./app-tool-stream.ts";
 import type { OpenClawApp } from "./app.ts";
 import { abortChatRun, loadChatHistory, sendChatMessage } from "./controllers/chat.ts";
 import { loadSessions } from "./controllers/sessions.ts";
+import { saveQueueItem, deleteQueueItem } from "./db.ts";
 import type { GatewayHelloOk } from "./gateway.ts";
 import { normalizeBasePath } from "./navigation.ts";
 import type { ChatAttachment, ChatQueueItem } from "./ui-types.ts";
@@ -79,16 +80,17 @@ function enqueueChatMessage(
   if (!trimmed && !hasAttachments) {
     return;
   }
-  host.chatQueue = [
-    ...host.chatQueue,
-    {
-      id: generateUUID(),
-      text: trimmed,
-      createdAt: Date.now(),
-      attachments: hasAttachments ? attachments?.map((att) => ({ ...att })) : undefined,
-      refreshSessions,
-    },
-  ];
+  const item: ChatQueueItem = {
+    id: generateUUID(),
+    text: trimmed,
+    createdAt: Date.now(),
+    attachments: hasAttachments ? attachments?.map((att) => ({ ...att })) : undefined,
+    refreshSessions,
+  };
+  host.chatQueue = [...host.chatQueue, item];
+  saveQueueItem(item).catch((err) =>
+    console.warn("[chat-queue] failed to persist queue item to IndexedDB:", err),
+  );
 }
 
 async function sendChatMessageNow(
@@ -147,13 +149,20 @@ async function flushChatQueue(host: ChatHost) {
     attachments: next.attachments,
     refreshSessions: next.refreshSessions,
   });
-  if (!ok) {
+  if (ok) {
+    deleteQueueItem(next.id).catch((err) =>
+      console.warn("[chat-queue] failed to remove sent item from IndexedDB:", err),
+    );
+  } else {
     host.chatQueue = [next, ...host.chatQueue];
   }
 }
 
 export function removeQueuedMessage(host: ChatHost, id: string) {
   host.chatQueue = host.chatQueue.filter((item) => item.id !== id);
+  deleteQueueItem(id).catch((err) =>
+    console.warn("[chat-queue] failed to remove item from IndexedDB:", err),
+  );
 }
 
 export async function handleSendChat(
@@ -161,9 +170,6 @@ export async function handleSendChat(
   messageOverride?: string,
   opts?: { restoreDraft?: boolean },
 ) {
-  if (!host.connected) {
-    return;
-  }
   const previousDraft = host.chatMessage;
   const message = (messageOverride ?? host.chatMessage).trim();
   const attachments = host.chatAttachments ?? [];
@@ -172,6 +178,16 @@ export async function handleSendChat(
 
   // Allow sending with just attachments (no message text required)
   if (!message && !hasAttachments) {
+    return;
+  }
+
+  // When disconnected, queue the message for later delivery
+  if (!host.connected) {
+    if (messageOverride == null) {
+      host.chatMessage = "";
+      host.chatAttachments = [];
+    }
+    enqueueChatMessage(host, message, attachmentsToSend);
     return;
   }
 
