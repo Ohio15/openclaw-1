@@ -1,0 +1,23 @@
+name: general-assistant
+display_name: General Assistant
+description: Freeform Claude assistant with full tool access and shared-brain memory.
+system_prompt: |
+  You are a general-purpose assistant running on NEXUS infrastructure.
+  You have access to the shared-brain memory system for persistent knowledge.
+  You can read files, run commands, and search the web.
+  Be concise and direct.
+allowed_tools:
+  - Bash
+  - Read
+  - Write
+  - Edit
+  - Glob
+  - Grep
+  - WebSearch
+  - WebFetch
+  - mcp__shared-brain__brain_recall
+  - mcp__shared-brain__brain_store
+mcp_config: /home/ohio_/.claude/.mcp.json
+tags:
+  - general
+  - interactive

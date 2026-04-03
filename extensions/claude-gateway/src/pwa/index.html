@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Claude Gateway</title>
+  <link rel="manifest" href="/gateway/ui/manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="stylesheet" href="/gateway/ui/styles.css">
+  <!-- XSS sanitization -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"
+    integrity="sha256-mFSHBIjTsKeDFnWWDz5LmWkxJH0mbJU5vbT1c+KTdQ="
+    crossorigin="anonymous"></script>
+  <!-- Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@15.0.0/marked.min.js"
+    integrity="sha256-Z8JFfY7NJieTAKJOPmR5nDCYaB8sS1aFAhKqZqQUCA="
+    crossorigin="anonymous"></script>
+  <!-- Syntax highlighting for code blocks -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/github-dark.min.css"
+    integrity="sha256-cysodBMcePRZZqJb0hbvKCVj6DDaFd4FMcP8MH2PX3c="
+    crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/core.min.js"
+    integrity="sha256-EZhjdEn9sEJvJRVcCGF45qxGCal/4bQdkJkXOQ8YNRA="
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/languages/javascript.min.js"
+    integrity="sha256-h8pSS5C4rwy2U3PoC8s3Yci/V/6VZBdqbGJKFasJXSc="
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/languages/python.min.js"
+    integrity="sha256-1LBCJYjfH7xQx1loFXWq/WnEJn03qOfV8WSHL3DadI="
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/languages/bash.min.js"
+    integrity="sha256-8fT5gnuBE/cTR84XuH0Vmg3bBmiawdOFg4zW5d8oVXQ="
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/languages/yaml.min.js"
+    integrity="sha256-tMiXMHsiFfNnVG72lJHT/RQFP1EBFBXXx2/CD1Eg3pU="
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/languages/json.min.js"
+    integrity="sha256-VgGEl0RJ3X0R5dBNKYOOjxOE4Bm1PqC/k4W2C7JMPjU="
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/languages/go.min.js"
+    integrity="sha256-GwcSR87bR7VCbLmXfBj5pPexh2ky5+/tj0sRMTkD8tg="
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/languages/sql.min.js"
+    integrity="sha256-gxP1JlYIEL7yG1aEKUCQku1bnc+nrLzf4lIhPgUQkw="
+    crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/lib/languages/typescript.min.js"
+    integrity="sha256-CIkGLPVJQsWVHX8HtEV+D4qCq1ZyEDnfXGM/pSt+RY="
+    crossorigin="anonymous"></script>
+</head>
+<body>
+  <!-- Login screen -->
+  <div id="login-screen" style="display:none">
+    <div class="welcome-screen" style="height:100dvh">
+      <h2>Claude Gateway</h2>
+
+      <!-- Token login -->
+      <div id="token-login">
+        <p style="color:var(--text-secondary);font-size:14px;margin-bottom:16px">Enter OpenClaw gateway password</p>
+        <input id="login-token" type="password" placeholder="Gateway password..."
+          style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;color:var(--text-primary);font-size:14px;width:280px">
+        <button id="login-btn" class="preset-btn" style="min-width:120px;text-align:center;padding:10px">Connect</button>
+        <div id="login-error" style="color:var(--error);font-size:12px;display:none"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <h1>Claude Gateway</h1>
+        <div class="header-actions">
+          <div id="status-dot" class="status-dot" title="Connecting..."></div>
+          <div id="status-popover" class="status-popover">
+            <div id="status-popover-content"></div>
+          </div>
+          <button id="new-session-btn" title="New Session">+</button>
+        </div>
+      </div>
+
+      <!-- Presets -->
+      <div class="sidebar-section">
+        <div id="preset-interactive">
+          <div class="skeleton-item"><div class="skeleton-icon"></div><div class="skeleton-lines"><div class="skeleton-line skeleton-line-title"></div><div class="skeleton-line skeleton-line-desc"></div></div></div>
+          <div class="skeleton-item"><div class="skeleton-icon"></div><div class="skeleton-lines"><div class="skeleton-line skeleton-line-title"></div><div class="skeleton-line skeleton-line-desc"></div></div></div>
+          <div class="skeleton-item"><div class="skeleton-icon"></div><div class="skeleton-lines"><div class="skeleton-line skeleton-line-title"></div><div class="skeleton-line skeleton-line-desc"></div></div></div>
+        </div>
+        <div id="preset-automated-toggle" class="automated-toggle" style="display:none">
+          <span class="automated-label">Automated</span>
+          <span id="automated-count" class="automated-count"></span>
+          <span class="automated-chevron">&#x203A;</span>
+        </div>
+        <div id="preset-automated" class="preset-automated-list"></div>
+      </div>
+
+      <!-- Sessions -->
+      <div class="sidebar-section sidebar-sessions">
+        <h3>Sessions</h3>
+        <div id="pull-indicator" class="pull-indicator"><span class="pull-arrow">&darr;</span><span class="pull-text">Pull to refresh</span></div>
+        <div id="session-list"></div>
+      </div>
+
+      <!-- Alert badge (shown when alerts exist) -->
+      <div id="alert-badge" class="sidebar-alert" style="display:none"></div>
+    </aside>
+
+    <!-- Sidebar overlay for mobile -->
+    <div id="sidebar-overlay"></div>
+
+    <!-- Toggle sidebar on mobile -->
+    <button id="sidebar-toggle">&#9776;</button>
+
+    <!-- Main chat area -->
+    <main id="chat-area">
+      <div id="connection-banner"></div>
+      <div id="welcome" class="welcome-screen">
+        <h2>Claude Gateway</h2>
+        <div class="welcome-input-wrap">
+          <input type="text" id="welcome-input" class="welcome-input" placeholder="Ask Claude anything..." autocomplete="off" />
+          <button id="welcome-send-btn" class="welcome-send-btn" title="Send">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+          </button>
+        </div>
+        <div id="recent-sessions"></div>
+        <div id="quick-presets"></div>
+        <div id="health-summary" class="health-summary"></div>
+      </div>
+      <div id="messages" class="messages-container"></div>
+      <div id="streaming-indicator" class="streaming-bar" style="display:none">
+        <div class="streaming-dot"></div>
+        <span id="streaming-text">Claude is thinking...</span>
+        <span id="streaming-timer" style="margin-left:auto;font-variant-numeric:tabular-nums"></span>
+      </div>
+      <div id="context-bar" class="context-bar" style="display:none">
+        <div class="context-bar-fill"></div>
+        <span class="context-bar-label"></span>
+      </div>
+      <div id="input-area" class="input-area">
+        <textarea id="message-input" placeholder="Send a message..." rows="1"></textarea>
+        <button id="send-btn" title="Send">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+        </button>
+        <button id="shortcuts-btn" class="shortcuts-btn" title="Keyboard shortcuts">?</button>
+        <div id="shortcuts-popover" class="shortcuts-popover">
+          <div class="shortcuts-title">Keyboard Shortcuts</div>
+          <div class="shortcut-row"><kbd>Ctrl/Cmd+K</kbd><span>Focus input</span></div>
+          <div class="shortcut-row"><kbd>Ctrl/Cmd+N</kbd><span>New session</span></div>
+          <div class="shortcut-row"><kbd>Ctrl/Cmd+/</kbd><span>Toggle sidebar</span></div>
+          <div class="shortcut-row"><kbd>Escape</kbd><span>Close / blur</span></div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/gateway/ui/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+  "id": "claude-gateway",
+  "name": "Claude Gateway",
+  "description": "YAML preset loader with scheduled agent execution and alert keyword scanning",
+  "version": "2.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "presetsDir": {
+        "type": "string",
+        "description": "Directory containing preset YAML files"
+      },
+      "delivery": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["none", "announce", "webhook"],
+            "default": "none"
+          },
+          "channel": {
+            "type": "string",
+            "description": "Channel ID for alert delivery (e.g., 'telegram', 'discord')"
+          },
+          "to": {
+            "type": "string",
+            "description": "Recipient identifier for alert delivery"
+          }
+        }
+      },
+      "alertKeywords": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": ["WARNING", "CRITICAL", "FAIL", "ERROR"],
+        "description": "Keywords in agent output that trigger alerts"
+      }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Claude Gateway Presets",
+      "help": "Load YAML preset files and schedule agent execution via cron"
+    },
+    "presetsDir": {
+      "label": "Presets Directory",
+      "placeholder": "./presets",
+      "help": "Path to directory containing preset YAML files"
+    },
+    "delivery.channel": {
+      "label": "Alert Channel",
+      "help": "Which messaging channel to send preset alerts to"
+    }
+  }
+}

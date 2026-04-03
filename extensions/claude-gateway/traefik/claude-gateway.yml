@@ -1,0 +1,41 @@
+# OpenClaw Gateway — Local .nexus routing
+#
+# Replaces the standalone Claude Gateway Traefik config.
+# Routes claude.nexus traffic to the OpenClaw gateway service on port 18789.
+#
+# Place this file in Traefik's dynamic config directory and remove/disable
+# the old ClaudeGateway/traefik/claude-gateway.yml to avoid conflicts.
+#
+# WebSocket connections are handled transparently by Traefik — no special
+# middleware is needed since the transport layer negotiation is automatic.
+
+http:
+  routers:
+    # HTTP (port 80) — local .nexus domain
+    claude-local:
+      rule: "Host(`claude.nexus`)"
+      entryPoints: [web]
+      service: openclaw-gateway-svc
+      priority: 5
+
+    # HTTPS (port 443, self-signed *.nexus cert)
+    claude-local-tls:
+      rule: "Host(`claude.nexus`)"
+      entryPoints: [websecure]
+      service: openclaw-gateway-svc
+      tls: {}
+      priority: 5
+
+    # External route via Cloudflare tunnel (claude.n3xus.uk)
+    claude-n3xus:
+      rule: "Host(`claude.n3xus.uk`)"
+      entryPoints: [web]
+      service: openclaw-gateway-svc
+      priority: 5
+
+  services:
+    openclaw-gateway-svc:
+      loadBalancer:
+        servers:
+          - url: "http://openclaw-gateway:18789"
+        passHostHeader: true

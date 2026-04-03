@@ -1,0 +1,18 @@
+{
+  "name": "@openclaw/claude-gateway",
+  "version": "2.1.0",
+  "private": true,
+  "description": "YAML preset loader with scheduled agent execution via cron, PWA chat UI",
+  "type": "module",
+  "devDependencies": {
+    "openclaw": "workspace:*"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "id": "webauthn",
+  "name": "WebAuthn Passkey Authentication",
+  "description": "Biometric authentication (Face ID, fingerprint, security keys) and QR-code device pairing via WebAuthn/passkeys",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "rpId": {
+        "type": "string",
+        "description": "Relying party identifier (domain name, e.g. 'example.com')"
+      },
+      "rpName": {
+        "type": "string",
+        "description": "Human-readable relying party name",
+        "default": "OpenClaw"
+      },
+      "origin": {
+        "type": "string",
+        "description": "Expected origin for WebAuthn ceremonies (e.g. 'https://example.com')"
+      },
+      "userName": {
+        "type": "string",
+        "default": "owner",
+        "description": "WebAuthn user name (single-user system)"
+      },
+      "userDisplayName": {
+        "type": "string",
+        "default": "Owner",
+        "description": "WebAuthn user display name"
+      },
+      "passkeysPath": {
+        "type": "string",
+        "description": "Path to passkeys.json persistence file. Defaults to {stateDir}/webauthn/passkeys.json"
+      },
+      "deviceApprovalToken": {
+        "type": "string",
+        "description": "Token granted to approved devices (e.g. an MCP bearer token)"
+      },
+      "hmacSecret": {
+        "type": "string",
+        "description": "Secret used for HMAC signing of QR approval URLs. Falls back to gateway token if not set."
+      }
+    },
+    "required": ["rpId", "origin"]
+  },
+  "uiHints": {
+    "rpId": {
+      "label": "Relying Party ID",
+      "help": "The domain name for WebAuthn (must match the site's actual domain)",
+      "placeholder": "example.com"
+    },
+    "rpName": {
+      "label": "Relying Party Name",
+      "help": "Displayed to the user during passkey registration"
+    },
+    "origin": {
+      "label": "Origin URL",
+      "help": "Full origin URL including scheme (e.g. https://example.com)",
+      "placeholder": "https://example.com"
+    },
+    "passkeysPath": {
+      "label": "Passkeys Store Path",
+      "advanced": true
+    },
+    "hmacSecret": {
+      "label": "HMAC Secret",
+      "help": "Used to sign QR code approval URLs",
+      "sensitive": true,
+      "advanced": true
+    },
+    "deviceApprovalToken": {
+      "label": "Device Approval Token",
+      "help": "Token granted to devices after biometric approval",
+      "sensitive": true,
+      "advanced": true
+    }
+  }
+}

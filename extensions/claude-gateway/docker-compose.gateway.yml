@@ -1,0 +1,59 @@
+# Docker Compose override for Claude Gateway plugin
+#
+# Merge with main compose file:
+#   docker compose -f docker-compose.yml -f extensions/claude-gateway/docker-compose.gateway.yml up
+#
+# This adds gateway-specific volumes (passkeys, run history) and environment
+# variables for preset loading, WebAuthn relying party configuration, and
+# Claude credential forwarding.
+#
+# The openclaw-gateway service is defined in the root docker-compose.yml.
+# This file only extends it with gateway plugin concerns.
+
+services:
+  openclaw-gateway:
+    volumes:
+      # Persistent gateway data: passkeys, session history, run artifacts
+      - gateway-data:/app/data/gateway
+      # YAML preset files — read-only mount from the extension directory
+      - ./extensions/claude-gateway/presets:/app/presets:ro
+      # Claude Code auth — read-write so the CLI can refresh its OAuth token
+      - ${CLAUDE_CREDENTIALS_PATH:-/home/ohio_/.claude/.credentials.json}:/home/node/.claude/.credentials.json
+      # Claude CLI configuration files
+      - ${CLAUDE_SETTINGS_PATH:-/home/ohio_/.claude/settings.json}:/home/node/.claude/settings.json:ro
+      - ${CLAUDE_JSON_PATH:-/home/ohio_/.claude.json}:/home/node/.claude.json:ro
+      # Writable Claude working directories (sessions, project state)
+      - claude-state:/home/node/.claude/projects
+      - claude-sessions:/home/node/.claude/sessions
+    environment:
+      # Gateway preset configuration
+      - CLAUDE_GATEWAY_PRESETS_DIR=/app/presets
+      # WebAuthn relying party settings
+      - CLAUDE_GATEWAY_RP_ID=${RP_ID:-claude.n3xus.uk}
+      - CLAUDE_GATEWAY_ORIGIN=${ORIGIN:-https://claude.n3xus.uk}
+      # Gateway secret for API authentication
+      - GATEWAY_SECRET=${GATEWAY_SECRET}
+      # Shared-brain MCP token
+      - BRAIN_MCP_TOKEN=${BRAIN_MCP_TOKEN}
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4096M
+        reservations:
+          cpus: "1"
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:18789/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  gateway-data:
+    driver: local
+  claude-state:
+    driver: local
+  claude-sessions:
+    driver: local
