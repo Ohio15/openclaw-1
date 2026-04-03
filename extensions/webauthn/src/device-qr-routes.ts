@@ -196,7 +196,7 @@ export function createDeviceQrHandler(deps: DeviceQrRoutesDeps) {
           mcpServers: {
             "shared-brain": {
               type: "http",
-              url: "https://shared-brain.us/mcp",
+              url: "http://192.168.1.20:3100/mcp",
               headers: {
                 Authorization: `Bearer ${device.token ?? ""}`,
               },

@@ -16,7 +16,6 @@ system_prompt: |
 
   Projects:
   - ~/Sentinel
-  - ~/claude-gateway
   - ~/OpenClaw
   - ~/shared-brain-mcp
 

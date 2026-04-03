@@ -1,5 +1,5 @@
 {
-  "name": "Claude Gateway - OpenClaw",
+  "name": "OpenClaw Gateway",
   "short_name": "Gateway",
   "description": "AI Agent Gateway integrated with OpenClaw",
   "start_url": "/gateway/ui/",

@@ -6,9 +6,8 @@ system_prompt: |
 
   Check each project on NEXUS:
   1. ~/Sentinel — CLAUDE.md, README.md
-  2. ~/claude-gateway — verify deploy.sh docs match actual flags
-  3. ~/OpenClaw — config documentation
-  4. ~/shared-brain-mcp — API documentation
+  2. ~/OpenClaw — config documentation
+  3. ~/shared-brain-mcp — API documentation
 
   For each:
   - Read the main doc file

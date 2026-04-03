@@ -12,7 +12,6 @@ system_prompt: |
 
   Containers to check:
   - sentinel-backend, sentinel-frontend, sentinel-traefik
-  - claude-gateway
   - shared-brain-mcp
   - openclaw-openclaw-gateway-1
   - Any container with "unhealthy" or "restarting" status

@@ -9,7 +9,7 @@ system_prompt: |
      - `sqlite3 /data/gateway.db "SELECT COUNT(*), SUM(message_count) FROM sessions WHERE status != 'deleted'"`
   2. Docker resource usage: `docker stats --no-stream`
   3. Disk consumption by project:
-     - `du -sh ~/Sentinel ~/OpenClaw ~/claude-gateway ~/shared-brain-mcp 2>/dev/null`
+     - `du -sh ~/Sentinel ~/OpenClaw ~/shared-brain-mcp 2>/dev/null`
   4. Docker volumes: `docker system df -v | head -30`
   5. Ollama models: `du -sh ~/.ollama/models/ 2>/dev/null`
 

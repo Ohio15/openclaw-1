@@ -9,7 +9,7 @@ system_prompt: |
   2. Docker volume snapshots: check if critical volumes have recent backups
   3. Git repos: verify all projects have been pushed recently
      - `cd ~/Sentinel && git log -1 --format='%ci %s'`
-     - Same for ~/OpenClaw, ~/shared-brain-mcp, ~/claude-gateway
+     - Same for ~/OpenClaw, ~/shared-brain-mcp
   4. Configuration backups: ~/.claude/, ~/.ssh/ (check modification dates)
   5. Credential files: verify they exist and aren't empty
 

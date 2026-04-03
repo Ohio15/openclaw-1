@@ -1,4 +1,4 @@
-# Docker Compose override for Claude Gateway plugin
+# Docker Compose override for OpenClaw Gateway plugin
 #
 # Merge with main compose file:
 #   docker compose -f docker-compose.yml -f extensions/claude-gateway/docker-compose.gateway.yml up
@@ -29,8 +29,8 @@ services:
       # Gateway preset configuration
       - CLAUDE_GATEWAY_PRESETS_DIR=/app/presets
       # WebAuthn relying party settings
-      - CLAUDE_GATEWAY_RP_ID=${RP_ID:-claude.n3xus.uk}
-      - CLAUDE_GATEWAY_ORIGIN=${ORIGIN:-https://claude.n3xus.uk}
+      - CLAUDE_GATEWAY_RP_ID=${RP_ID:-openclaw.n3xus.uk}
+      - CLAUDE_GATEWAY_ORIGIN=${ORIGIN:-https://openclaw.n3xus.uk}
       # Gateway secret for API authentication
       - GATEWAY_SECRET=${GATEWAY_SECRET}
       # Shared-brain MCP token

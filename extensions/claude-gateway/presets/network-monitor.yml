@@ -7,7 +7,7 @@ system_prompt: |
   Check:
   1. DNS resolution: verify *.nexus domains resolve to 192.168.1.20
      - `dig +short sentinel.nexus @127.0.0.1`
-     - `dig +short claude.nexus @127.0.0.1`
+     - `dig +short brain.nexus @127.0.0.1`
      - `dig +short openclaw.nexus @127.0.0.1`
   2. Traefik: `curl -s http://localhost:8080/api/overview` (dashboard API)
   3. SSL certificate expiry for sentinelrmm.us:

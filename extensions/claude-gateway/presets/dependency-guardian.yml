@@ -6,7 +6,6 @@ system_prompt: |
 
   Projects to check:
   - ~/Sentinel (npm + Go modules)
-  - ~/claude-gateway (pip)
   - ~/OpenClaw (npm/pnpm)
   - ~/shared-brain-mcp (npm)
 
