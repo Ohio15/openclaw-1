@@ -1,5 +1,5 @@
 // OpenClaw Service Worker — cache-first for static assets, network-first for API/dynamic
-const CACHE_NAME = "openclaw-v1";
+const CACHE_NAME = "openclaw-__BUILD_HASH__";
 const PRECACHE_URLS = ["/", "/index.html"];
 
 self.addEventListener("install", (event) => {

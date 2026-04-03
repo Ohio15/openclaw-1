@@ -3,7 +3,7 @@ import type { OpenClawConfig } from "../config/config.js";
 
 const requireConfig = createRequire(import.meta.url);
 
-export type RedactSensitiveMode = "off" | "tools";
+export type RedactSensitiveMode = "tools";
 
 const DEFAULT_REDACT_MODE: RedactSensitiveMode = "tools";
 const DEFAULT_REDACT_MIN_LENGTH = 18;
@@ -42,8 +42,9 @@ type RedactOptions = {
   patterns?: string[];
 };
 
-function normalizeMode(value?: string): RedactSensitiveMode {
-  return value === "off" ? "off" : DEFAULT_REDACT_MODE;
+function normalizeMode(_value?: string): RedactSensitiveMode {
+  // "off" is no longer supported — redaction is always enabled.
+  return DEFAULT_REDACT_MODE;
 }
 
 function parsePattern(raw: string): RegExp | null {
@@ -128,9 +129,6 @@ export function redactSensitiveText(text: string, options?: RedactOptions): stri
     return text;
   }
   const resolved = options ?? resolveConfigRedaction();
-  if (normalizeMode(resolved.mode) === "off") {
-    return text;
-  }
   const patterns = resolvePatterns(resolved.patterns);
   if (!patterns.length) {
     return text;
@@ -140,9 +138,6 @@ export function redactSensitiveText(text: string, options?: RedactOptions): stri
 
 export function redactToolDetail(detail: string): string {
   const resolved = resolveConfigRedaction();
-  if (normalizeMode(resolved.mode) !== "tools") {
-    return detail;
-  }
   return redactSensitiveText(detail, resolved);
 }
 

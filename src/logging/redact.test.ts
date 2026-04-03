@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getDefaultRedactPatterns, redactSensitiveText } from "./redact.js";
+import {
+  type RedactSensitiveMode,
+  getDefaultRedactPatterns,
+  redactSensitiveText,
+} from "./redact.js";
 
 const defaults = getDefaultRedactPatterns();
 
@@ -93,12 +97,14 @@ describe("redactSensitiveText", () => {
     expect(output).toBe("token=abcdef…ghij");
   });
 
-  it("skips redaction when mode is off", () => {
+  it("redacts even when mode is set to off (off is no longer supported)", () => {
     const input = "OPENAI_API_KEY=sk-1234567890abcdef";
     const output = redactSensitiveText(input, {
-      mode: "off",
+      mode: "off" as RedactSensitiveMode,
       patterns: defaults,
     });
-    expect(output).toBe(input);
+    expect(output).not.toBe(input);
+    expect(output).toContain("OPENAI_API_KEY=");
+    expect(output).not.toContain("567890ab");
   });
 });

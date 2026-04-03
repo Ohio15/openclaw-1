@@ -4,6 +4,7 @@ import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import type { Api, Model } from "@mariozechner/pi-ai";
 import { resolveStateDir } from "../config/paths.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { redactSensitiveText } from "../logging/redact.js";
 import { resolveUserPath } from "../utils.js";
 import { parseBooleanValue } from "../utils/boolean.js";
 import { safeJsonStringify } from "../utils/safe-json.js";
@@ -126,7 +127,10 @@ export function createAnthropicPayloadLogger(params: {
     if (!line) {
       return;
     }
-    writer.write(`${line}\n`);
+    // Redact sensitive content (API keys, tokens, PII) before writing to disk.
+    // The payloadDigest is computed on the original payload for integrity verification.
+    const redacted = redactSensitiveText(line);
+    writer.write(`${redacted}\n`);
   };
 
   const wrapStreamFn: AnthropicPayloadLogger["wrapStreamFn"] = (streamFn) => {
