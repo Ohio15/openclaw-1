@@ -22,6 +22,17 @@ services:
     networks:
       - default
       - shared-brain
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=edge
+      - traefik.http.routers.openclaw.rule=Host(`openclaw.nexus`)
+      - traefik.http.routers.openclaw.entrypoints=web,websecure
+      - traefik.http.routers.openclaw.tls=true
+      - traefik.http.services.openclaw.loadbalancer.server.port=18789
+      - traefik.http.routers.openclaw-tunnel.rule=Host(`openclaw.n3xus.uk`)
+      - traefik.http.routers.openclaw-tunnel.entrypoints=web
+      - traefik.http.routers.openclaw-tunnel.service=openclaw
     command:
       [
         "node",
@@ -57,3 +68,6 @@ networks:
   shared-brain:
     external: true
     name: shared-brain-mcp_default
+  edge:
+    external: true
+    name: edge
