@@ -10,6 +10,9 @@
  * @module control-plane
  */
 
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { analyzeComplexity } from "./complexity-decomposer.js";
 import {
   getSemanticKnowledge,
@@ -22,6 +25,7 @@ import {
   type TierSelection,
   type PipelineSelection,
 } from "../config/routing-authority.js";
+import { LearnedClassifier } from "./learned-classifier.js";
 
 // ============================================================================
 // Types
@@ -154,6 +158,21 @@ function countRequirements(text: string): number {
 }
 
 /**
+ * Numeric rank for tier comparison. Higher = more capable.
+ */
+const TIER_RANKS: Record<string, number> = {
+  tiny: 0,
+  small: 1,
+  medium: 2,
+  large: 3,
+  reasoning: 4,
+};
+
+function tierRank(tier: string): number {
+  return TIER_RANKS[tier] ?? 2; // default to medium if unknown
+}
+
+/**
  * Detect task type from text content (mirrors MultiPassExecutor's determineSpecialistType).
  */
 function detectTaskType(text: string): string {
@@ -176,6 +195,8 @@ function detectTaskType(text: string): string {
 
 export class IntelligenceControlPlane {
   private config: IntelligenceConfig;
+  private classifier: LearnedClassifier;
+  private classifierReady: boolean;
 
   constructor(config: Partial<IntelligenceConfig> = {}) {
     this.config = {
@@ -187,6 +208,28 @@ export class IntelligenceControlPlane {
       feedbackPath: config.feedbackPath,
       knowledgeSource: config.knowledgeSource ?? "hybrid",
     };
+
+    // Load the learned classifier model at startup.
+    // Falls back to heuristic if model file doesn't exist.
+    this.classifier = new LearnedClassifier();
+    this.classifierReady = false;
+    try {
+      // Resolve model path relative to this source file's location in the project tree.
+      // The model lives at benchmark/classifier-model.json relative to the extension root.
+      const thisDir = dirname(fileURLToPath(import.meta.url));
+      const modelPath = resolve(thisDir, "../../benchmark/classifier-model.json");
+      this.classifierReady = this.classifier.loadModelFromFile(modelPath);
+    } catch {
+      // Model loading failed — fall back to heuristic
+      this.classifierReady = false;
+    }
+  }
+
+  /**
+   * Whether the learned classifier is loaded and ready.
+   */
+  get isClassifierReady(): boolean {
+    return this.classifierReady;
   }
 
   /**
@@ -201,26 +244,61 @@ export class IntelligenceControlPlane {
   async analyzeBeforeAgent(messages: unknown[]): Promise<BeforeAgentAnalysis> {
     const userPrompt = extractUserPrompt(messages);
 
-    // 1. Complexity decomposition
+    // 1. Complexity decomposition (always run — used for knowledge retrieval sizing)
     const complexityResult = analyzeComplexity(userPrompt);
     const complexity = complexityResult.complexity;
 
-    // 2. Domain detection (still used for tier routing, not for knowledge gating)
+    // 2. Domain detection (still used for domain escalation override and knowledge gating)
     const domain = detectDomain(userPrompt);
 
     // 3. Requirement count
     const requirementCount = countRequirements(userPrompt);
 
-    // 4. Tier selection
-    const taskType = detectTaskType(userPrompt);
-    const tierSelection = selectTier(complexity, domain, taskType);
+    // 4. Tier and pipeline selection
+    //    PRIMARY: learned classifier (if model loaded)
+    //    FALLBACK: heuristic-based selectTier + selectPipeline
+    let tierSelection: TierSelection;
+    let pipelineSelection: PipelineSelection;
 
-    // 5. Pipeline selection
-    const pipelineSelection = selectPipeline(
-      complexity,
-      requirementCount,
-      userPrompt,
-    );
+    if (this.classifierReady) {
+      const prediction = this.classifier.predictFromPrompt(userPrompt);
+
+      tierSelection = {
+        tier: prediction.tier,
+        reason: `Learned classifier (confidence: ${(prediction.tierConfidence * 100).toFixed(0)}%)`,
+      };
+
+      pipelineSelection = {
+        pipeline: prediction.pipeline as "simple" | "complex",
+        reason: `Learned classifier (confidence: ${(prediction.pipelineConfidence * 100).toFixed(0)}%)`,
+      };
+
+      // Domain escalation override: if routing-authority says a domain should
+      // escalate and the classifier chose a lower tier, respect the escalation.
+      // This preserves the safety net for security-sensitive domains.
+      const taskType = detectTaskType(userPrompt);
+      const heuristicTier = selectTier(complexity, domain, taskType);
+
+      if (
+        domain &&
+        heuristicTier.reason.startsWith("Domain escalation") &&
+        tierRank(heuristicTier.tier) > tierRank(prediction.tier)
+      ) {
+        tierSelection = {
+          tier: heuristicTier.tier,
+          reason: `Domain escalation override: ${domain} -> ${heuristicTier.tier} (classifier predicted ${prediction.tier})`,
+        };
+      }
+    } else {
+      // Fallback to heuristic when no classifier model is available
+      const taskType = detectTaskType(userPrompt);
+      tierSelection = selectTier(complexity, domain, taskType);
+      pipelineSelection = selectPipeline(
+        complexity,
+        requirementCount,
+        userPrompt,
+      );
+    }
 
     // 6. Semantic knowledge retrieval (not gated by domain — any query gets searched)
     //    Uses agentic RAG for complex queries (iterative/decomposed retrieval)

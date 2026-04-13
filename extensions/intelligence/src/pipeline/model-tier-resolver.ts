@@ -14,16 +14,41 @@
 // Types
 // ============================================================================
 
+export type BackendType = "api" | "local";
+export type LatencyClass = "instant" | "fast" | "slow" | "variable";
+export type CostClass = "free" | "cheap" | "moderate" | "expensive";
+
+export interface TierModelEntry {
+  model?: string;
+  provider?: string;
+  /** Distinguishes cloud API providers from local inference backends. Defaults to "api". */
+  backend?: BackendType;
+  /** Routing hint for expected latency characteristics. */
+  latencyClass?: LatencyClass;
+  /** Routing hint for cost classification. */
+  costClass?: CostClass;
+}
+
 export interface TierModelConfig {
-  [tier: string]: {
-    model?: string;
-    provider?: string;
-  };
+  [tier: string]: TierModelEntry;
 }
 
 // ============================================================================
 // ModelTierResolver
 // ============================================================================
+
+/**
+ * Reference local-inference tier map for llama.cpp backends.
+ * Users opt in by assigning this (or a similar map) to their `tierModelMap` config.
+ * Not active by default — provided as a starting point for local deployments.
+ */
+export const LOCAL_TIER_DEFAULTS: TierModelConfig = {
+  tiny: { model: "deepseek-r1-distill-7b-q4", provider: "llama.cpp", backend: "local", latencyClass: "instant", costClass: "free" },
+  small: { model: "deepseek-r1-distill-7b-q4", provider: "llama.cpp", backend: "local", latencyClass: "instant", costClass: "free" },
+  medium: { model: "qwen2.5-72b-q4", provider: "llama.cpp", backend: "local", latencyClass: "fast", costClass: "free" },
+  large: { model: "deepseek-v3-q2", provider: "llama.cpp", backend: "local", latencyClass: "slow", costClass: "free" },
+  reasoning: { model: "claude-opus-4-6", provider: "anthropic", backend: "api", latencyClass: "fast", costClass: "expensive" },
+};
 
 export class ModelTierResolver {
   private config: TierModelConfig;
@@ -53,13 +78,22 @@ export class ModelTierResolver {
    */
   resolve(
     tierSelection: { tier: string; reason: string },
-  ): { modelOverride?: string; providerOverride?: string } | null {
+  ): {
+    modelOverride?: string;
+    providerOverride?: string;
+    backend?: BackendType;
+    latencyClass?: LatencyClass;
+    costClass?: CostClass;
+  } | null {
     const entry = this.config[tierSelection.tier];
     if (!entry) return null;
 
     return {
       modelOverride: entry.model,
       providerOverride: entry.provider,
+      backend: entry.backend ?? "api",
+      latencyClass: entry.latencyClass,
+      costClass: entry.costClass,
     };
   }
 }

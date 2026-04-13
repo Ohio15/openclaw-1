@@ -37,6 +37,7 @@ import {
   buildTemplateSenderContext,
   resolveRunAuthProfile,
 } from "./agent-runner-utils.js";
+import { consumeCascadeSignal } from "../../../extensions/intelligence/src/pipeline/cascade-state.js";
 import { resolveEnforceFinalTag } from "./agent-runner-utils.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
 import type { FollowupRun } from "./queue.js";
@@ -104,6 +105,8 @@ export async function runAgentTurnWithFallback(params: {
   let fallbackModel = params.followupRun.run.model;
   let didResetAfterCompactionFailure = false;
   let didRetryTransientHttpError = false;
+  let cascadeAttempts = 0;
+  const CASCADE_MAX_RETRIES = 2;
 
   while (true) {
     try {
@@ -439,6 +442,32 @@ export async function runAgentTurnWithFallback(params: {
             },
           };
         }
+      }
+
+      // Cascade quality fallback — if the intelligence extension's quality gate
+      // flagged this response for retry, check if we should re-invoke at a higher tier.
+      // The signal is set by the llm_output hook and consumed here (single-read).
+      const cascadeSessionId = params.sessionKey ?? params.followupRun.run.sessionId;
+      if (cascadeAttempts < CASCADE_MAX_RETRIES) {
+        const signal = consumeCascadeSignal(cascadeSessionId);
+        if (signal?.verdict === "retry" && signal.escalatedModel) {
+          cascadeAttempts += 1;
+          logVerbose(
+            `Cascade quality fallback: escalating from "${signal.currentTier}" to ` +
+            `"${signal.escalatedTier ?? "unknown"}" (attempt ${cascadeAttempts}/${CASCADE_MAX_RETRIES}, ` +
+            `model=${signal.escalatedModel}, provider=${signal.escalatedProvider ?? "default"})`,
+          );
+          // Override the provider/model for the next iteration with the
+          // pre-resolved escalation from the intelligence extension
+          if (signal.escalatedProvider) {
+            params.followupRun.run.provider = signal.escalatedProvider;
+          }
+          params.followupRun.run.model = signal.escalatedModel;
+          continue;
+        }
+      } else {
+        // Consume and discard any lingering signal to prevent leaking to the next turn
+        consumeCascadeSignal(cascadeSessionId);
       }
 
       break;

@@ -37,7 +37,8 @@ import {
 import { FeedbackLoop, type FeedbackEntry } from "./src/feedback/feedback-loop.js";
 import { SubAgentOrchestrator } from "./src/pipeline/sub-agent-orchestrator.js";
 import { ModelTierResolver } from "./src/pipeline/model-tier-resolver.js";
-import { assessQuality } from "./src/pipeline/quality-gate.js";
+import { assessQuality, assessQualityWithJudge } from "./src/pipeline/quality-gate.js";
+import type { LLMJudgeConfig } from "./src/pipeline/llm-judge.js";
 import { AnalysisCache, promptHash } from "./src/pipeline/analysis-cache.js";
 import type { BeforeAgentAnalysis } from "./src/pipeline/control-plane.js";
 import {
@@ -54,6 +55,8 @@ import {
   CONFIG_DEFAULTS as DELEGATION_DEFAULTS,
 } from "./src/tools/coding-agent-delegator.js";
 import { createDelegateCodingAgentTool } from "./src/tools/delegate-coding-agent-tool.js";
+import { setCascadeSignal, clearCascadeSignals } from "./src/pipeline/cascade-state.js";
+import { runWithQualityCascade, TIER_ORDER, type CascadeConfig } from "./src/pipeline/cascade-fallback.js";
 
 // ============================================================================
 // Plugin Definition
@@ -73,9 +76,7 @@ const intelligencePlugin = {
     const controlPlane = new IntelligenceControlPlane({
       enabled: cfg.enabled,
       knowledgeSource: (cfg as any).knowledgeSource,
-      brainUrl: (cfg as any).brainUrl,
-      brainApiKey: (cfg as any).brainApiKey,
-    });
+    } as Partial<IntelligenceConfig>);
     const feedback = new FeedbackLoop(
       api.resolvePath(cfg.feedbackPath || "~/.openclaw/intelligence/feedback.jsonl"),
     );
@@ -123,6 +124,22 @@ const intelligencePlugin = {
     const delegationEnabled = delegationCfg.enabled ?? false;
     const delegator = new CodingAgentDelegator(delegationCfg);
 
+    // Cascade fallback configuration
+    const cascadeConfig: CascadeConfig = {
+      cascadeEnabled: (cfg as any).cascadeEnabled ?? true,
+      cascadeMaxRetries: (cfg as any).cascadeMaxRetries ?? 2,
+    };
+
+    // LLM judge configuration (disabled by default)
+    const llmJudgeCfg = (cfg as any).llmJudge ?? {};
+    const llmJudgeConfig: LLMJudgeConfig = {
+      enabled: llmJudgeCfg.enabled ?? false,
+      ollamaBaseUrl: llmJudgeCfg.ollamaBaseUrl ?? "http://192.168.1.20:11434",
+      model: llmJudgeCfg.model ?? "deepseek-r1-distill-qwen-7b:latest",
+      timeoutMs: llmJudgeCfg.timeoutMs ?? 15000,
+      minHeuristicScoreForJudge: llmJudgeCfg.minHeuristicScoreForJudge ?? 0.8,
+    };
+
     api.logger.info("intelligence: plugin registered");
 
     // ========================================================================
@@ -133,8 +150,8 @@ const intelligencePlugin = {
     api.on("before_model_resolve", async (event) => {
       if (!enabled) return;
       try {
-        const messages = event.messages as unknown[];
-        if (!messages || messages.length === 0) return;
+        if (!event.prompt || event.prompt.length < 5) return;
+        const messages = [{ role: "user", content: event.prompt }] as unknown[];
         const analysis = await getCachedAnalysis(messages);
         const override = tierResolver.resolve(analysis.tierSelection);
         if (override?.modelOverride || override?.providerOverride) {
@@ -301,6 +318,9 @@ const intelligencePlugin = {
           tier: analysis?.tierSelection.tier,
           pipeline: analysis?.pipelineSelection.pipeline,
           refusalDetected: qualityResult.issues.some((i) => i.type === "explicit_refusal"),
+          issues: qualityResult.issues.length > 0
+            ? qualityResult.issues.map((i) => i.description)
+            : undefined,
           complexity: analysis?.complexity,
           domain: analysis?.domain ?? undefined,
           chainedExecution: chainedExecution || undefined,
@@ -364,9 +384,79 @@ const intelligencePlugin = {
     // ========================================================================
 
     api.on("llm_output", async (event, ctx) => {
-      if (!loopEnabled) return;
       const sessionKey = ctx.sessionKey ?? ctx.agentId ?? "default";
-      loopDetector.trackResponse(event.assistantTexts, sessionKey);
+
+      // Loop detection (existing behavior)
+      if (loopEnabled) {
+        loopDetector.trackResponse(event.assistantTexts, sessionKey);
+      }
+
+      // Cascade quality assessment — evaluate response and set signal if retry needed
+      // When LLM judge is enabled, uses two-stage assessment (heuristic + semantic);
+      // otherwise falls back to heuristic-only assessment.
+      if (cascadeConfig.cascadeEnabled && event.assistantTexts.length > 0) {
+        const combinedText = event.assistantTexts.join("\n");
+        if (combinedText.trim()) {
+          try {
+            // Extract user prompt for judge context (if available)
+            let userPromptForJudge = "";
+            if (llmJudgeConfig.enabled && event.messages) {
+              for (let i = (event.messages as unknown[]).length - 1; i >= 0; i--) {
+                const msg = (event.messages as unknown[])[i] as Record<string, unknown> | null;
+                if (msg?.role === "user") {
+                  userPromptForJudge = typeof msg.content === "string"
+                    ? msg.content
+                    : "";
+                  break;
+                }
+              }
+            }
+
+            // Two-stage assessment when judge is enabled and user prompt is available
+            const qualityResult = llmJudgeConfig.enabled && userPromptForJudge
+              ? await assessQualityWithJudge(combinedText, userPromptForJudge, llmJudgeConfig)
+              : assessQuality(combinedText);
+            if (qualityResult.verdict === "retry") {
+              // Determine the current tier from cached analysis or default to "medium"
+              let currentTier = "medium";
+              try {
+                const messages = [{ role: "user", content: combinedText }] as unknown[];
+                const analysis = await getCachedAnalysis(messages);
+                currentTier = analysis.tierSelection.tier;
+              } catch {
+                // Fall back to "medium" if analysis fails
+              }
+
+              // Pre-resolve the next tier's model/provider so the cascade wrapper
+              // in agent-runner-execution doesn't need to import the tier resolver
+              const nextTierIdx = TIER_ORDER.indexOf(currentTier);
+              const nextTierName = nextTierIdx >= 0 && nextTierIdx < TIER_ORDER.length - 1
+                ? TIER_ORDER[nextTierIdx + 1]
+                : undefined;
+              let escalation: { provider?: string; model?: string; tier?: string } | undefined;
+              if (nextTierName) {
+                const override = tierResolver.resolve({ tier: nextTierName, reason: "cascade-fallback" });
+                if (override?.modelOverride) {
+                  escalation = {
+                    provider: override.providerOverride,
+                    model: override.modelOverride,
+                    tier: nextTierName,
+                  };
+                }
+              }
+
+              setCascadeSignal(sessionKey, qualityResult.verdict, currentTier, escalation);
+              api.logger.info(
+                `intelligence: cascade signal set — verdict=${qualityResult.verdict}, ` +
+                `tier=${currentTier}→${escalation?.tier ?? "ceiling"}, ` +
+                `model=${escalation?.model ?? "none"}, session=${sessionKey}`,
+              );
+            }
+          } catch (err) {
+            api.logger.warn(`intelligence: cascade quality assessment failed: ${String(err)}`);
+          }
+        }
+      }
     });
 
     // ========================================================================
@@ -401,6 +491,7 @@ const intelligencePlugin = {
       const sessionKey = ctx.sessionId ?? ctx.agentId ?? "default";
       if (loopEnabled) loopDetector.clearSession(sessionKey);
       if (compactionEnabled) compactionMgr.clearSession(sessionKey);
+      clearCascadeSignals(sessionKey);
       analysisCache.clear(); // Sweep all — session is done
     });
 

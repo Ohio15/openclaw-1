@@ -296,3 +296,80 @@ export function assessQuality(response: string): QualityGateResult {
 
   return { verdict, issues, score };
 }
+
+// ============================================================================
+// Two-stage gate: heuristic + LLM judge
+// ============================================================================
+
+import {
+  evaluateWithLLMJudge,
+  type LLMJudgeConfig,
+} from "./llm-judge.js";
+
+/**
+ * Two-stage quality assessment:
+ *
+ * Stage 1: Heuristic gate (instant, <1ms)
+ *   → "pass" with score > threshold → DONE
+ *   → "retry" (explicit refusal) → DONE
+ *   → "flag" or "pass" with score ≤ threshold → Stage 2
+ *
+ * Stage 2: LLM judge (2-10s via Ollama)
+ *   → evaluates completeness, correctness, depth, implementation quality
+ *   → returns refined verdict with reasoning
+ *
+ * Falls back to heuristic-only on any judge failure.
+ */
+export async function assessQualityWithJudge(
+  response: string,
+  userPrompt: string,
+  config: LLMJudgeConfig,
+): Promise<QualityGateResult> {
+  // Stage 1: always run heuristic gate
+  const heuristicResult = assessQuality(response);
+
+  // Clear pass — score above threshold, skip judge entirely
+  if (
+    heuristicResult.verdict === "pass" &&
+    heuristicResult.score > config.minHeuristicScoreForJudge
+  ) {
+    return heuristicResult;
+  }
+
+  // Clear retry (explicit refusal) — skip judge, cascade immediately
+  if (heuristicResult.verdict === "retry") {
+    return heuristicResult;
+  }
+
+  // Borderline — invoke LLM judge (Stage 2)
+  try {
+    const judgeResult = await evaluateWithLLMJudge({
+      userPrompt,
+      assistantResponse: response,
+      heuristicResult,
+      ollamaBaseUrl: config.ollamaBaseUrl,
+      model: config.model,
+      timeoutMs: config.timeoutMs,
+    });
+
+    // Merge: use judge's verdict but keep heuristic issues for diagnostics
+    return {
+      verdict: judgeResult.verdict,
+      issues: [
+        ...heuristicResult.issues,
+        // Add a synthetic issue with the judge's reasoning for traceability
+        {
+          type: "placeholder" as const, // closest available type
+          description: `LLM judge: ${judgeResult.reasoning}`,
+          evidence: `verdict=${judgeResult.verdict} confidence=${judgeResult.confidence.toFixed(2)} time=${judgeResult.evaluationTimeMs}ms`,
+        },
+      ],
+      score: judgeResult.confidence,
+    };
+  } catch (err: unknown) {
+    // Judge failed entirely — fall back to heuristic
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[quality-gate] LLM judge failed, using heuristic: ${msg}`);
+    return heuristicResult;
+  }
+}
