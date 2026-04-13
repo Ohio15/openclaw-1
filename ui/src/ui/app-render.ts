@@ -159,7 +159,24 @@ export function renderApp(state: AppViewState) {
           <button
             class="topbar-new-session"
             ?disabled=${!state.connected}
-            @click=${() => (state as unknown as OpenClawApp).handleSendChat("/new", { restoreDraft: true })}
+            @click=${() => {
+              const ts = Date.now().toString(36);
+              const newKey = `chat-${ts}`;
+              state.sessionKey = newKey;
+              state.chatMessage = "";
+              state.chatMessages = [];
+              state.chatStream = null;
+              (state as unknown as OpenClawApp).chatStreamStartedAt = null;
+              state.chatRunId = null;
+              (state as unknown as OpenClawApp).resetToolStream();
+              (state as unknown as OpenClawApp).resetChatScroll();
+              state.applySettings({
+                ...state.settings,
+                sessionKey: newKey,
+                lastActiveSessionKey: newKey,
+              });
+              void (state as unknown as OpenClawApp).loadAssistantIdentity();
+            }}
             title="New session"
             aria-label="New session"
           >

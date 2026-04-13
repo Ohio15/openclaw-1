@@ -50,7 +50,29 @@ export function renderChannels(props: ChannelsProps) {
       return a.order - b.order;
     });
 
+  const enabledCount = orderedChannels.filter((c) => c.enabled).length;
+  const totalCount = orderedChannels.length;
+
   return html`
+    <section class="card channels-summary">
+      <div class="row" style="justify-content: space-between;">
+        <div>
+          <div class="card-title">Channels</div>
+          <div class="card-sub">${enabledCount} of ${totalCount} channels active</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip ${enabledCount > 0 ? "chip-ok" : ""}">${enabledCount} active</span>
+          ${totalCount - enabledCount > 0 ? html`<span class="chip">${totalCount - enabledCount} inactive</span>` : nothing}
+          ${props.lastSuccessAt ? html`<span class="chip muted">Updated ${formatRelativeTimestamp(props.lastSuccessAt)}</span>` : nothing}
+        </div>
+      </div>
+      ${
+        props.lastError
+          ? html`<div class="callout danger" style="margin-top: 12px;">${props.lastError}</div>`
+          : nothing
+      }
+    </section>
+
     <section class="grid grid-cols-2">
       ${orderedChannels.map((channel) =>
         renderChannel(channel.key, props, {
@@ -67,24 +89,18 @@ export function renderChannels(props: ChannelsProps) {
       )}
     </section>
 
-    <section class="card" style="margin-top: 18px;">
-      <div class="row" style="justify-content: space-between;">
-        <div>
-          <div class="card-title">Channel health</div>
-          <div class="card-sub">Channel status snapshots from the gateway.</div>
-        </div>
-        <div class="muted">${props.lastSuccessAt ? formatRelativeTimestamp(props.lastSuccessAt) : "n/a"}</div>
-      </div>
-      ${
-        props.lastError
-          ? html`<div class="callout danger" style="margin-top: 12px;">
-            ${props.lastError}
-          </div>`
-          : nothing
-      }
-      <pre class="code-block" style="margin-top: 12px;">
+    <section class="card channels-health-debug">
+      <details>
+        <summary class="row" style="cursor: pointer; justify-content: space-between;">
+          <div>
+            <div class="card-title">Channel health (raw)</div>
+            <div class="card-sub">Raw status snapshot from the gateway — for debugging.</div>
+          </div>
+        </summary>
+        <pre class="code-block" style="margin-top: 12px;">
 ${props.snapshot ? JSON.stringify(props.snapshot, null, 2) : "No snapshot yet."}
-      </pre>
+        </pre>
+      </details>
     </section>
   `;
 }

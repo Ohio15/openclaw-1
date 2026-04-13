@@ -21,12 +21,12 @@ function renderApprovalRow(
     <tr
       style="border-bottom:1px solid var(--border, rgba(255,255,255,0.06));"
     >
-      <td style="padding:8px 12px;font-family:monospace;font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title=${entry.command}>
-        ${entry.command}
+      <td style="padding:8px 12px;font-family:monospace;font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title=${entry.request.command}>
+        ${entry.request.command}
       </td>
-      <td style="padding:8px 12px;font-size:0.8rem;">${entry.agentId ?? "—"}</td>
-      <td style="padding:8px 12px;font-size:0.8rem;">${entry.sessionKey ?? "—"}</td>
-      <td style="padding:8px 12px;font-size:0.8rem;">${entry.hostname ?? "—"}</td>
+      <td style="padding:8px 12px;font-size:0.8rem;">${entry.request.agentId ?? "—"}</td>
+      <td style="padding:8px 12px;font-size:0.8rem;">${entry.request.sessionKey ?? "—"}</td>
+      <td style="padding:8px 12px;font-size:0.8rem;">${entry.request.host ?? "—"}</td>
       <td style="padding:8px 12px;font-size:0.8rem;font-family:monospace;">
         ${formatExpiry(entry.expiresAtMs)}
       </td>

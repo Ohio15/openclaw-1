@@ -64,39 +64,86 @@ export function renderCron(props: CronProps) {
     props.form.sessionTarget === "isolated" && props.form.payloadKind === "agentTurn";
   const selectedDeliveryMode =
     props.form.deliveryMode === "announce" && !supportsAnnounce ? "none" : props.form.deliveryMode;
+  const enabledJobCount = props.jobs.filter((j) => j.enabled).length;
+
   return html`
-    <section class="grid grid-cols-2">
-      <div class="card">
-        <div class="card-title">Scheduler</div>
-        <div class="card-sub">Gateway-owned cron scheduler status.</div>
-        <div class="stat-grid" style="margin-top: 16px;">
-          <div class="stat">
-            <div class="stat-label">Enabled</div>
-            <div class="stat-value">
-              ${props.status ? (props.status.enabled ? "Yes" : "No") : "n/a"}
-            </div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Jobs</div>
-            <div class="stat-value">${props.status?.jobs ?? "n/a"}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Next wake</div>
-            <div class="stat-value">${formatNextRun(props.status?.nextWakeAtMs ?? null)}</div>
-          </div>
+    <!-- Scheduler status — full width hero -->
+    <section class="card">
+      <div class="row" style="justify-content: space-between;">
+        <div>
+          <div class="card-title">Scheduler</div>
+          <div class="card-sub">Gateway-owned cron scheduler status.</div>
         </div>
-        <div class="row" style="margin-top: 12px;">
+        <div class="row">
+          ${props.error ? html`<span class="muted">${props.error}</span>` : nothing}
           <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
             ${props.loading ? "Refreshing…" : "Refresh"}
           </button>
-          ${props.error ? html`<span class="muted">${props.error}</span>` : nothing}
         </div>
       </div>
+      <div class="stat-grid" style="margin-top: 16px;">
+        <div class="stat">
+          <div class="stat-label">Status</div>
+          <div class="stat-value ${props.status?.enabled ? "ok" : "warn"}">
+            ${props.status ? (props.status.enabled ? "Active" : "Paused") : "n/a"}
+          </div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Total jobs</div>
+          <div class="stat-value">${props.status?.jobs ?? "n/a"}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Enabled</div>
+          <div class="stat-value">${enabledJobCount}</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Next wake</div>
+          <div class="stat-value">${formatNextRun(props.status?.nextWakeAtMs ?? null)}</div>
+        </div>
+      </div>
+    </section>
 
-      <div class="card">
-        <div class="card-title">New Job</div>
-        <div class="card-sub">Create a scheduled wakeup or agent run.</div>
-        <div class="form-grid" style="margin-top: 16px;">
+    <!-- Jobs list — primary content -->
+    <section class="card">
+      <div class="row" style="justify-content: space-between;">
+        <div>
+          <div class="card-title">Jobs</div>
+          <div class="card-sub">${props.jobs.length} scheduled ${props.jobs.length === 1 ? "job" : "jobs"} in the gateway.</div>
+        </div>
+      </div>
+      ${
+        props.jobs.length === 0
+          ? html`<div class="muted" style="margin-top: 12px">No jobs yet. Create one below.</div>`
+          : html`<div class="list" style="margin-top: 12px;">${props.jobs.map((job) => renderJob(job, props))}</div>`
+      }
+    </section>
+
+    <!-- Run history -->
+    <section class="card">
+      <div class="card-title">Run history</div>
+      <div class="card-sub">Latest runs for ${selectedRunTitle}.</div>
+      ${
+        props.runsJobId == null
+          ? html`<div class="muted" style="margin-top: 12px">Click a job above to view its run history.</div>`
+          : orderedRuns.length === 0
+            ? html`<div class="muted" style="margin-top: 12px">No runs yet.</div>`
+            : html`<div class="list" style="margin-top: 12px;">${orderedRuns.map((entry) => renderRun(entry, props.basePath))}</div>`
+      }
+    </section>
+
+    <!-- New Job form — collapsible, less frequently used -->
+    <section class="card">
+      <details>
+        <summary style="cursor: pointer;">
+          <div class="card-title" style="display: inline;">New Job</div>
+          <div class="card-sub">Create a scheduled wakeup or agent run.</div>
+        </summary>
+
+        <!-- Identity -->
+        <div class="card-sub" style="margin-top: 16px; font-weight: 600; color: var(--text-strong); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em;">
+          Identity
+        </div>
+        <div class="form-grid" style="margin-top: 8px;">
           <label class="field">
             <span>Name</span>
             <input
@@ -131,8 +178,15 @@ export function renderCron(props: CronProps) {
                 props.onFormChange({ enabled: (e.target as HTMLInputElement).checked })}
             />
           </label>
+        </div>
+
+        <!-- Schedule -->
+        <div class="card-sub" style="margin-top: 20px; font-weight: 600; color: var(--text-strong); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em;">
+          Schedule
+        </div>
+        <div class="form-grid" style="margin-top: 8px;">
           <label class="field">
-            <span>Schedule</span>
+            <span>Type</span>
             <select
               .value=${props.form.scheduleKind}
               @change=${(e: Event) =>
@@ -148,7 +202,12 @@ export function renderCron(props: CronProps) {
           </label>
         </div>
         ${renderScheduleFields(props)}
-        <div class="form-grid" style="margin-top: 12px;">
+
+        <!-- Execution -->
+        <div class="card-sub" style="margin-top: 20px; font-weight: 600; color: var(--text-strong); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em;">
+          Execution
+        </div>
+        <div class="form-grid" style="margin-top: 8px;">
           <label class="field">
             <span>Session</span>
             <select
@@ -190,40 +249,6 @@ export function renderCron(props: CronProps) {
               <option value="agentTurn">Agent turn</option>
             </select>
           </label>
-        </div>
-        <label class="field" style="margin-top: 12px;">
-          <span>${props.form.payloadKind === "systemEvent" ? "System text" : "Agent message"}</span>
-          <textarea
-            .value=${props.form.payloadText}
-            @input=${(e: Event) =>
-              props.onFormChange({
-                payloadText: (e.target as HTMLTextAreaElement).value,
-              })}
-            rows="4"
-          ></textarea>
-        </label>
-        <div class="form-grid" style="margin-top: 12px;">
-          <label class="field">
-            <span>Delivery</span>
-            <select
-              .value=${selectedDeliveryMode}
-              @change=${(e: Event) =>
-                props.onFormChange({
-                  deliveryMode: (e.target as HTMLSelectElement)
-                    .value as CronFormState["deliveryMode"],
-                })}
-            >
-              ${
-                supportsAnnounce
-                  ? html`
-                      <option value="announce">Announce summary (default)</option>
-                    `
-                  : nothing
-              }
-              <option value="webhook">Webhook POST</option>
-              <option value="none">None (internal)</option>
-            </select>
-          </label>
           ${
             props.form.payloadKind === "agentTurn"
               ? html`
@@ -240,6 +265,43 @@ export function renderCron(props: CronProps) {
                 `
               : nothing
           }
+        </div>
+        <label class="field" style="margin-top: 12px;">
+          <span>${props.form.payloadKind === "systemEvent" ? "System text" : "Agent message"}</span>
+          <textarea
+            .value=${props.form.payloadText}
+            @input=${(e: Event) =>
+              props.onFormChange({
+                payloadText: (e.target as HTMLTextAreaElement).value,
+              })}
+            rows="4"
+          ></textarea>
+        </label>
+
+        <!-- Delivery -->
+        <div class="card-sub" style="margin-top: 20px; font-weight: 600; color: var(--text-strong); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em;">
+          Delivery
+        </div>
+        <div class="form-grid" style="margin-top: 8px;">
+          <label class="field">
+            <span>Mode</span>
+            <select
+              .value=${selectedDeliveryMode}
+              @change=${(e: Event) =>
+                props.onFormChange({
+                  deliveryMode: (e.target as HTMLSelectElement)
+                    .value as CronFormState["deliveryMode"],
+                })}
+            >
+              ${
+                supportsAnnounce
+                  ? html`<option value="announce">Announce summary (default)</option>`
+                  : nothing
+              }
+              <option value="webhook">Webhook POST</option>
+              <option value="none">None (internal)</option>
+            </select>
+          </label>
           ${
             selectedDeliveryMode !== "none"
               ? html`
@@ -296,48 +358,13 @@ export function renderCron(props: CronProps) {
               : nothing
           }
         </div>
-        <div class="row" style="margin-top: 14px;">
+
+        <div class="row" style="margin-top: 16px;">
           <button class="btn primary" ?disabled=${props.busy} @click=${props.onAdd}>
             ${props.busy ? "Saving…" : "Add job"}
           </button>
         </div>
-      </div>
-    </section>
-
-    <section class="card" style="margin-top: 18px;">
-      <div class="card-title">Jobs</div>
-      <div class="card-sub">All scheduled jobs stored in the gateway.</div>
-      ${
-        props.jobs.length === 0
-          ? html`
-              <div class="muted" style="margin-top: 12px">No jobs yet.</div>
-            `
-          : html`
-            <div class="list" style="margin-top: 12px;">
-              ${props.jobs.map((job) => renderJob(job, props))}
-            </div>
-          `
-      }
-    </section>
-
-    <section class="card" style="margin-top: 18px;">
-      <div class="card-title">Run history</div>
-      <div class="card-sub">Latest runs for ${selectedRunTitle}.</div>
-      ${
-        props.runsJobId == null
-          ? html`
-              <div class="muted" style="margin-top: 12px">Select a job to inspect run history.</div>
-            `
-          : orderedRuns.length === 0
-            ? html`
-                <div class="muted" style="margin-top: 12px">No runs yet.</div>
-              `
-            : html`
-              <div class="list" style="margin-top: 12px;">
-                ${orderedRuns.map((entry) => renderRun(entry, props.basePath))}
-              </div>
-            `
-      }
+      </details>
     </section>
   `;
 }

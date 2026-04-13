@@ -282,7 +282,11 @@ export function renderChatControls(state: AppViewState) {
         class="btn btn--sm btn--icon"
         ?disabled=${!state.connected}
         @click=${() => {
-          (state as unknown as OpenClawApp).handleSendChat("/new", { restoreDraft: true });
+          const ts = Date.now().toString(36);
+          const newKey = `chat-${ts}`;
+          resetChatStateForSessionSwitch(state, newKey);
+          void (state as unknown as OpenClawApp).loadAssistantIdentity();
+          void loadChatHistory(state as unknown as ChatState);
         }}
         title="New session"
       >
