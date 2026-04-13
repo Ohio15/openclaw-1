@@ -46,8 +46,9 @@ export type CronJob = {
   state: Record<string, unknown>;
 };
 
-type CronJobCreate = Omit<CronJob, "id" | "state"> & {
+export type CronJobCreate = Omit<CronJob, "id" | "state"> & {
   state?: Record<string, unknown>;
+  deleteAfterRun?: boolean;
 };
 
 const PRESET_PREFIX = "preset:";
@@ -103,13 +104,14 @@ export type CronApi = {
   add: (job: CronJobCreate) => Promise<CronJob>;
   update: (id: string, patch: Record<string, unknown>) => Promise<CronJob>;
   remove: (id: string) => Promise<{ removed: boolean }>;
+  run: (id: string, mode?: string) => Promise<unknown>;
 };
 
 export async function syncPresetsToCron(
   cron: CronApi,
   presets: PresetConfig[],
   delivery?: ClaudeGatewayConfig["delivery"],
-  logger?: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void },
+  logger?: { info: (message: string) => void; warn: (message: string) => void },
 ): Promise<{ added: number; updated: number; removed: number }> {
   const log = logger ?? console;
   const scheduledPresets = presets.filter((p) => p.schedule);

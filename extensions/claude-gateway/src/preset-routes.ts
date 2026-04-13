@@ -13,21 +13,16 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PresetStore } from "./preset-loader.js";
-
-type CronApi = {
-  list: (opts?: { includeDisabled?: boolean }) => Promise<Array<{ id: string; name: string }>>;
-  add: (job: Record<string, unknown>) => Promise<{ id: string }>;
-  run: (id: string, mode: string) => Promise<unknown>;
-};
+import type { CronApi } from "./preset-cron-sync.js";
 
 type PresetRoutesDeps = {
   presetStore: PresetStore;
   reload: () => Promise<{ presetsLoaded: number; cronSync: unknown }>;
   getCron: () => CronApi | undefined;
   logger: {
-    info: (...args: unknown[]) => void;
-    warn: (...args: unknown[]) => void;
-    error: (...args: unknown[]) => void;
+    info: (message: string) => void;
+    warn: (message: string) => void;
+    error: (message: string) => void;
   };
 };
 

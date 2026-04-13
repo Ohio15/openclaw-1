@@ -45,7 +45,7 @@ export function detectAlertKeywords(
 export function createAlertKeywordHandler(opts: {
   keywords?: string[];
   onAlert?: (alert: AlertEntry) => void | Promise<void>;
-  logger?: { info: (...args: unknown[]) => void; warn: (...args: unknown[]) => void };
+  logger?: { info: (message: string) => void; warn: (message: string) => void };
 }) {
   const keywords = opts.keywords ?? DEFAULT_ALERT_KEYWORDS;
   const log = opts.logger ?? console;

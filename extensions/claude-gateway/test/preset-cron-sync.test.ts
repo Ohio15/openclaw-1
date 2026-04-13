@@ -49,6 +49,7 @@ describe("PresetCronSync", () => {
         ...patch,
       })),
       remove: vi.fn().mockResolvedValue({ removed: true }),
+      run: vi.fn().mockResolvedValue({}),
     };
   }
 

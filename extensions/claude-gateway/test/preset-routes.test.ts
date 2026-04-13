@@ -49,7 +49,7 @@ describe("PresetRoutes", () => {
 
     handler = createPresetHttpHandler({
       presetStore,
-      reload: reloadFn,
+      reload: reloadFn as () => Promise<{ presetsLoaded: number; cronSync: unknown }>,
       getCron: () => undefined,
       logger: silentLogger,
     });

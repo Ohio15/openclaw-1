@@ -77,7 +77,7 @@ const claudeGatewayPlugin = {
       // Capture cron reference for the HTTP handler
       if (!cronRef && context?.cron) cronRef = context.cron as unknown as CronApi;
       if (!presetStore) {
-        respond(false, undefined, { code: -1, message: "Presets not loaded" });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: "Presets not loaded" });
         return;
       }
       const presets = presetStore.listAll().map((p) => ({
@@ -94,17 +94,17 @@ const claudeGatewayPlugin = {
     // Gateway method: preset.get
     api.registerGatewayMethod("preset.get", ({ params, respond }) => {
       if (!presetStore) {
-        respond(false, undefined, { code: -1, message: "Presets not loaded" });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: "Presets not loaded" });
         return;
       }
       const name = (params as { name?: string })?.name;
       if (!name) {
-        respond(false, undefined, { code: -1, message: "Missing 'name' parameter" });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: "Missing 'name' parameter" });
         return;
       }
       const preset = presetStore.get(name);
       if (!preset) {
-        respond(false, undefined, { code: -1, message: `Preset not found: ${name}` });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: `Preset not found: ${name}` });
         return;
       }
       respond(true, { preset });
@@ -115,17 +115,17 @@ const claudeGatewayPlugin = {
       // Capture cron reference for the HTTP handler
       if (!cronRef) cronRef = context.cron as unknown as CronApi;
       if (!presetStore) {
-        respond(false, undefined, { code: -1, message: "Presets not loaded" });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: "Presets not loaded" });
         return;
       }
       const name = (params as { name?: string })?.name;
       if (!name) {
-        respond(false, undefined, { code: -1, message: "Missing 'name' parameter" });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: "Missing 'name' parameter" });
         return;
       }
       const preset = presetStore.get(name);
       if (!preset) {
-        respond(false, undefined, { code: -1, message: `Preset not found: ${name}` });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: `Preset not found: ${name}` });
         return;
       }
 
@@ -158,7 +158,7 @@ const claudeGatewayPlugin = {
           respond(true, { preset: name, cronJobId: job.id, oneOff: true, result });
         }
       } catch (e) {
-        respond(false, undefined, { code: -1, message: `Run failed: ${e}` });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: `Run failed: ${e}` });
       }
     });
 
@@ -167,7 +167,7 @@ const claudeGatewayPlugin = {
       // Capture cron reference for the HTTP handler
       if (!cronRef) cronRef = context.cron as unknown as CronApi;
       if (!presetStore) {
-        respond(false, undefined, { code: -1, message: "Presets not loaded" });
+        respond(false, undefined, { code: "PLUGIN_ERROR", message: "Presets not loaded" });
         return;
       }
       presetStore.reload();
