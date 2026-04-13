@@ -96,7 +96,7 @@
         "properties": {
           "enabled": { "type": "boolean", "default": false },
           "ollamaBaseUrl": { "type": "string", "default": "http://192.168.1.20:11434" },
-          "model": { "type": "string", "default": "deepseek-r1-distill-qwen-7b:latest" },
+          "model": { "type": "string", "default": "qwen3.5:9b" },
           "timeoutMs": { "type": "number", "default": 15000 },
           "minHeuristicScoreForJudge": { "type": "number", "default": 0.8, "description": "Heuristic score threshold — only invoke LLM judge when score is at or below this value" }
         }

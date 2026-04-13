@@ -135,7 +135,7 @@ const intelligencePlugin = {
     const llmJudgeConfig: LLMJudgeConfig = {
       enabled: llmJudgeCfg.enabled ?? false,
       ollamaBaseUrl: llmJudgeCfg.ollamaBaseUrl ?? "http://192.168.1.20:11434",
-      model: llmJudgeCfg.model ?? "deepseek-r1-distill-qwen-7b:latest",
+      model: llmJudgeCfg.model ?? "qwen3.5:9b",
       timeoutMs: llmJudgeCfg.timeoutMs ?? 15000,
       minHeuristicScoreForJudge: llmJudgeCfg.minHeuristicScoreForJudge ?? 0.8,
     };
