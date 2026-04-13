@@ -21,7 +21,14 @@
  */
 
 import { Type } from "@sinclair/typebox";
-import type { OpenClawPluginApi, PluginLogger } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+
+type PluginLogger = {
+  debug?: (message: string) => void;
+  info: (message: string) => void;
+  warn: (message: string) => void;
+  error: (message: string) => void;
+};
 
 // ============================================================================
 // Types
@@ -742,7 +749,7 @@ const memorySharedBrainPlugin = {
         async execute(_toolCallId, params) {
           const { file_path, heading } = params as { file_path: string; heading: string };
           const result = await client.callToolRaw("read_section", { file_path, heading });
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "brain_read_section" },
@@ -763,7 +770,7 @@ const memorySharedBrainPlugin = {
           const args: Record<string, unknown> = {};
           if (file_path) args.file_path = file_path;
           const result = await client.callToolRaw("list_contents", args);
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "brain_list_contents" },
@@ -785,7 +792,7 @@ const memorySharedBrainPlugin = {
         async execute(_toolCallId, params) {
           const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
           const result = await client.callToolRaw("brain_manage", { action, params: actionParams });
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "brain_manage" },
@@ -805,7 +812,7 @@ const memorySharedBrainPlugin = {
         async execute(_toolCallId, params) {
           const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
           const result = await client.callToolRaw("brain_incidents", { action, params: actionParams });
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "brain_incidents" },
@@ -825,7 +832,7 @@ const memorySharedBrainPlugin = {
         async execute(_toolCallId, params) {
           const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
           const result = await client.callToolRaw("brain_decisions", { action, params: actionParams });
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "brain_decisions" },
@@ -839,9 +846,9 @@ const memorySharedBrainPlugin = {
         description:
           "Get Cortex orchestrator status including queue depth, schedules, circuit breakers, Signal daemon connectivity, and system pause state.",
         parameters: Type.Object({}),
-        async execute() {
+        async execute(_toolCallId) {
           const result = await client.callToolRaw("cortex_status", {});
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "cortex_status" },
@@ -871,7 +878,7 @@ const memorySharedBrainPlugin = {
           if (priority !== undefined) args.priority = priority;
           if (force !== undefined) args.force = force;
           const result = await client.callToolRaw("cortex_run", args);
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "cortex_run" },
@@ -901,7 +908,7 @@ const memorySharedBrainPlugin = {
           if (enabled !== undefined) args.enabled = enabled;
           if (payload !== undefined) args.payload = payload;
           const result = await client.callToolRaw("cortex_schedules", args);
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "cortex_schedules" },
@@ -924,7 +931,7 @@ const memorySharedBrainPlugin = {
           if (period !== undefined) args.period = period;
           if (capability !== undefined) args.capability = capability;
           const result = await client.callToolRaw("cortex_costs", args);
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }] };
+          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
         },
       },
       { name: "cortex_costs" },
