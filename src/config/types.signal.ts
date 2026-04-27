@@ -33,6 +33,18 @@ export type SignalAccountConfig = {
   cliPath?: string;
   /** Auto-start signal-cli daemon (default: true if httpUrl not set). */
   autoStart?: boolean;
+  /**
+   * Outbound transport to the signal backend.
+   * - "json-rpc" (default): talk to a local signal-cli daemon's JSON-RPC endpoint
+   *   at `${baseUrl}/api/v1/rpc`. This is what `spawnSignalDaemon` provides.
+   * - "rest": talk to bbernhard/signal-cli-rest-api over its REST endpoints
+   *   (`/v2/send`, etc). Use this when signal-cli is not installed locally and
+   *   a shared signal-cli-rest-api container is reachable instead.
+   *
+   * Only outbound `send` is implemented for "rest". Inbound monitoring and
+   * receipts/reactions remain on the JSON-RPC path.
+   */
+  transport?: "json-rpc" | "rest";
   /** Max time to wait for signal-cli daemon startup (ms, cap 120000). */
   startupTimeoutMs?: number;
   receiveMode?: "on-start" | "manual";

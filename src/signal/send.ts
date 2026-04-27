@@ -3,7 +3,7 @@ import { resolveMarkdownTableMode } from "../config/markdown-tables.js";
 import { mediaKindFromMime } from "../media/constants.js";
 import { resolveOutboundAttachmentFromUrl } from "../media/outbound-attachment.js";
 import { resolveSignalAccount } from "./accounts.js";
-import { signalRpcRequest } from "./client.js";
+import { signalRpcRequest, type SignalTransport } from "./client.js";
 import { markdownToSignalText, type SignalTextStyleRange } from "./format.js";
 import { resolveSignalRpcContext } from "./rpc-context.js";
 
@@ -17,6 +17,8 @@ export type SignalSendOpts = {
   timeoutMs?: number;
   textMode?: "markdown" | "plain";
   textStyles?: SignalTextStyleRange[];
+  /** Override account-level transport choice. Default: account config. */
+  transport?: SignalTransport;
 };
 
 export type SignalSendResult = {
@@ -105,7 +107,7 @@ export async function sendMessageSignal(
     cfg,
     accountId: opts.accountId,
   });
-  const { baseUrl, account } = resolveSignalRpcContext(opts, accountInfo);
+  const { baseUrl, account, transport } = resolveSignalRpcContext(opts, accountInfo);
   const target = parseTarget(to);
   let message = text ?? "";
   let messageFromPlaceholder = false;
@@ -183,6 +185,7 @@ export async function sendMessageSignal(
   const result = await signalRpcRequest<{ timestamp?: number }>("send", params, {
     baseUrl,
     timeoutMs: opts.timeoutMs,
+    transport,
   });
   const timestamp = result?.timestamp;
   return {
