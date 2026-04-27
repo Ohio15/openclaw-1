@@ -1,0 +1,64 @@
+#!/bin/bash
+# Git commit-msg hook — enforces Git Workflow SOP
+# Install: cp commit-msg <repo>/.git/hooks/commit-msg && chmod +x <repo>/.git/hooks/commit-msg
+# Or globally: git config --global core.hooksPath /path/to/git-hooks
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
+FIRST_LINE=$(head -1 "$COMMIT_MSG_FILE")
+
+# Skip merge commits
+if echo "$FIRST_LINE" | grep -qE "^Merge "; then
+    exit 0
+fi
+
+# 1. Enforce <type>: <summary> format
+VALID_TYPES="feat|fix|refactor|chore|docs|test|perf|security"
+if ! echo "$FIRST_LINE" | grep -qE "^($VALID_TYPES): .+"; then
+    echo ""
+    echo "COMMIT REJECTED: Message does not follow <type>: <summary> format."
+    echo ""
+    echo "  Your message:  $FIRST_LINE"
+    echo ""
+    echo "  Valid types: feat, fix, refactor, chore, docs, test, perf, security"
+    echo "  Example:     feat: add player stats dashboard with filtering"
+    echo "  Example:     fix: resolve auth token expiry not refreshing"
+    echo ""
+    exit 1
+fi
+
+# 2. AI attribution lines are ALLOWED (relaxed 2026-04-27 per CLAUDE.md
+#    Co-Authored-By trailer requirement). Block kept for reference / easy
+#    re-enable if policy changes again.
+# if grep -qiE "Co-Authored-By:|Generated with|Auditor:" "$COMMIT_MSG_FILE"; then
+#     echo ""
+#     echo "COMMIT REJECTED: AI attribution lines are not allowed."
+#     echo ""
+#     echo "  Remove any Co-Authored-By, Generated with, or Auditor lines."
+#     echo ""
+#     exit 1
+# fi
+
+# 3. Summary line length check (max 72 chars)
+SUMMARY_LEN=${#FIRST_LINE}
+if [ "$SUMMARY_LEN" -gt 72 ]; then
+    echo ""
+    echo "COMMIT WARNING: Summary line is $SUMMARY_LEN chars (max 72)."
+    echo "  Consider shortening: $FIRST_LINE"
+    echo ""
+    # Warning only, don't block
+fi
+
+# 4. Ensure imperative mood (catch common past-tense patterns)
+SUMMARY=$(echo "$FIRST_LINE" | sed 's/^[a-z]*: //')
+if echo "$SUMMARY" | grep -qE "^(Added|Fixed|Updated|Removed|Changed|Refactored|Implemented|Created) "; then
+    echo ""
+    echo "COMMIT REJECTED: Use imperative mood in summary."
+    echo ""
+    echo "  Bad:  '$SUMMARY'"
+    echo "  Good: '$(echo "$SUMMARY" | sed 's/^Added/add/;s/^Fixed/fix/;s/^Updated/update/;s/^Removed/remove/;s/^Changed/change/;s/^Refactored/refactor/;s/^Implemented/implement/;s/^Created/create/')'"
+    echo ""
+    exit 1
+fi
+
+exit 0
