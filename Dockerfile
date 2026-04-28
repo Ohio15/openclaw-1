@@ -65,6 +65,12 @@ RUN if [ -n "$OPENCLAW_INSTALL_SIGNAL_CLI" ]; then \
     fi
 
 COPY . .
+# Re-run pnpm install now that workspace package.json files are present.
+# The earlier install only saw the root + ui packages, so workspace deps
+# (e.g. extensions/claude-gateway → js-yaml) had no node_modules symlinks.
+# CI=true silences pnpm's interactive prompt about removing modules.
+ENV CI=true
+RUN pnpm install --frozen-lockfile --prefer-offline
 RUN pnpm build
 # Force pnpm for UI build (Bun may fail on ARM/Synology architectures)
 ENV OPENCLAW_PREFER_PNPM=1
