@@ -10,6 +10,7 @@ services:
       CLAUDE_WEB_COOKIE: ${CLAUDE_WEB_COOKIE}
       SHARED_BRAIN_URL: ${SHARED_BRAIN_URL:-http://shared-brain-mcp:3100}
       SHARED_BRAIN_API_KEY: ${SHARED_BRAIN_API_KEY}
+      OPENCLAW_SIGNAL_INBOUND_ENABLED: ${OPENCLAW_SIGNAL_INBOUND_ENABLED:-true}
     volumes:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
