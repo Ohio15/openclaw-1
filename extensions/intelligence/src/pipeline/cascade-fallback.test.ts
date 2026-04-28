@@ -11,7 +11,7 @@ import {
   setCascadeSignal,
   consumeCascadeSignal,
   clearCascadeSignals,
-} from "./cascade-state.js";
+} from "../../../../src/intelligence/cascade-state.js";
 import { ModelTierResolver } from "./model-tier-resolver.js";
 
 // ============================================================================

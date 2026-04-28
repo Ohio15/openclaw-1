@@ -55,7 +55,7 @@ import {
   CONFIG_DEFAULTS as DELEGATION_DEFAULTS,
 } from "./src/tools/coding-agent-delegator.js";
 import { createDelegateCodingAgentTool } from "./src/tools/delegate-coding-agent-tool.js";
-import { setCascadeSignal, clearCascadeSignals } from "./src/pipeline/cascade-state.js";
+import { setCascadeSignal, clearCascadeSignals } from "../../src/intelligence/cascade-state.js";
 import { runWithQualityCascade, TIER_ORDER, type CascadeConfig } from "./src/pipeline/cascade-fallback.js";
 
 // ============================================================================

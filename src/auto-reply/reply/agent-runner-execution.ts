@@ -37,7 +37,7 @@ import {
   buildTemplateSenderContext,
   resolveRunAuthProfile,
 } from "./agent-runner-utils.js";
-import { consumeCascadeSignal } from "../../../extensions/intelligence/src/pipeline/cascade-state.js";
+import { consumeCascadeSignal } from "../../intelligence/cascade-state.js";
 import { resolveEnforceFinalTag } from "./agent-runner-utils.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
 import type { FollowupRun } from "./queue.js";

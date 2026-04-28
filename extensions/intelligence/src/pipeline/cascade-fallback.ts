@@ -17,7 +17,7 @@
  */
 
 import { MODEL_TIERS } from "../config/routing-authority.js";
-import { consumeCascadeSignal } from "./cascade-state.js";
+import { consumeCascadeSignal } from "../../../../src/intelligence/cascade-state.js";
 import type { ModelTierResolver } from "./model-tier-resolver.js";
 
 // ============================================================================

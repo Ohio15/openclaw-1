@@ -266,6 +266,17 @@ async function deliverReplies(params: {
 
 export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promise<void> {
   const runtime = resolveRuntime(opts);
+
+  // Kill-switch for the inbound SSE listener. Default: enabled. Set
+  // OPENCLAW_SIGNAL_INBOUND_ENABLED=false to skip daemon spawn and SSE loop
+  // entirely; outbound (sendMessageSignal / REST transport) is unaffected.
+  if (process.env.OPENCLAW_SIGNAL_INBOUND_ENABLED === "false") {
+    runtime.log?.(
+      "Signal inbound listener disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false; outbound unaffected.",
+    );
+    return;
+  }
+
   const cfg = opts.config ?? loadConfig();
   const accountInfo = resolveSignalAccount({
     cfg,
