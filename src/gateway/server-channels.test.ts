@@ -165,4 +165,34 @@ describe("server-channels auto restart", () => {
     expect(account?.enabled).toBe(true);
     expect(account?.configured).toBe(true);
   });
+
+  it("does not auto-restart a channel that published enabled:false (kill-switch path)", async () => {
+    const startAccount = vi.fn(async (ctx: { setStatus: (next: unknown) => void }) => {
+      // Channel deliberately disables itself (mirrors the signal kill-switch path):
+      // resolves sub-millisecond after marking the runtime status enabled:false.
+      // The auto-restart loop should NOT reschedule.
+      ctx.setStatus({
+        accountId: DEFAULT_ACCOUNT_ID,
+        running: false,
+        enabled: false,
+        lastError: "inbound disabled",
+      });
+    });
+    installTestRegistry(
+      createTestPlugin({
+        startAccount: startAccount as unknown as NonNullable<
+          ChannelPlugin<TestAccount>["gateway"]
+        >["startAccount"],
+      }),
+    );
+    const manager = createManager();
+
+    await manager.startChannels();
+    // Drain microtasks plus a generous window past the 5s restart backoff.
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    // Without the auto-restart guard, startAccount would be called 11 times
+    // (initial + 10 restart attempts) within this window.
+    expect(startAccount).toHaveBeenCalledTimes(1);
+  });
 });

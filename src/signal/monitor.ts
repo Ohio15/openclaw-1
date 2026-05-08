@@ -1,6 +1,7 @@
 import { chunkTextWithMode, resolveChunkMode, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { DEFAULT_GROUP_HISTORY_LIMIT, type HistoryEntry } from "../auto-reply/reply/history.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
+import type { ChannelAccountSnapshot } from "../channels/plugins/types.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import type { SignalReactionNotificationMode } from "../config/types.js";
@@ -54,6 +55,11 @@ export type MonitorSignalOpts = {
   allowFrom?: Array<string | number>;
   groupAllowFrom?: Array<string | number>;
   mediaMaxMb?: number;
+  // Optional status reporter wired in by the channel manager (via plugin
+  // `gateway.startAccount` ctx.setStatus). Allows the monitor to mark itself
+  // disabled when the inbound kill-switch is engaged so the gateway does not
+  // schedule a restart loop.
+  setStatus?: (next: ChannelAccountSnapshot) => void;
 };
 
 function resolveRuntime(opts: MonitorSignalOpts): RuntimeEnv {
@@ -270,10 +276,36 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
   // Kill-switch for the inbound SSE listener. Default: enabled. Set
   // OPENCLAW_SIGNAL_INBOUND_ENABLED=false to skip daemon spawn and SSE loop
   // entirely; outbound (sendMessageSignal / REST transport) is unaffected.
+  //
+  // When engaged, we publish a terminal `enabled:false` status (so the
+  // gateway's auto-restart loop short-circuits) and then suspend until the
+  // owning channel aborts. Returning eagerly previously caused the
+  // server-channels.ts auto-restart logic to reschedule us every 5s forever.
   if (process.env.OPENCLAW_SIGNAL_INBOUND_ENABLED === "false") {
+    const accountIdForStatus =
+      opts.accountId?.trim() || opts.account?.trim() || "default";
     runtime.log?.(
       "Signal inbound listener disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false; outbound unaffected.",
     );
+    opts.setStatus?.({
+      accountId: accountIdForStatus,
+      running: false,
+      enabled: false,
+      lastError: "inbound disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false",
+    });
+    const abortSignal = opts.abortSignal;
+    if (!abortSignal) {
+      // No abort wiring available — return so we don't leak a never-resolving
+      // promise. The auto-restart guard added in server-channels.ts will keep
+      // us from being rescheduled.
+      return;
+    }
+    if (abortSignal.aborted) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      abortSignal.addEventListener("abort", () => resolve(), { once: true });
+    });
     return;
   }
 

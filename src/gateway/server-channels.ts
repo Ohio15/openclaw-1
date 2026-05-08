@@ -217,6 +217,14 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
             if (manuallyStopped.has(rKey)) {
               return;
             }
+            // If the channel has signalled it is intentionally disabled (e.g.
+            // via an env kill-switch or admin disable) the runtime status
+            // carries `enabled:false`. Don't run the restart machinery for a
+            // channel the operator deliberately turned off.
+            const currentStatus = getRuntime(channelId, id);
+            if (currentStatus.enabled === false) {
+              return;
+            }
             const attempt = (restartAttempts.get(rKey) ?? 0) + 1;
             restartAttempts.set(rKey, attempt);
             if (attempt > MAX_RESTART_ATTEMPTS) {
