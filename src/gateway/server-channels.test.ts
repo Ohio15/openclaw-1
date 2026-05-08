@@ -166,6 +166,44 @@ describe("server-channels auto restart", () => {
     expect(account?.configured).toBe(true);
   });
 
+  it("startChannel mutex collapses concurrent starts to a single startAccount invocation", async () => {
+    // CRITICAL #1: TOCTOU at `if (store.tasks.has(id)) return;` allowed two
+    // concurrent callers (health-monitor + auto-restart) to race past the
+    // check and both materialise daemons. The per-channel:account mutex
+    // collapses concurrent entries to a single in-flight start.
+    let resolveStart: (() => void) | null = null;
+    const startAccount = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveStart = resolve;
+        }),
+    );
+    installTestRegistry(
+      createTestPlugin({
+        startAccount: startAccount as unknown as NonNullable<
+          ChannelPlugin<TestAccount>["gateway"]
+        >["startAccount"],
+      }),
+    );
+    const manager = createManager();
+
+    // Fire two concurrent startChannel invocations BEFORE the first resolves.
+    const a = manager.startChannel("discord", DEFAULT_ACCOUNT_ID);
+    const b = manager.startChannel("discord", DEFAULT_ACCOUNT_ID);
+
+    // Drain microtasks so both calls progress through the mutex check.
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Only one startAccount call materialises despite two concurrent starts.
+    expect(startAccount).toHaveBeenCalledTimes(1);
+
+    // Now resolve the in-flight start and let both promises settle.
+    resolveStart?.();
+    await a;
+    await b;
+  });
+
   it("does not auto-restart a channel that published enabled:false (kill-switch path)", async () => {
     const startAccount = vi.fn(async (ctx: { setStatus: (next: unknown) => void }) => {
       // Channel deliberately disables itself (mirrors the signal kill-switch path):

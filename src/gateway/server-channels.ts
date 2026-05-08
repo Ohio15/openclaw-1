@@ -74,6 +74,15 @@ export type ChannelManager = {
   markChannelLoggedOut: (channelId: ChannelId, cleared: boolean, accountId?: string) => void;
   isManuallyStopped: (channelId: ChannelId, accountId: string) => boolean;
   resetRestartAttempts: (channelId: ChannelId, accountId: string) => void;
+  /**
+   * Returns the in-flight `startChannel` promise for a given channel (and
+   * optional accountId), or undefined if no start is currently in flight.
+   * Used by config hot-reload + tests to await an in-flight start before
+   * stopping/restarting a channel — prevents the rug-pull race where
+   * `runReload` fires `stopChannel` between `startChannel`'s plugin lookup
+   * and `startAccount` materialising.
+   */
+  awaitInFlightStart: (channel: ChannelId, accountId?: string) => Promise<void> | undefined;
 };
 
 // Channel docking: lifecycle hooks (`plugin.gateway`) flow through this manager.
@@ -85,6 +94,11 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
   const restartAttempts = new Map<string, number>();
   // Tracks accounts that were manually stopped so we don't auto-restart them.
   const manuallyStopped = new Set<string>();
+  // Per-channel:account mutex protecting the start path against TOCTOU races
+  // between health-monitor and auto-restart. Concurrent `startChannel(id)`
+  // calls await the same in-flight promise instead of both passing the
+  // `store.tasks.has(id)` check and racing to `store.tasks.set(...)`.
+  const inFlightStarts = new Map<string, Promise<void>>();
 
   const restartKey = (channelId: ChannelId, accountId: string) => `${channelId}:${accountId}`;
 
@@ -120,11 +134,15 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
     accountId?: string,
     opts: StartChannelOptions = {},
   ) => {
-    const plugin = getChannelPlugin(channelId);
-    const startAccount = plugin?.gateway?.startAccount;
-    if (!startAccount) {
+    const pluginMaybe = getChannelPlugin(channelId);
+    const startAccountMaybe = pluginMaybe?.gateway?.startAccount;
+    if (!pluginMaybe || !startAccountMaybe) {
       return;
     }
+    // Capture as locals after the null-check so the nested helper functions
+    // below (`startOneAccountBody`) inherit the narrowed types.
+    const plugin = pluginMaybe;
+    const startAccount = startAccountMaybe;
     const { preserveRestartAttempts = false, preserveManualStop = false } = opts;
     const cfg = loadConfig();
     resetDirectoryCache({ channel: channelId, accountId });
@@ -135,10 +153,37 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
     }
 
     await Promise.all(
-      accountIds.map(async (id) => {
-        if (store.tasks.has(id)) {
-          return;
+      accountIds.map((id) => startOneAccount(id)),
+    );
+
+    // Per-account start path, mutex-guarded so concurrent callers
+    // (health-monitor + auto-restart + hot-reload) await the same in-flight
+    // promise instead of racing past the `store.tasks.has(id)` check and
+    // both committing to `store.tasks.set(...)`.
+    async function startOneAccount(id: string) {
+      const mutexKey = restartKey(channelId, id);
+      const existing = inFlightStarts.get(mutexKey);
+      if (existing) {
+        await existing.catch(() => {});
+        return;
+      }
+      if (store.tasks.has(id)) {
+        return;
+      }
+      const work = startOneAccountBody(id);
+      inFlightStarts.set(mutexKey, work);
+      try {
+        await work;
+      } finally {
+        // Only clear if this exact promise still owns the slot — a
+        // follow-on caller may have replaced the entry already.
+        if (inFlightStarts.get(mutexKey) === work) {
+          inFlightStarts.delete(mutexKey);
         }
+      }
+    }
+
+    async function startOneAccountBody(id: string) {
         const account = plugin.config.resolveAccount(cfg, id);
         const enabled = plugin.config.isEnabled
           ? plugin.config.isEnabled(account, cfg)
@@ -267,12 +312,31 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
             }
           });
         store.tasks.set(id, trackedPromise);
-      }),
-    );
+    }
   };
 
   const startChannel = async (channelId: ChannelId, accountId?: string) => {
     await startChannelInternal(channelId, accountId);
+  };
+
+  const awaitInFlightStart = (
+    channelId: ChannelId,
+    accountId?: string,
+  ): Promise<void> | undefined => {
+    if (accountId) {
+      const promise = inFlightStarts.get(restartKey(channelId, accountId));
+      return promise ? promise.catch(() => {}) : undefined;
+    }
+    // Channel-level await: gather any per-account in-flight starts whose key
+    // is prefixed with this channel.
+    const prefix = `${channelId}:`;
+    const pending: Promise<void>[] = [];
+    for (const [key, promise] of inFlightStarts) {
+      if (key.startsWith(prefix)) {
+        pending.push(promise.catch(() => {}));
+      }
+    }
+    return pending.length === 0 ? undefined : Promise.all(pending).then(() => {});
   };
 
   const stopChannel = async (channelId: ChannelId, accountId?: string) => {
@@ -418,5 +482,6 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
     markChannelLoggedOut,
     isManuallyStopped: isManuallyStopped_,
     resetRestartAttempts: resetRestartAttempts_,
+    awaitInFlightStart,
   };
 }
