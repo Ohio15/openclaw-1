@@ -348,7 +348,7 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     Math.max(1_000, opts.startupTimeoutMs ?? accountInfo.config.startupTimeoutMs ?? 30_000),
   );
   const readReceiptsViaDaemon = Boolean(autoStart && sendReadReceipts);
-  let daemonHandle: ReturnType<typeof spawnSignalDaemon> | null = null;
+  let daemonHandle: Awaited<ReturnType<typeof spawnSignalDaemon>> | null = null;
 
   // CRITICAL #3: split the parent abort into independent daemon and SSE
   // controllers. Previously a single `opts.abortSignal` cascaded into both
@@ -380,7 +380,7 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     const cliPath = opts.cliPath ?? accountInfo.config.cliPath ?? "signal-cli";
     const httpHost = opts.httpHost ?? accountInfo.config.httpHost ?? "127.0.0.1";
     const httpPort = opts.httpPort ?? accountInfo.config.httpPort ?? 8080;
-    daemonHandle = spawnSignalDaemon({
+    daemonHandle = await spawnSignalDaemon({
       cliPath,
       account,
       httpHost,

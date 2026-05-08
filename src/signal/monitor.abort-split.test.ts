@@ -79,9 +79,12 @@ beforeEach(() => {
   signalRpcRequestMock.mockReset().mockResolvedValue({});
   sendMock.mockReset().mockResolvedValue(undefined);
   daemonStopMock.mockReset();
-  spawnDaemonMock
-    .mockReset()
-    .mockImplementation(() => ({ pid: 9999, stop: daemonStopMock }));
+  spawnDaemonMock.mockReset().mockImplementation(async () => ({
+    pid: 9999,
+    stop: daemonStopMock,
+    exited: false,
+    adopted: false,
+  }));
   streamMock.mockReset();
 });
 
@@ -205,7 +208,7 @@ describe("CRITICAL #3 — daemon/SSE abort signals are independent", () => {
 
     // Synthesise a daemon-only stop by invoking the captured handle's stop().
     // This is what a future "daemon needs restart" path would do.
-    const handle = spawnDaemonMock.mock.results[0]?.value as {
+    const handle = (await spawnDaemonMock.mock.results[0]?.value) as {
       stop: () => void;
     };
     handle.stop();

@@ -84,7 +84,11 @@ vi.mock("./client.js", () => ({
 }));
 
 vi.mock("./daemon.js", () => ({
-  spawnSignalDaemon: vi.fn(() => ({ stop: vi.fn() })),
+  spawnSignalDaemon: vi.fn(async () => ({
+    stop: vi.fn(),
+    exited: false,
+    adopted: false,
+  })),
 }));
 
 vi.mock("../infra/transport-ready.js", () => ({
