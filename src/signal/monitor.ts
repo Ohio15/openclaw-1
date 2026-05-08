@@ -350,6 +350,32 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
   const readReceiptsViaDaemon = Boolean(autoStart && sendReadReceipts);
   let daemonHandle: ReturnType<typeof spawnSignalDaemon> | null = null;
 
+  // CRITICAL #3: split the parent abort into independent daemon and SSE
+  // controllers. Previously a single `opts.abortSignal` cascaded into both
+  // the daemon child and the SSE loop, so any failure that called
+  // `daemonHandle.stop()` (e.g. transient daemon crash + restart) tore
+  // down the SSE loop too — and any SSE error that aborted the parent
+  // killed the daemon. With separate controllers:
+  //   - parentAbort → both stop (channel-level cancellation)
+  //   - daemonAbort → daemon stop only; SSE keeps running
+  //   - sseAbort    → SSE stop only; daemon child keeps running
+  // The readiness wait is bound to the parentAbort because it is
+  // timeout-bounded and cancels with the channel, not with one transport.
+  const parentAbort = opts.abortSignal;
+  const daemonAbort = new AbortController();
+  const sseAbort = new AbortController();
+  const onParentAbort = () => {
+    daemonAbort.abort();
+    sseAbort.abort();
+  };
+  if (parentAbort) {
+    if (parentAbort.aborted) {
+      onParentAbort();
+    } else {
+      parentAbort.addEventListener("abort", onParentAbort, { once: true });
+    }
+  }
+
   if (autoStart) {
     const cliPath = opts.cliPath ?? accountInfo.config.cliPath ?? "signal-cli";
     const httpHost = opts.httpHost ?? accountInfo.config.httpHost ?? "127.0.0.1";
@@ -367,16 +393,18 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     });
   }
 
-  const onAbort = () => {
+  // Wire daemonAbort → daemon child stop. This is the ONLY path that
+  // tears down the daemon process; SSE failures must never reach here.
+  const onDaemonAbort = () => {
     daemonHandle?.stop();
   };
-  opts.abortSignal?.addEventListener("abort", onAbort, { once: true });
+  daemonAbort.signal.addEventListener("abort", onDaemonAbort, { once: true });
 
   try {
     if (daemonHandle) {
       await waitForSignalDaemonReady({
         baseUrl,
-        abortSignal: opts.abortSignal,
+        abortSignal: parentAbort,
         timeoutMs: startupTimeoutMs,
         logAfterMs: 10_000,
         logIntervalMs: 10_000,
@@ -415,7 +443,7 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     await runSignalSseLoop({
       baseUrl,
       account,
-      abortSignal: opts.abortSignal,
+      abortSignal: sseAbort.signal,
       runtime,
       onEvent: (event) => {
         void handleEvent(event).catch((err) => {
@@ -424,12 +452,15 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       },
     });
   } catch (err) {
-    if (opts.abortSignal?.aborted) {
+    if (parentAbort?.aborted) {
       return;
     }
     throw err;
   } finally {
-    opts.abortSignal?.removeEventListener("abort", onAbort);
+    parentAbort?.removeEventListener("abort", onParentAbort);
+    daemonAbort.signal.removeEventListener("abort", onDaemonAbort);
+    // Final teardown — channel exit always stops the daemon, regardless
+    // of whether daemonAbort already fired (no-op if already stopped).
     daemonHandle?.stop();
   }
 }
