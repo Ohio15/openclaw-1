@@ -77,4 +77,55 @@ describe("waitForTransportReady", () => {
     });
     expect(runtime.error).not.toHaveBeenCalled();
   });
+
+  // HIGH #6: failFast predicate short-circuits the readiness wait so a
+  // crashed daemon child does not burn the full timeout.
+  it("throws immediately when failFast returns a reason after a failed probe", async () => {
+    const runtime = { log: vi.fn(), error: vi.fn(), exit: vi.fn() };
+    let exited = false;
+    const checkSpy = vi.fn(async () => {
+      // After the first probe, simulate the daemon dying.
+      exited = true;
+      return { ok: false, error: "connection refused" };
+    });
+    const waitPromise = waitForTransportReady({
+      label: "signal daemon",
+      // Deliberately enormous so a non-fail-fast wait would hang the test.
+      timeoutMs: 30_000,
+      logAfterMs: 0,
+      logIntervalMs: 1_000,
+      pollIntervalMs: 50,
+      runtime,
+      check: checkSpy,
+      failFast: () => (exited ? "signal daemon exited before readiness" : null),
+    });
+    const asserted = expect(waitPromise).rejects.toThrow(
+      "signal daemon not ready (signal daemon exited before readiness)",
+    );
+    // Probe + failFast re-check happen synchronously; no need to advance
+    // by 30s. A short tick suffices to drain the microtask queue.
+    await vi.advanceTimersByTimeAsync(10);
+    await asserted;
+    expect(checkSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws immediately when failFast returns a reason before the first probe", async () => {
+    const runtime = { log: vi.fn(), error: vi.fn(), exit: vi.fn() };
+    const checkSpy = vi.fn(async () => ({ ok: false, error: "connection refused" }));
+    const waitPromise = waitForTransportReady({
+      label: "signal daemon",
+      timeoutMs: 30_000,
+      logAfterMs: 0,
+      pollIntervalMs: 50,
+      runtime,
+      check: checkSpy,
+      failFast: () => "already dead",
+    });
+    const asserted = expect(waitPromise).rejects.toThrow(
+      "signal daemon not ready (already dead)",
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    await asserted;
+    expect(checkSpy).not.toHaveBeenCalled();
+  });
 });

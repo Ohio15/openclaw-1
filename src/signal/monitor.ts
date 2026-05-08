@@ -155,6 +155,12 @@ async function waitForSignalDaemonReady(params: {
   logAfterMs: number;
   logIntervalMs?: number;
   runtime: RuntimeEnv;
+  // HIGH #6: optional readiness short-circuit. Returns a non-empty reason
+  // when the daemon child has exited. The wait throws immediately instead
+  // of burning the 30s timeout polling a port that will never come up.
+  // The caller is responsible for binding this to the daemon handle's
+  // `exited` flag (populated by `child.on('exit')` in spawnSignalDaemon).
+  hasDaemonExited?: () => boolean;
 }): Promise<void> {
   await waitForTransportReady({
     label: "signal daemon",
@@ -174,6 +180,10 @@ async function waitForSignalDaemonReady(params: {
         error: res.error ?? (res.status ? `HTTP ${res.status}` : "unreachable"),
       };
     },
+    failFast: () =>
+      params.hasDaemonExited?.()
+        ? "signal daemon exited before readiness"
+        : null,
   });
 }
 
@@ -402,6 +412,10 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
 
   try {
     if (daemonHandle) {
+      // Capture as a local for the closure so TS can narrow `null` away
+      // and so the readiness wait reads from the same handle reference
+      // we have here even if the field is later reassigned.
+      const handle = daemonHandle;
       await waitForSignalDaemonReady({
         baseUrl,
         abortSignal: parentAbort,
@@ -409,6 +423,12 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
         logAfterMs: 10_000,
         logIntervalMs: 10_000,
         runtime,
+        // HIGH #6: short-circuit if the daemon child died during startup.
+        // Without this, a port-bind failure or signal-cli crash would
+        // burn the full startupTimeoutMs (default 30s) for every gateway
+        // start. Adopted handles never set `exited`, so this is a no-op
+        // for the "leftover daemon already listening" path.
+        hasDaemonExited: () => handle.exited,
       });
     }
 
