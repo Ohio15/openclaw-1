@@ -204,6 +204,41 @@ describe("server-channels auto restart", () => {
     await b;
   });
 
+  it("stopChannel clears restartAttempts so subsequent starts get fresh restart budget", async () => {
+    // CRITICAL #2: `restartAttempts` was populated on every channel exit and
+    // never deleted on `stopChannel`. After 10 stop/start cycles a fresh
+    // start would log "giving up after 10 restart attempts" with zero
+    // network I/O because the restart counter survived the stop boundary.
+    const startAccount = vi.fn(async () => {
+      // Resolves immediately. The outer `.then()` increments restartAttempts.
+    });
+    installTestRegistry(
+      createTestPlugin({
+        startAccount,
+      }),
+    );
+    const manager = createManager();
+
+    // Cycle: start (auto-restart logic increments counter) → stop (must
+    // wipe counter) → start again. After 11 such cycles, the bug would
+    // surface as `reconnectAttempts >= 10` on the latest start, since
+    // every restart-attempt increment outlives its stop.
+    for (let i = 0; i < 11; i += 1) {
+      await manager.startChannel("discord", DEFAULT_ACCOUNT_ID);
+      // Drain microtasks so the immediate-resolve startAccount promise
+      // settles and the .then() auto-restart handler runs (incrementing
+      // restartAttempts). We then call stopChannel BEFORE the backoff
+      // expires; stopChannel must reset the counter.
+      vi.runAllTicks();
+      await manager.stopChannel("discord", DEFAULT_ACCOUNT_ID);
+      const snap = manager.getRuntimeSnapshot();
+      const account = snap.channelAccounts.discord?.[DEFAULT_ACCOUNT_ID];
+      // Each start has to begin from a clean restartAttempts budget — the
+      // stop on the prior iteration must have cleared the counter.
+      expect(account?.reconnectAttempts ?? 0).toBeLessThan(10);
+    }
+  });
+
   it("does not auto-restart a channel that published enabled:false (kill-switch path)", async () => {
     const startAccount = vi.fn(async (ctx: { setStatus: (next: unknown) => void }) => {
       // Channel deliberately disables itself (mirrors the signal kill-switch path):

@@ -386,6 +386,14 @@ export function createChannelManager(opts: ChannelManagerOptions): ChannelManage
         }
         store.aborts.delete(id);
         store.tasks.delete(id);
+        // Intentional stop = clean slate for the auto-restart counter.
+        // Without this, repeated stop/start cycles accumulate restart
+        // attempts across the lifetime of the manager and a fresh start
+        // can trigger "giving up after 10 restart attempts" with zero
+        // network I/O. Health-monitor's `resetRestartAttempts` is a
+        // separate explicit reset; this is the implicit reset paired
+        // with the user's stop intent.
+        restartAttempts.delete(restartKey(channelId, id));
         setRuntime(channelId, id, {
           accountId: id,
           running: false,
