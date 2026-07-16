@@ -84,11 +84,26 @@ const MemoryQmdSchema = z
   })
   .strict();
 
+const BrainIngestSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    url: z.string().optional(),
+    deviceId: z.string().optional(),
+    keyPath: z.string().optional(),
+    project: z.string().optional(),
+    type: z.string().optional(),
+    importance: z.number().min(0).max(1).optional(),
+    tags: z.array(z.string()).optional(),
+    timeoutMs: z.number().int().positive().optional(),
+  })
+  .strict();
+
 const MemorySchema = z
   .object({
     backend: z.union([z.literal("builtin"), z.literal("qmd")]).optional(),
     citations: z.union([z.literal("auto"), z.literal("on"), z.literal("off")]).optional(),
     qmd: MemoryQmdSchema.optional(),
+    brainIngest: BrainIngestSchema.optional(),
   })
   .strict()
   .optional();
