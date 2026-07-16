@@ -27,6 +27,7 @@ import { createTypingCallbacks } from "../../channels/typing.js";
 import { resolveChannelGroupRequireMention } from "../../config/group-policy.js";
 import { readSessionUpdatedAt, resolveStorePath } from "../../config/sessions.js";
 import { danger, logVerbose, shouldLogVerbose } from "../../globals.js";
+import { captureInboundToBrain } from "../../infra/brain-ingest.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import { mediaKindFromMime } from "../../media/constants.js";
 import { buildPairingReply } from "../../pairing/pairing-messages.js";
@@ -248,6 +249,12 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       },
     });
     markDispatchIdle();
+    // P4 W2.1 brain-ingest bridge: forward exactly what the agent saw (this ctx
+    // has already passed allowlist/group gating, and for voice notes its
+    // Transcript was resolved in-place during dispatch) to shared-brain. Purely
+    // fire-and-forget — never awaited, never throws into the reply path, and a
+    // no-op unless explicitly enabled.
+    void captureInboundToBrain(ctxPayload, { cfg: deps.cfg, runtime: deps.runtime });
     if (!queuedFinal) {
       if (entry.isGroup && historyKey) {
         clearHistoryEntriesIfEnabled({
