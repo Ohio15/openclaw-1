@@ -110,6 +110,8 @@ export type MsgContext = {
   SenderUsername?: string;
   SenderTag?: string;
   SenderE164?: string;
+  /** Raw provider uuid for the sender when distinct from SenderId (e.g. Signal). */
+  SenderUuid?: string;
   Timestamp?: number;
   /** Provider label (e.g. whatsapp, telegram). */
   Provider?: string;

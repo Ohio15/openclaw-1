@@ -134,7 +134,7 @@ describe("formatBrainIngestEnvelope", () => {
     expect(envelope).not.toBeNull();
     expect(envelope?.channel).toBe("signal");
     expect(envelope?.content).toBe("Ron: ship the release tonight");
-    expect(envelope?.metadata.sender_uuid).toBe("uuid-ron");
+    expect(envelope?.metadata.sender_id).toBe("uuid-ron");
     expect(envelope?.metadata.has_media).toBe(false);
     expect(envelope?.metadata.channel).toBe("signal");
   });
@@ -156,7 +156,7 @@ describe("formatBrainIngestEnvelope", () => {
     expect(envelope?.external_id).toBe("signal:group:g99:uuid-ron:1700000000000");
   });
 
-  it("returns null for a media-only message with no transcript", () => {
+  it("returns null for a media-only message with the [media attached] note", () => {
     const envelope = formatBrainIngestEnvelope({
       SenderId: "uuid-ron",
       MediaPath: "/tmp/photo.jpg",
@@ -167,11 +167,85 @@ describe("formatBrainIngestEnvelope", () => {
     expect(envelope).toBeNull();
   });
 
+  it("returns null for a real Signal media-only message (<media:...> placeholder)", () => {
+    // event-handler.ts sets RawBody to `<media:image>` / `<media:attachment>`
+    // for a photo-only message with no caption. This must map to null, not to
+    // "Ron: <media:image>".
+    for (const placeholder of ["<media:image>", "<media:video>", "<media:attachment>"]) {
+      const envelope = formatBrainIngestEnvelope({
+        SenderName: "Ron",
+        SenderId: "uuid-ron",
+        RawBody: placeholder,
+        CommandBody: placeholder,
+        MediaPath: "/tmp/photo.jpg",
+        ChatType: "direct",
+        Timestamp: 1700000000000,
+      } as MsgContext);
+      expect(envelope, `placeholder ${placeholder}`).toBeNull();
+    }
+  });
+
+  it("returns null for a voice note whose transcription failed (<media:audio>, no Transcript)", () => {
+    const envelope = formatBrainIngestEnvelope({
+      SenderName: "Ron",
+      SenderId: "uuid-ron",
+      RawBody: "<media:audio>",
+      CommandBody: "<media:audio>",
+      MediaPath: "/tmp/voice.ogg",
+      ChatType: "direct",
+      Timestamp: 1700000000000,
+    } as MsgContext);
+    expect(envelope).toBeNull();
+  });
+
+  it("prefers the raw uuid over the E.164 for a phone-kind sender that carries both", () => {
+    const envelope = formatBrainIngestEnvelope(
+      textCtx({ SenderName: "Ron", SenderId: "+15550001111", SenderUuid: "abcd-uuid" }),
+    );
+    // content keeps the human display name; id fields use the uuid.
+    expect(envelope?.content).toBe("Ron: ship the release tonight");
+    expect(envelope?.metadata.sender_id).toBe("abcd-uuid");
+    expect(envelope?.external_id).toBe("signal:dm:abcd-uuid:1700000000000");
+  });
+
+  it("unwraps a uuid: display id when no separate SenderUuid is present", () => {
+    const envelope = formatBrainIngestEnvelope(
+      textCtx({ SenderName: undefined, SenderId: "uuid:raw-99", SenderUuid: undefined }),
+    );
+    expect(envelope?.metadata.sender_id).toBe("raw-99");
+    expect(envelope?.external_id).toBe("signal:dm:raw-99:1700000000000");
+  });
+
+  it("falls back to the E.164 only when no uuid is available", () => {
+    const envelope = formatBrainIngestEnvelope(
+      textCtx({ SenderName: "Ron", SenderId: "+15550001111", SenderUuid: undefined }),
+    );
+    expect(envelope?.metadata.sender_id).toBe("+15550001111");
+  });
+
   it("produces a stable external_id for identical input", () => {
     const a = formatBrainIngestEnvelope(textCtx());
     const b = formatBrainIngestEnvelope(textCtx());
     expect(a?.external_id).toBe(b?.external_id);
     expect(a?.external_id).toBe("signal:dm:uuid-ron:1700000000000");
+  });
+
+  it("uses a content-hash tail (never an empty segment) when the timestamp is missing", () => {
+    const a = formatBrainIngestEnvelope(
+      textCtx({ Timestamp: undefined, RawBody: "first message", CommandBody: "first message" }),
+    );
+    const b = formatBrainIngestEnvelope(
+      textCtx({ Timestamp: undefined, RawBody: "second message", CommandBody: "second message" }),
+    );
+    const aRepeat = formatBrainIngestEnvelope(
+      textCtx({ Timestamp: undefined, RawBody: "first message", CommandBody: "first message" }),
+    );
+    expect(a?.external_id).not.toMatch(/:$/);
+    expect(a?.external_id).toMatch(/^signal:dm:uuid-ron:h[0-9a-f]{16}$/);
+    // Distinct content → distinct id (no provenance-dedup collapse).
+    expect(a?.external_id).not.toBe(b?.external_id);
+    // Same content → stable id.
+    expect(a?.external_id).toBe(aRepeat?.external_id);
   });
 });
 
@@ -186,6 +260,31 @@ describe("buildIngestRequestBody", () => {
     expect(body.external_id).toBe("signal:dm:uuid-ron:1700000000000");
     expect(body.tags).toEqual(["openclaw", "voice"]);
     expect(body.importance).toBe(0.5);
+  });
+
+  it("never leaks the audio file path or raw media bytes in a voice payload", () => {
+    const { privateKeyPem } = makeKeypair();
+    const config = resolveBrainIngestConfig({}, enabledEnv(privateKeyPem));
+    const ctx = voiceCtx({
+      MediaPath: "/var/data/attachments/secret-voice-42.ogg",
+      MediaPaths: ["/var/data/attachments/secret-voice-42.ogg"],
+      MediaType: "audio/ogg",
+    });
+    const envelope = formatBrainIngestEnvelope(ctx)!;
+    const body = buildIngestRequestBody(envelope, config!);
+    const serialized = JSON.stringify(body);
+
+    // The transcript is forwarded; the file path and audio bytes are not.
+    expect(body.content).toBe("Ron: meet me at noon");
+    expect(serialized).not.toContain("secret-voice-42");
+    expect(serialized).not.toContain(".ogg");
+    expect(serialized).not.toContain("/var/data/attachments");
+    // has_media flags the presence of an attachment without carrying it.
+    expect((body.metadata as Record<string, unknown>).has_media).toBe(true);
+    // No path-bearing metadata keys.
+    for (const key of Object.keys(body.metadata as Record<string, unknown>)) {
+      expect(key.toLowerCase()).not.toContain("path");
+    }
   });
 });
 

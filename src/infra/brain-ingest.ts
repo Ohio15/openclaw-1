@@ -36,7 +36,13 @@ import { fetchWithTimeout } from "../utils/fetch-timeout.js";
 const DEFAULT_TIMEOUT_MS = 5000;
 const DEFAULT_IMPORTANCE = 0.5;
 const INGEST_PATH = "/api/memory/ingest";
+// Two distinct media-only placeholder shapes reach the capture as body text:
+//  - `[media attached: /path (mime)]` from the media-note builder, and
+//  - `<media:image>` / `<media:attachment>` etc. set by the Signal handler when
+//    an attachment arrives with no caption (event-handler.ts placeholder path).
+// Both are stripped so a media-only message maps to an empty text → null.
 const MEDIA_NOTE_RE = /\[media attached[^\]]*\]/gi;
+const MEDIA_PLACEHOLDER_RE = /<media:[^>]*>/gi;
 
 export type BrainIngestChannel = "signal" | "voice";
 
@@ -164,8 +170,31 @@ function resolveGroupId(ctx: MsgContext): string | undefined {
 function stripMediaNotes(text: string): string {
   return text
     .replace(MEDIA_NOTE_RE, "")
+    .replace(MEDIA_PLACEHOLDER_RE, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * Resolve the sender identifier, preferring a Signal uuid over an E.164 phone
+ * number wherever both are available. `SenderUuid` is the raw envelope uuid (set
+ * for phone-kind senders that also carry a uuid); `SenderId` may itself be a
+ * `uuid:<raw>` display form (uuid-kind senders) or a bare E.164 (phone-kind).
+ * E.164 is used only as a last-resort fallback.
+ */
+function resolveSenderId(ctx: MsgContext): string {
+  const uuid = trimmedString(ctx.SenderUuid);
+  if (uuid) {
+    return uuid;
+  }
+  const senderId = trimmedString(ctx.SenderId);
+  if (senderId?.toLowerCase().startsWith("uuid:")) {
+    const raw = senderId.slice("uuid:".length).trim();
+    if (raw) {
+      return raw;
+    }
+  }
+  return senderId ?? "unknown";
 }
 
 /**
@@ -188,12 +217,16 @@ export function formatBrainIngestEnvelope(ctx: MsgContext): BrainIngestEnvelope 
     return null;
   }
 
+  // content keeps the human-readable display name (sourceName), falling back to
+  // the sender id then conversation label. This is Ron's own conversation data.
   const senderDisplay =
     trimmedString(ctx.SenderName) ??
     trimmedString(ctx.SenderId) ??
     trimmedString(ctx.ConversationLabel) ??
     "unknown";
-  const senderId = trimmedString(ctx.SenderId) ?? "unknown";
+  // sender_id / external_id use the stable identifier (uuid-preferred).
+  const senderId = resolveSenderId(ctx);
+  const content = `${senderDisplay}: ${messageText}`;
   const groupId = resolveGroupId(ctx);
   const timestamp = typeof ctx.Timestamp === "number" ? ctx.Timestamp : undefined;
   const hasMedia = Boolean(
@@ -202,14 +235,20 @@ export function formatBrainIngestEnvelope(ctx: MsgContext): BrainIngestEnvelope 
 
   const channel: BrainIngestChannel = isVoice ? "voice" : "signal";
 
-  // Stable per-message id: envelope timestamp + source uuid, namespaced by the
+  // Stable per-message id: envelope timestamp + source id, namespaced by the
   // conversation scope so a DM and a group message can never collide. Identical
   // inputs always produce the same id — the brain's own dedup makes replays safe.
+  // When the timestamp is missing, fall back to a content hash so distinct
+  // messages from one sender never collapse into a single provenance-deduped id.
   const scope = groupId ? `group:${groupId}` : "dm";
-  const external_id = `signal:${scope}:${senderId}:${timestamp ?? ""}`;
+  const idTail =
+    timestamp !== undefined
+      ? String(timestamp)
+      : `h${createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)}`;
+  const external_id = `signal:${scope}:${senderId}:${idTail}`;
 
   const metadata: Record<string, unknown> = {
-    sender_uuid: senderId,
+    sender_id: senderId,
     ts: timestamp,
     has_media: hasMedia,
     surface: "signal",
@@ -240,7 +279,7 @@ export function formatBrainIngestEnvelope(ctx: MsgContext): BrainIngestEnvelope 
   }
 
   return {
-    content: `${senderDisplay}: ${messageText}`,
+    content,
     channel,
     external_id,
     metadata,

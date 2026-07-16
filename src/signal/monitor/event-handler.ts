@@ -57,6 +57,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
     senderDisplay: string;
     senderRecipient: string;
     senderPeerId: string;
+    senderUuid?: string;
     groupId?: string;
     groupName?: string;
     isGroup: boolean;
@@ -153,6 +154,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       GroupSubject: entry.isGroup ? (entry.groupName ?? undefined) : undefined,
       SenderName: entry.senderName,
       SenderId: entry.senderDisplay,
+      SenderUuid: entry.senderUuid,
       Provider: "signal" as const,
       Surface: "signal" as const,
       MessageSid: entry.messageId,
@@ -666,6 +668,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
       senderDisplay,
       senderRecipient,
       senderPeerId,
+      senderUuid: envelope.sourceUuid?.trim() || undefined,
       groupId,
       groupName,
       isGroup,
