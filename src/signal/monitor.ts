@@ -10,12 +10,12 @@ import { saveMediaBuffer } from "../media/store.js";
 import { createNonExitingRuntime, type RuntimeEnv } from "../runtime.js";
 import { normalizeE164 } from "../utils.js";
 import { resolveSignalAccount } from "./accounts.js";
-import { signalCheck, signalRpcRequest } from "./client.js";
+import { signalCheck, signalRpcRequest, type SignalTransport } from "./client.js";
 import { spawnSignalDaemon } from "./daemon.js";
 import { isSignalSenderAllowed, type resolveSignalSender } from "./identity.js";
 import { createSignalEventHandler } from "./monitor/event-handler.js";
 import { sendMessageSignal } from "./send.js";
-import { runSignalSseLoop } from "./sse-reconnect.js";
+import { runSignalSseLoop, runSignalWsLoop } from "./sse-reconnect.js";
 
 type SignalReactionMessage = {
   emoji?: string | null;
@@ -43,6 +43,8 @@ export type MonitorSignalOpts = {
   accountId?: string;
   config?: OpenClawConfig;
   baseUrl?: string;
+  /** Override the account's inbound/outbound transport (default: account config). */
+  transport?: SignalTransport;
   autoStart?: boolean;
   startupTimeoutMs?: number;
   cliPath?: string;
@@ -180,10 +182,7 @@ async function waitForSignalDaemonReady(params: {
         error: res.error ?? (res.status ? `HTTP ${res.status}` : "unreachable"),
       };
     },
-    failFast: () =>
-      params.hasDaemonExited?.()
-        ? "signal daemon exited before readiness"
-        : null,
+    failFast: () => (params.hasDaemonExited?.() ? "signal daemon exited before readiness" : null),
   });
 }
 
@@ -292,8 +291,7 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
   // owning channel aborts. Returning eagerly previously caused the
   // server-channels.ts auto-restart logic to reschedule us every 5s forever.
   if (process.env.OPENCLAW_SIGNAL_INBOUND_ENABLED === "false") {
-    const accountIdForStatus =
-      opts.accountId?.trim() || opts.account?.trim() || "default";
+    const accountIdForStatus = opts.accountId?.trim() || opts.account?.trim() || "default";
     runtime.log?.(
       "Signal inbound listener disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false; outbound unaffected.",
     );
@@ -335,6 +333,10 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
   const chunkMode = resolveChunkMode(cfg, "signal", accountInfo.accountId);
   const baseUrl = opts.baseUrl?.trim() || accountInfo.baseUrl;
   const account = opts.account?.trim() || accountInfo.config.account?.trim();
+  // "rest" (bbernhard/signal-cli-rest-api) has no native daemon or SSE endpoint;
+  // its inbound stream is a per-account WebSocket. "json-rpc" keeps the daemon +
+  // SSE path unchanged.
+  const transport: SignalTransport = opts.transport ?? accountInfo.config.transport ?? "json-rpc";
   const dmPolicy = accountInfo.config.dmPolicy ?? "pairing";
   const allowFrom = normalizeAllowList(opts.allowFrom ?? accountInfo.config.allowFrom);
   const groupAllowFrom = normalizeAllowList(
@@ -460,7 +462,12 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       buildSignalReactionSystemEventText,
     });
 
-    await runSignalSseLoop({
+    // Slot the "rest" WebSocket receive loop in as a drop-in alternative to the
+    // native SSE loop. Both share the same abort/backoff/restart machinery and
+    // feed the identical onEvent consumer, so the entire downstream pipeline is
+    // reused unchanged.
+    const runReceiveLoop = transport === "rest" ? runSignalWsLoop : runSignalSseLoop;
+    await runReceiveLoop({
       baseUrl,
       account,
       abortSignal: sseAbort.signal,

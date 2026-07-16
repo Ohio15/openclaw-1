@@ -34,15 +34,21 @@ export type SignalAccountConfig = {
   /** Auto-start signal-cli daemon (default: true if httpUrl not set). */
   autoStart?: boolean;
   /**
-   * Outbound transport to the signal backend.
+   * Transport to the signal backend.
    * - "json-rpc" (default): talk to a local signal-cli daemon's JSON-RPC endpoint
-   *   at `${baseUrl}/api/v1/rpc`. This is what `spawnSignalDaemon` provides.
-   * - "rest": talk to bbernhard/signal-cli-rest-api over its REST endpoints
-   *   (`/v2/send`, etc). Use this when signal-cli is not installed locally and
-   *   a shared signal-cli-rest-api container is reachable instead.
+   *   at `${baseUrl}/api/v1/rpc` for outbound, and its native SSE endpoint
+   *   (`/api/v1/events`) for inbound. This is what `spawnSignalDaemon` provides.
+   * - "rest": talk to bbernhard/signal-cli-rest-api. Outbound uses its REST
+   *   endpoints (`/v2/send`, etc); inbound connects a per-account WebSocket to
+   *   `${baseUrl}/v1/receive/{account}` (requires the container running
+   *   MODE=json-rpc) and feeds the same inbound pipeline as the SSE path. Use
+   *   this when signal-cli is not installed locally and a shared
+   *   signal-cli-rest-api container is reachable instead.
    *
-   * Only outbound `send` is implemented for "rest". Inbound monitoring and
-   * receipts/reactions remain on the JSON-RPC path.
+   * Inbound text/group messages, allowlist/pairing gating, and reactions work on
+   * both transports. Attachment download and read receipts still require the
+   * JSON-RPC path (the REST client rejects those methods); on "rest" they are
+   * skipped gracefully rather than delivered.
    */
   transport?: "json-rpc" | "rest";
   /** Max time to wait for signal-cli daemon startup (ms, cap 120000). */

@@ -2,7 +2,7 @@ import { logVerbose, shouldLogVerbose } from "../globals.js";
 import type { BackoffPolicy } from "../infra/backoff.js";
 import { computeBackoff, sleepWithAbort } from "../infra/backoff.js";
 import type { RuntimeEnv } from "../runtime.js";
-import { type SignalSseEvent, streamSignalEvents } from "./client.js";
+import { type SignalSseEvent, streamSignalEvents, streamSignalWsEvents } from "./client.js";
 
 const DEFAULT_RECONNECT_POLICY: BackoffPolicy = {
   initialMs: 1_000,
@@ -11,7 +11,14 @@ const DEFAULT_RECONNECT_POLICY: BackoffPolicy = {
   jitter: 0.2,
 };
 
-type RunSignalSseLoopParams = {
+type SignalReceiveStream = (params: {
+  baseUrl: string;
+  account?: string;
+  abortSignal?: AbortSignal;
+  onEvent: (event: SignalSseEvent) => void;
+}) => Promise<void>;
+
+type RunSignalReceiveLoopParams = {
   baseUrl: string;
   account?: string;
   abortSignal?: AbortSignal;
@@ -20,14 +27,15 @@ type RunSignalSseLoopParams = {
   policy?: Partial<BackoffPolicy>;
 };
 
-export async function runSignalSseLoop({
-  baseUrl,
-  account,
-  abortSignal,
-  runtime,
-  onEvent,
-  policy,
-}: RunSignalSseLoopParams) {
+// Shared reconnect driver for both the native-daemon SSE stream and the
+// bbernhard "rest" WebSocket stream. Both expose the same resolve-on-close /
+// reject-on-error contract, so the backoff and restart-attempt accounting are
+// identical — only the underlying transport function differs.
+async function runSignalReceiveLoop(
+  stream: SignalReceiveStream,
+  label: string,
+  { baseUrl, account, abortSignal, runtime, onEvent, policy }: RunSignalReceiveLoopParams,
+) {
   const reconnectPolicy = {
     ...DEFAULT_RECONNECT_POLICY,
     ...policy,
@@ -43,7 +51,7 @@ export async function runSignalSseLoop({
 
   while (!abortSignal?.aborted) {
     try {
-      await streamSignalEvents({
+      await stream({
         baseUrl,
         account,
         abortSignal,
@@ -57,16 +65,16 @@ export async function runSignalSseLoop({
       }
       reconnectAttempts += 1;
       const delayMs = computeBackoff(reconnectPolicy, reconnectAttempts);
-      logReconnectVerbose(`Signal SSE stream ended, reconnecting in ${delayMs / 1000}s...`);
+      logReconnectVerbose(`Signal ${label} stream ended, reconnecting in ${delayMs / 1000}s...`);
       await sleepWithAbort(delayMs, abortSignal);
     } catch (err) {
       if (abortSignal?.aborted) {
         return;
       }
-      runtime.error?.(`Signal SSE stream error: ${String(err)}`);
+      runtime.error?.(`Signal ${label} stream error: ${String(err)}`);
       reconnectAttempts += 1;
       const delayMs = computeBackoff(reconnectPolicy, reconnectAttempts);
-      runtime.log?.(`Signal SSE connection lost, reconnecting in ${delayMs / 1000}s...`);
+      runtime.log?.(`Signal ${label} connection lost, reconnecting in ${delayMs / 1000}s...`);
       try {
         await sleepWithAbort(delayMs, abortSignal);
       } catch (sleepErr) {
@@ -77,4 +85,12 @@ export async function runSignalSseLoop({
       }
     }
   }
+}
+
+export function runSignalSseLoop(params: RunSignalReceiveLoopParams) {
+  return runSignalReceiveLoop(streamSignalEvents, "SSE", params);
+}
+
+export function runSignalWsLoop(params: RunSignalReceiveLoopParams) {
+  return runSignalReceiveLoop(streamSignalWsEvents, "WebSocket", params);
 }
