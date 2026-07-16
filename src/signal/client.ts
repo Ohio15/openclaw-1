@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import WebSocket from "ws";
 import { resolveFetch } from "../infra/fetch.js";
+import { rawDataToString } from "../infra/ws.js";
 import { fetchWithTimeout } from "../utils/fetch-timeout.js";
 
 export type SignalTransport = "json-rpc" | "rest";
@@ -315,4 +317,123 @@ export async function streamSignalEvents(params: {
   }
 
   flushEvent();
+}
+
+/**
+ * Translate a single bbernhard/signal-cli-rest-api WebSocket receive frame into
+ * the {@link SignalSseEvent} shape the SSE event handler already consumes.
+ *
+ * The `/v1/receive/{number}` WebSocket (MODE=json-rpc) emits one signal-cli
+ * receive payload per text frame — the same `{ envelope, account, exception }`
+ * object the native `signal-cli daemon --http` delivers inside an SSE
+ * "receive" event's `data` field. We only need to re-wrap it as
+ * `{ event: "receive", data: <frame> }` so the entire downstream pipeline
+ * (event-handler → gating → dispatch → captureInboundToBrain) is reused
+ * unchanged.
+ *
+ * Returns `null` for frames that carry no actionable payload (empty frames,
+ * non-JSON keepalives, or objects without an `envelope`/`exception`) so the
+ * reconnect loop's attempt counter is not reset by noise.
+ */
+export function signalWsFrameToSseEvent(raw: string): SignalSseEvent | null {
+  const text = raw.trim();
+  if (!text) {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+  if (!("envelope" in parsed) && !("exception" in parsed)) {
+    return null;
+  }
+  return { event: "receive", data: text };
+}
+
+function toWebSocketReceiveUrl(baseUrl: string, account: string): string {
+  // normalizeBaseUrl guarantees an http(s):// prefix and strips trailing
+  // slashes; swap the scheme (http->ws, https->wss) and append the receive
+  // route. The account (E.164) is a path segment, so it must be encoded.
+  const normalized = normalizeBaseUrl(baseUrl);
+  const wsBase = normalized.replace(/^http/i, "ws");
+  return `${wsBase}/v1/receive/${encodeURIComponent(account)}`;
+}
+
+/**
+ * Inbound receive stream for the "rest" transport (bbernhard/signal-cli-rest-api).
+ *
+ * Opens a WebSocket to `${baseUrl}/v1/receive/{account}` and forwards each frame
+ * to `onEvent` as a translated {@link SignalSseEvent}. Resolves when the socket
+ * closes (so {@link runSignalWsLoop} can reconnect) and rejects on a transport
+ * error unless the caller has already aborted. Mirrors the resolve/reject
+ * contract of {@link streamSignalEvents} so the two are interchangeable behind
+ * the transport check in the monitor.
+ */
+export async function streamSignalWsEvents(params: {
+  baseUrl: string;
+  account?: string;
+  abortSignal?: AbortSignal;
+  onEvent: (event: SignalSseEvent) => void;
+}): Promise<void> {
+  const account = params.account?.trim();
+  if (!account) {
+    throw new Error(
+      "Signal REST transport requires an E.164 `account` to open the receive WebSocket.",
+    );
+  }
+  if (params.abortSignal?.aborted) {
+    return;
+  }
+
+  const url = toWebSocketReceiveUrl(params.baseUrl, account);
+  const ws = new WebSocket(url);
+
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const onAbort = () => {
+      // Hard-terminate rather than close(): a graceful close waits for the
+      // server's close frame (up to ws's 30s closeTimeout), which would stall
+      // channel teardown. terminate() always emits 'close', which settles us.
+      ws.terminate();
+    };
+    const finish = (err?: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      params.abortSignal?.removeEventListener("abort", onAbort);
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    };
+
+    if (params.abortSignal) {
+      params.abortSignal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    ws.on("message", (data: WebSocket.RawData) => {
+      const event = signalWsFrameToSseEvent(rawDataToString(data));
+      if (event) {
+        params.onEvent(event);
+      }
+    });
+    ws.on("error", (err: Error) => {
+      // A socket error after abort is expected teardown, not a failure.
+      if (params.abortSignal?.aborted) {
+        finish();
+        return;
+      }
+      finish(err instanceof Error ? err : new Error(String(err)));
+    });
+    ws.on("close", () => {
+      finish();
+    });
+  });
 }
