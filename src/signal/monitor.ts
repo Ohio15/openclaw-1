@@ -1,6 +1,7 @@
 import { chunkTextWithMode, resolveChunkMode, resolveTextChunkLimit } from "../auto-reply/chunk.js";
 import { DEFAULT_GROUP_HISTORY_LIMIT, type HistoryEntry } from "../auto-reply/reply/history.js";
 import type { ReplyPayload } from "../auto-reply/types.js";
+import type { ChannelAccountSnapshot } from "../channels/plugins/types.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import type { SignalReactionNotificationMode } from "../config/types.js";
@@ -54,6 +55,11 @@ export type MonitorSignalOpts = {
   allowFrom?: Array<string | number>;
   groupAllowFrom?: Array<string | number>;
   mediaMaxMb?: number;
+  // Optional status reporter wired in by the channel manager (via plugin
+  // `gateway.startAccount` ctx.setStatus). Allows the monitor to mark itself
+  // disabled when the inbound kill-switch is engaged so the gateway does not
+  // schedule a restart loop.
+  setStatus?: (next: ChannelAccountSnapshot) => void;
 };
 
 function resolveRuntime(opts: MonitorSignalOpts): RuntimeEnv {
@@ -149,6 +155,12 @@ async function waitForSignalDaemonReady(params: {
   logAfterMs: number;
   logIntervalMs?: number;
   runtime: RuntimeEnv;
+  // HIGH #6: optional readiness short-circuit. Returns a non-empty reason
+  // when the daemon child has exited. The wait throws immediately instead
+  // of burning the 30s timeout polling a port that will never come up.
+  // The caller is responsible for binding this to the daemon handle's
+  // `exited` flag (populated by `child.on('exit')` in spawnSignalDaemon).
+  hasDaemonExited?: () => boolean;
 }): Promise<void> {
   await waitForTransportReady({
     label: "signal daemon",
@@ -168,6 +180,10 @@ async function waitForSignalDaemonReady(params: {
         error: res.error ?? (res.status ? `HTTP ${res.status}` : "unreachable"),
       };
     },
+    failFast: () =>
+      params.hasDaemonExited?.()
+        ? "signal daemon exited before readiness"
+        : null,
   });
 }
 
@@ -270,10 +286,36 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
   // Kill-switch for the inbound SSE listener. Default: enabled. Set
   // OPENCLAW_SIGNAL_INBOUND_ENABLED=false to skip daemon spawn and SSE loop
   // entirely; outbound (sendMessageSignal / REST transport) is unaffected.
+  //
+  // When engaged, we publish a terminal `enabled:false` status (so the
+  // gateway's auto-restart loop short-circuits) and then suspend until the
+  // owning channel aborts. Returning eagerly previously caused the
+  // server-channels.ts auto-restart logic to reschedule us every 5s forever.
   if (process.env.OPENCLAW_SIGNAL_INBOUND_ENABLED === "false") {
+    const accountIdForStatus =
+      opts.accountId?.trim() || opts.account?.trim() || "default";
     runtime.log?.(
       "Signal inbound listener disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false; outbound unaffected.",
     );
+    opts.setStatus?.({
+      accountId: accountIdForStatus,
+      running: false,
+      enabled: false,
+      lastError: "inbound disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false",
+    });
+    const abortSignal = opts.abortSignal;
+    if (!abortSignal) {
+      // No abort wiring available — return so we don't leak a never-resolving
+      // promise. The auto-restart guard added in server-channels.ts will keep
+      // us from being rescheduled.
+      return;
+    }
+    if (abortSignal.aborted) {
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      abortSignal.addEventListener("abort", () => resolve(), { once: true });
+    });
     return;
   }
 
@@ -316,13 +358,39 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     Math.max(1_000, opts.startupTimeoutMs ?? accountInfo.config.startupTimeoutMs ?? 30_000),
   );
   const readReceiptsViaDaemon = Boolean(autoStart && sendReadReceipts);
-  let daemonHandle: ReturnType<typeof spawnSignalDaemon> | null = null;
+  let daemonHandle: Awaited<ReturnType<typeof spawnSignalDaemon>> | null = null;
+
+  // CRITICAL #3: split the parent abort into independent daemon and SSE
+  // controllers. Previously a single `opts.abortSignal` cascaded into both
+  // the daemon child and the SSE loop, so any failure that called
+  // `daemonHandle.stop()` (e.g. transient daemon crash + restart) tore
+  // down the SSE loop too — and any SSE error that aborted the parent
+  // killed the daemon. With separate controllers:
+  //   - parentAbort → both stop (channel-level cancellation)
+  //   - daemonAbort → daemon stop only; SSE keeps running
+  //   - sseAbort    → SSE stop only; daemon child keeps running
+  // The readiness wait is bound to the parentAbort because it is
+  // timeout-bounded and cancels with the channel, not with one transport.
+  const parentAbort = opts.abortSignal;
+  const daemonAbort = new AbortController();
+  const sseAbort = new AbortController();
+  const onParentAbort = () => {
+    daemonAbort.abort();
+    sseAbort.abort();
+  };
+  if (parentAbort) {
+    if (parentAbort.aborted) {
+      onParentAbort();
+    } else {
+      parentAbort.addEventListener("abort", onParentAbort, { once: true });
+    }
+  }
 
   if (autoStart) {
     const cliPath = opts.cliPath ?? accountInfo.config.cliPath ?? "signal-cli";
     const httpHost = opts.httpHost ?? accountInfo.config.httpHost ?? "127.0.0.1";
     const httpPort = opts.httpPort ?? accountInfo.config.httpPort ?? 8080;
-    daemonHandle = spawnSignalDaemon({
+    daemonHandle = await spawnSignalDaemon({
       cliPath,
       account,
       httpHost,
@@ -335,20 +403,32 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     });
   }
 
-  const onAbort = () => {
+  // Wire daemonAbort → daemon child stop. This is the ONLY path that
+  // tears down the daemon process; SSE failures must never reach here.
+  const onDaemonAbort = () => {
     daemonHandle?.stop();
   };
-  opts.abortSignal?.addEventListener("abort", onAbort, { once: true });
+  daemonAbort.signal.addEventListener("abort", onDaemonAbort, { once: true });
 
   try {
     if (daemonHandle) {
+      // Capture as a local for the closure so TS can narrow `null` away
+      // and so the readiness wait reads from the same handle reference
+      // we have here even if the field is later reassigned.
+      const handle = daemonHandle;
       await waitForSignalDaemonReady({
         baseUrl,
-        abortSignal: opts.abortSignal,
+        abortSignal: parentAbort,
         timeoutMs: startupTimeoutMs,
         logAfterMs: 10_000,
         logIntervalMs: 10_000,
         runtime,
+        // HIGH #6: short-circuit if the daemon child died during startup.
+        // Without this, a port-bind failure or signal-cli crash would
+        // burn the full startupTimeoutMs (default 30s) for every gateway
+        // start. Adopted handles never set `exited`, so this is a no-op
+        // for the "leftover daemon already listening" path.
+        hasDaemonExited: () => handle.exited,
       });
     }
 
@@ -383,7 +463,7 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     await runSignalSseLoop({
       baseUrl,
       account,
-      abortSignal: opts.abortSignal,
+      abortSignal: sseAbort.signal,
       runtime,
       onEvent: (event) => {
         void handleEvent(event).catch((err) => {
@@ -392,12 +472,15 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       },
     });
   } catch (err) {
-    if (opts.abortSignal?.aborted) {
+    if (parentAbort?.aborted) {
       return;
     }
     throw err;
   } finally {
-    opts.abortSignal?.removeEventListener("abort", onAbort);
+    parentAbort?.removeEventListener("abort", onParentAbort);
+    daemonAbort.signal.removeEventListener("abort", onDaemonAbort);
+    // Final teardown — channel exit always stops the daemon, regardless
+    // of whether daemonAbort already fired (no-op if already stopped).
     daemonHandle?.stop();
   }
 }

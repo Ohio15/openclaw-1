@@ -294,6 +294,7 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
         runtime: ctx.runtime,
         abortSignal: ctx.abortSignal,
         mediaMaxMb: account.config.mediaMaxMb,
+        setStatus: ctx.setStatus,
       });
     },
   },

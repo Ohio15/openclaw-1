@@ -406,8 +406,14 @@ export async function startGatewayServer(
     channelLogs,
     channelRuntimeEnvs,
   });
-  const { getRuntimeSnapshot, startChannels, startChannel, stopChannel, markChannelLoggedOut } =
-    channelManager;
+  const {
+    getRuntimeSnapshot,
+    startChannels,
+    startChannel,
+    stopChannel,
+    markChannelLoggedOut,
+    awaitInFlightStart,
+  } = channelManager;
 
   if (!minimalTestGateway) {
     const machineDisplayName = await getMachineDisplayName();
@@ -666,6 +672,7 @@ export async function startGatewayServer(
           },
           startChannel,
           stopChannel,
+          awaitInFlightStart,
           logHooks,
           logBrowser,
           logChannels,

@@ -33,6 +33,16 @@ export function createGatewayReloadHandlers(params: {
   setState: (state: GatewayHotReloadState) => void;
   startChannel: (name: ChannelKind) => Promise<void>;
   stopChannel: (name: ChannelKind) => Promise<void>;
+  /**
+   * HIGH #5: returns the promise of an already-running `startChannel` for
+   * `name`, or undefined if no start is in flight. The hot-reload restart
+   * sequence awaits this before issuing `stopChannel` so it cannot yank
+   * the rug out from under a startChannel that hasn't yet committed its
+   * runtime state. Without this gate, runReload's `stopChannel` could land
+   * between `startChannel`'s plugin lookup and `startAccount` materialising,
+   * leaving an orphan daemon with no abort wiring.
+   */
+  awaitInFlightStart?: (name: ChannelKind) => Promise<void> | undefined;
   logHooks: {
     info: (msg: string) => void;
     warn: (msg: string) => void;
@@ -121,6 +131,22 @@ export function createGatewayReloadHandlers(params: {
       } else {
         const restartChannel = async (name: ChannelKind) => {
           params.logChannels.info(`restarting ${name} channel`);
+          // HIGH #5: serialize the restart sequence behind any in-flight
+          // startChannel for this channel. Without this gate, the
+          // health-monitor (or auto-restart) and config hot-reload can
+          // collide: a startChannel that has passed its mutex check but
+          // not yet committed `store.tasks.set(...)` is invisible to
+          // stopChannel's existence checks, so stop returns immediately
+          // and we then issue a second start that races the first.
+          const inFlight = params.awaitInFlightStart?.(name);
+          if (inFlight) {
+            await inFlight.catch(() => {
+              // The in-flight start may legitimately fail (bad config,
+              // missing transport). We don't care about the outcome —
+              // only that we waited for the start path to settle so
+              // subsequent stop+start observes a coherent runtime.
+            });
+          }
           await params.stopChannel(name);
           await params.startChannel(name);
         };
