@@ -17,6 +17,12 @@ OpenClaw integrates external CLIs via JSON-RPC. Two patterns are used today.
 - Health probe: `/api/v1/check`.
 - OpenClaw owns lifecycle when `channels.signal.autoStart=true`.
 
+With `channels.signal.transport="rest"` OpenClaw talks to
+bbernhard/signal-cli-rest-api instead, which serves none of the paths above:
+send is `POST /v2/send`, inbound is `ws://…/v1/receive/{number}`, health is
+`GET /v1/health` (204) and the version banner is `GET /v1/about`. There is no
+`/api/v1/rpc` on that image, so RPC methods other than send are unavailable.
+
 See [Signal](/channels/signal) for setup and endpoints.
 
 ## Pattern B: stdio child process (legacy: imsg)

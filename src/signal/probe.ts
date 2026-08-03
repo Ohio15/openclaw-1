@@ -1,5 +1,5 @@
 import type { BaseProbeResult } from "../channels/plugins/types.js";
-import { signalCheck, signalRpcRequest } from "./client.js";
+import { signalCheck, signalRestAbout, signalRpcRequest, type SignalTransport } from "./client.js";
 
 export type SignalProbe = BaseProbeResult & {
   status?: number | null;
@@ -20,7 +20,11 @@ function parseSignalVersion(value: unknown): string | null {
   return null;
 }
 
-export async function probeSignal(baseUrl: string, timeoutMs: number): Promise<SignalProbe> {
+export async function probeSignal(
+  baseUrl: string,
+  timeoutMs: number,
+  transport: SignalTransport = "json-rpc",
+): Promise<SignalProbe> {
   const started = Date.now();
   const result: SignalProbe = {
     ok: false,
@@ -29,7 +33,7 @@ export async function probeSignal(baseUrl: string, timeoutMs: number): Promise<S
     elapsedMs: 0,
     version: null,
   };
-  const check = await signalCheck(baseUrl, timeoutMs);
+  const check = await signalCheck(baseUrl, timeoutMs, transport);
   if (!check.ok) {
     return {
       ...result,
@@ -39,10 +43,15 @@ export async function probeSignal(baseUrl: string, timeoutMs: number): Promise<S
     };
   }
   try {
-    const version = await signalRpcRequest("version", undefined, {
-      baseUrl,
-      timeoutMs,
-    });
+    // "rest" (bbernhard/signal-cli-rest-api) serves no RPC endpoint — POSTing
+    // `version` to /api/v1/rpc 404s there. Its build info is on GET /v1/about.
+    const version =
+      transport === "rest"
+        ? await signalRestAbout(baseUrl, timeoutMs)
+        : await signalRpcRequest("version", undefined, {
+            baseUrl,
+            timeoutMs,
+          });
     result.version = parseSignalVersion(version);
   } catch (err) {
     result.error = err instanceof Error ? err.message : String(err);

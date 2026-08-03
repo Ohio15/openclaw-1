@@ -211,14 +211,28 @@ async function signalRestRequest<T>(
   }
 }
 
+/**
+ * Liveness check against the Signal backend.
+ *
+ * The two transports expose different health contracts and neither serves the
+ * other's path:
+ * - "json-rpc": `signal-cli daemon --http` answers `GET /api/v1/check`.
+ * - "rest": bbernhard/signal-cli-rest-api answers `GET /v1/health` (204) and
+ *   404s on `/api/v1/check`.
+ *
+ * Probing the wrong path reports the channel permanently unhealthy, so the
+ * transport must be threaded in by every caller that knows it.
+ */
 export async function signalCheck(
   baseUrl: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  transport: SignalTransport = "json-rpc",
 ): Promise<{ ok: boolean; status?: number | null; error?: string | null }> {
   const normalized = normalizeBaseUrl(baseUrl);
+  const path = transport === "rest" ? "/v1/health" : "/api/v1/check";
   try {
     const res = await fetchWithTimeout(
-      `${normalized}/api/v1/check`,
+      `${normalized}${path}`,
       { method: "GET" },
       timeoutMs,
       getRequiredFetch(),
@@ -233,6 +247,43 @@ export async function signalCheck(
       status: null,
       error: err instanceof Error ? err.message : String(err),
     };
+  }
+}
+
+/**
+ * Version banner for the "rest" transport.
+ *
+ * bbernhard/signal-cli-rest-api has no RPC endpoint — `signalRpcRequest`'s REST
+ * translator only implements `send`, and `POST /api/v1/rpc` does not exist on
+ * the image. Its build info lives at `GET /v1/about`, whose payload includes a
+ * `version` field (e.g. `{"versions":[...],"build":2,"version":"0.98"}`).
+ *
+ * Returns the parsed body so the caller can extract the field it wants; throws
+ * on a non-2xx response or unparseable body so probe callers can surface the
+ * failure without treating the backend as versionless.
+ */
+export async function signalRestAbout(
+  baseUrl: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<unknown> {
+  const normalized = normalizeBaseUrl(baseUrl);
+  const res = await fetchWithTimeout(
+    `${normalized}/v1/about`,
+    { method: "GET" },
+    timeoutMs,
+    getRequiredFetch(),
+  );
+  if (!res.ok) {
+    throw new Error(`Signal REST about failed: HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  if (!text) {
+    throw new Error("Signal REST about returned an empty body");
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error("Signal REST about returned a non-JSON body");
   }
 }
 

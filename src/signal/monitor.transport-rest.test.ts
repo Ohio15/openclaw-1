@@ -163,6 +163,55 @@ describe("monitorSignalProvider transport routing", () => {
   });
 });
 
+describe("waitForSignalDaemonReady health path", () => {
+  // The readiness gate polls signalCheck. On "rest" the daemon check path
+  // 404s, so the gate could never observe ready unless the transport is
+  // threaded through to signalCheck.
+  async function captureReadinessCheck(
+    signalSection: Record<string, unknown>,
+  ): Promise<() => Promise<{ ok: boolean; error?: string }>> {
+    monitorConfig = {
+      channels: { signal: { dmPolicy: "open", allowFrom: ["*"], ...signalSection } },
+    } as unknown as Record<string, unknown>;
+
+    const runtime = createMonitorRuntime();
+    const parent = new AbortController();
+    const finished = monitorSignalProvider({
+      runtime,
+      abortSignal: parent.signal,
+      accountId: "readiness-acc",
+    });
+
+    await waitFor(() => waitForTransportReadyMock.mock.calls.length > 0);
+    const readyArgs = waitForTransportReadyMock.mock.calls[0][0] as {
+      check: () => Promise<{ ok: boolean; error?: string }>;
+    };
+
+    parent.abort();
+    await finished;
+    return readyArgs.check;
+  }
+
+  it("polls /v1/health via signalCheck when transport is 'rest'", async () => {
+    const check = await captureReadinessCheck({
+      autoStart: true,
+      transport: "rest",
+      httpUrl: "http://signal-api:8080",
+      account: "+15550001111",
+    });
+
+    await expect(check()).resolves.toEqual({ ok: true });
+    expect(signalCheckMock).toHaveBeenCalledWith("http://signal-api:8080", 1000, "rest");
+  });
+
+  it("polls the daemon check path on the default json-rpc transport", async () => {
+    const check = await captureReadinessCheck({ autoStart: true });
+
+    await expect(check()).resolves.toEqual({ ok: true });
+    expect(signalCheckMock).toHaveBeenCalledWith("http://127.0.0.1:8080", 1000, "json-rpc");
+  });
+});
+
 async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!predicate()) {
