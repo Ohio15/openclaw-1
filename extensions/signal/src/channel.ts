@@ -267,7 +267,16 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
       // resolution order the monitor uses — don't re-read cfg here or the two
       // precedence chains will drift.
       const transport = account.config.transport ?? "json-rpc";
-      return await getSignalRuntime().channel.signal.probeSignal(baseUrl, timeoutMs, transport);
+      // The E.164 sender number. On "rest" the probe needs it to assert the
+      // account is registered — /v1/health is container-wide and account-blind,
+      // so without this every account sharing a signal-api container reports
+      // green off one liveness endpoint.
+      return await getSignalRuntime().channel.signal.probeSignal(
+        baseUrl,
+        timeoutMs,
+        transport,
+        account.config.account,
+      );
     },
     buildAccountSnapshot: ({ account, runtime, probe }) => ({
       accountId: account.accountId,

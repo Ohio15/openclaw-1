@@ -23,6 +23,14 @@ send is `POST /v2/send`, inbound is `ws://…/v1/receive/{number}`, health is
 `GET /v1/health` (204) and the version banner is `GET /v1/about`. There is no
 `/api/v1/rpc` on that image, so RPC methods other than send are unavailable.
 
+`GET /v1/health` is container liveness only — it answers 204 whenever the HTTP
+server is up, regardless of whether any account is registered, and every account
+sharing a container gets the same answer. The health probe therefore also checks
+`GET /v1/accounts` (a JSON array of registered E.164 numbers) and reports the
+account unhealthy when its number is absent. `channels.signal.account` is
+required on this transport for that reason; an unreadable or unexpected
+`/v1/accounts` payload is reported unhealthy rather than assumed healthy.
+
 See [Signal](/channels/signal) for setup and endpoints.
 
 ## Pattern B: stdio child process (legacy: imsg)

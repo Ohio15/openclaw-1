@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { signalCheck, signalRestAbout } from "./client.js";
+import { signalCheck, signalRestAbout, signalRestAccounts } from "./client.js";
 
 // The two Signal backends expose different health contracts and each 404s on
 // the other's path, so these tests pin the exact URL per transport:
@@ -105,5 +105,93 @@ describe("signalRestAbout", () => {
     fetchMock.mockResolvedValueOnce(new Response("<html>oops</html>", { status: 200 }));
 
     await expect(signalRestAbout("http://signal-api:8080", 1000)).rejects.toThrow(/non-JSON body/);
+  });
+});
+
+// NOTE: mock-based. These pin OUR reading of the signal-cli-rest-api contract
+// (GET /v1/accounts -> JSON array of E.164 strings) and the defensive parsing
+// around it; they do not prove the image behaves this way.
+describe("signalRestAccounts", () => {
+  function jsonResponse(body: unknown): Response {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+  });
+
+  it("GETs /v1/accounts and returns the documented array of E.164 strings", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(["+15550001234", "+15559990000"]));
+
+    const accounts = await signalRestAccounts("http://signal-api:8080", 1000);
+
+    expect(requestedUrl()).toBe("http://signal-api:8080/v1/accounts");
+    expect(accounts).toEqual(["+15550001234", "+15559990000"]);
+  });
+
+  it("accepts object entries carrying a number/account field", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse([{ number: "+15550001234", uuid: "abc" }, { account: "+15559990000" }]),
+    );
+
+    await expect(signalRestAccounts("http://signal-api:8080", 1000)).resolves.toEqual([
+      "+15550001234",
+      "+15559990000",
+    ]);
+  });
+
+  it("returns an empty list when no account is registered", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await expect(signalRestAccounts("http://signal-api:8080", 1000)).resolves.toEqual([]);
+  });
+
+  it("normalizes a bare host before appending the path", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([]));
+
+    await signalRestAccounts("signal-api:8080//", 1000);
+
+    expect(requestedUrl()).toBe("http://signal-api:8080/v1/accounts");
+  });
+
+  it("throws on a non-2xx response", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("404 page not found", { status: 404 }));
+
+    await expect(signalRestAccounts("http://signal-api:8080", 1000)).rejects.toThrow(
+      /Signal REST accounts failed: HTTP 404/,
+    );
+  });
+
+  it("throws on an empty body", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 200 }));
+
+    await expect(signalRestAccounts("http://signal-api:8080", 1000)).rejects.toThrow(/empty body/);
+  });
+
+  it("throws on a non-JSON body", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("<html>oops</html>", { status: 200 }));
+
+    await expect(signalRestAccounts("http://signal-api:8080", 1000)).rejects.toThrow(
+      /non-JSON body/,
+    );
+  });
+
+  it("throws (never silently succeeds) on a wrapped envelope", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ accounts: ["+15550001234"] }));
+
+    await expect(signalRestAccounts("http://signal-api:8080", 1000)).rejects.toThrow(
+      /unexpected shape/,
+    );
+  });
+
+  it("throws on an entry with no recognizable E.164 number", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse([{ uuid: "abc" }]));
+
+    await expect(signalRestAccounts("http://signal-api:8080", 1000)).rejects.toThrow(
+      /unrecognized entry at index 0/,
+    );
   });
 });
