@@ -152,6 +152,12 @@ function buildSignalReactionSystemEventText(params: {
 
 async function waitForSignalDaemonReady(params: {
   baseUrl: string;
+  /**
+   * Selects the health path polled by {@link signalCheck}. The "rest" backend
+   * 404s on the native daemon's /api/v1/check, so without this the readiness
+   * gate could never observe ready on that transport.
+   */
+  transport: SignalTransport;
   abortSignal?: AbortSignal;
   timeoutMs: number;
   logAfterMs: number;
@@ -173,7 +179,7 @@ async function waitForSignalDaemonReady(params: {
     abortSignal: params.abortSignal,
     runtime: params.runtime,
     check: async () => {
-      const res = await signalCheck(params.baseUrl, 1000);
+      const res = await signalCheck(params.baseUrl, 1000, params.transport);
       if (res.ok) {
         return { ok: true };
       }
@@ -420,6 +426,7 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       const handle = daemonHandle;
       await waitForSignalDaemonReady({
         baseUrl,
+        transport,
         abortSignal: parentAbort,
         timeoutMs: startupTimeoutMs,
         logAfterMs: 10_000,

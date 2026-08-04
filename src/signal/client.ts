@@ -211,14 +211,28 @@ async function signalRestRequest<T>(
   }
 }
 
+/**
+ * Liveness check against the Signal backend.
+ *
+ * The two transports expose different health contracts and neither serves the
+ * other's path:
+ * - "json-rpc": `signal-cli daemon --http` answers `GET /api/v1/check`.
+ * - "rest": bbernhard/signal-cli-rest-api answers `GET /v1/health` (204) and
+ *   404s on `/api/v1/check`.
+ *
+ * Probing the wrong path reports the channel permanently unhealthy, so the
+ * transport must be threaded in by every caller that knows it.
+ */
 export async function signalCheck(
   baseUrl: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  transport: SignalTransport = "json-rpc",
 ): Promise<{ ok: boolean; status?: number | null; error?: string | null }> {
   const normalized = normalizeBaseUrl(baseUrl);
+  const path = transport === "rest" ? "/v1/health" : "/api/v1/check";
   try {
     const res = await fetchWithTimeout(
-      `${normalized}/api/v1/check`,
+      `${normalized}${path}`,
       { method: "GET" },
       timeoutMs,
       getRequiredFetch(),
@@ -234,6 +248,116 @@ export async function signalCheck(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+/**
+ * Version banner for the "rest" transport.
+ *
+ * bbernhard/signal-cli-rest-api has no RPC endpoint — `signalRpcRequest`'s REST
+ * translator only implements `send`, and `POST /api/v1/rpc` does not exist on
+ * the image. Its build info lives at `GET /v1/about`, whose payload includes a
+ * `version` field (e.g. `{"versions":[...],"build":2,"version":"0.98"}`).
+ *
+ * Returns the parsed body so the caller can extract the field it wants; throws
+ * on a non-2xx response or unparseable body so probe callers can surface the
+ * failure without treating the backend as versionless.
+ */
+export async function signalRestAbout(
+  baseUrl: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<unknown> {
+  const normalized = normalizeBaseUrl(baseUrl);
+  const res = await fetchWithTimeout(
+    `${normalized}/v1/about`,
+    { method: "GET" },
+    timeoutMs,
+    getRequiredFetch(),
+  );
+  if (!res.ok) {
+    throw new Error(`Signal REST about failed: HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  if (!text) {
+    throw new Error("Signal REST about returned an empty body");
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw new Error("Signal REST about returned a non-JSON body");
+  }
+}
+
+function extractRestAccountNumber(entry: unknown): string | null {
+  if (typeof entry === "string") {
+    const trimmed = entry.trim();
+    return trimmed || null;
+  }
+  if (entry && typeof entry === "object") {
+    // Newer images have shipped object entries; accept the two field names the
+    // API has used for the E.164 rather than assuming one.
+    const record = entry as { number?: unknown; account?: unknown };
+    for (const candidate of [record.number, record.account]) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Registered accounts on the "rest" backend (bbernhard/signal-cli-rest-api).
+ *
+ * `GET /v1/health` is container liveness only — it answers 204 while the HTTP
+ * server is up regardless of whether signal-cli has any registered/linked
+ * account, and every account sharing a container emits the identical result.
+ * `GET /v1/accounts` is the only account-aware signal the image exposes, so it
+ * is what makes a probe say something about the number rather than the process.
+ *
+ * The documented payload is a JSON array of E.164 strings
+ * (`["+15550001111","+15550002222"]`). Parsing is deliberately defensive but
+ * never lenient: object entries carrying a `number`/`account` field are
+ * accepted, and anything else (non-2xx, empty body, non-JSON, a non-array
+ * envelope, or an entry with no recognizable number) throws. Callers on a
+ * dead-man's-switch path must fail closed rather than infer "registered" from a
+ * shape we did not understand.
+ */
+export async function signalRestAccounts(
+  baseUrl: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+): Promise<string[]> {
+  const normalized = normalizeBaseUrl(baseUrl);
+  const res = await fetchWithTimeout(
+    `${normalized}/v1/accounts`,
+    { method: "GET" },
+    timeoutMs,
+    getRequiredFetch(),
+  );
+  if (!res.ok) {
+    throw new Error(`Signal REST accounts failed: HTTP ${res.status}`);
+  }
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error("Signal REST accounts returned an empty body");
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    throw new Error("Signal REST accounts returned a non-JSON body");
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error("Signal REST accounts returned an unexpected shape (expected a JSON array)");
+  }
+  return parsed.map((entry, index) => {
+    const number = extractRestAccountNumber(entry);
+    if (!number) {
+      throw new Error(
+        `Signal REST accounts returned an unrecognized entry at index ${index} (no E.164 number)`,
+      );
+    }
+    return number;
+  });
 }
 
 export async function streamSignalEvents(params: {
