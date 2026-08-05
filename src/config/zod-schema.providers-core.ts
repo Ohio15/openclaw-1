@@ -700,6 +700,13 @@ export const SignalAccountSchema = SignalAccountSchemaBase.superRefine((value, c
 
 const SIGNAL_TLS_KEYS = ["tlsCaFile", "tlsCertFile", "tlsKeyFile"] as const;
 
+/**
+ * Mirrors `DEFAULT_ACCOUNT_ID` from routing/session-key. Duplicated rather than
+ * imported to keep the config schema free of runtime imports; the consistency
+ * test in config.signal-tls.test.ts pins the two together.
+ */
+const SIGNAL_DEFAULT_ACCOUNT_ID = "default";
+
 type SignalTlsKeys = Partial<Record<(typeof SIGNAL_TLS_KEYS)[number], string | undefined>>;
 
 type SignalTlsView = SignalTlsKeys & {
@@ -780,15 +787,37 @@ export const SignalConfigSchema = SignalAccountSchemaBase.extend({
   // so the channel block is only a config on its own when no account contributes
   // to it. The shared-CA layout — tlsCaFile at channel level, cert/key per
   // account — is deliberately valid, and judging the channel block standalone
-  // would reject it. When an account does define TLS keys, only merged views are
-  // judged, and a complete channel block is still scheme-checked because
-  // accounts absent from `accounts` inherit it wholesale.
+  // would reject it.
+  //
+  // The catch is that `resolveSignalAccount` synthesizes an account for any id
+  // that is not listed under `accounts`, including the "default" id every
+  // accountId-less send resolves to. That synthetic account merges to the bare
+  // channel block, so a partial channel block is only safe when an explicit
+  // `accounts.default` entry completes it — otherwise the config validates green
+  // and then throws on the first default-path send.
   const accountEntries = Object.entries(value.accounts ?? {}).flatMap(([accountId, account]) =>
     account ? [[accountId, account] as const] : [],
   );
   const anyAccountDefinesTls = accountEntries.some(([, account]) => definesSignalTlsKey(account));
-  if (!anyAccountDefinesTls || SIGNAL_TLS_KEYS.every((key) => Boolean(value[key]?.trim()))) {
+  const channelTlsPresent = SIGNAL_TLS_KEYS.filter((key) => Boolean(value[key]?.trim()));
+  const channelTlsComplete = channelTlsPresent.length === SIGNAL_TLS_KEYS.length;
+  if (!anyAccountDefinesTls || channelTlsComplete) {
     requireCompleteSignalTls({ value, ctx, path: [], configPath: "channels.signal" });
+  } else if (channelTlsPresent.length > 0) {
+    // Partial channel block with per-account TLS: the implicit "default"
+    // account inherits the partial block verbatim unless it is listed.
+    const explicitDefault = value.accounts?.[SIGNAL_DEFAULT_ACCOUNT_ID];
+    const defaultIsComplete =
+      Boolean(explicitDefault) &&
+      SIGNAL_TLS_KEYS.every((key) => Boolean((explicitDefault?.[key] ?? value[key])?.trim()));
+    if (!defaultIsComplete) {
+      const missing = SIGNAL_TLS_KEYS.filter((key) => !channelTlsPresent.includes(key));
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [missing[0]],
+        message: `channels.signal TLS block is partial and unlisted accounts (including the implicit "${SIGNAL_DEFAULT_ACCOUNT_ID}" used by accountId-less sends) inherit it as-is (missing: ${missing.join(", ")}) — complete the channel-level block, or add an explicit channels.signal.accounts.${SIGNAL_DEFAULT_ACCOUNT_ID} entry completing it.`,
+      });
+    }
   }
   for (const [accountId, account] of accountEntries) {
     requireCompleteSignalTls({

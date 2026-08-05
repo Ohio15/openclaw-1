@@ -211,12 +211,15 @@ In a multi-account setup the keys merge the same way the rest of the section doe
       httpUrl: "https://signal-proxy:8443",
       tlsCaFile: "/certs/ca.crt",
       accounts: {
+        default: { tlsCertFile: "/certs/default.crt", tlsKeyFile: "/certs/default.key" },
         alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
       },
     },
   },
 }
 ```
+
+The explicit `default` entry is required whenever the channel-level block is partial: any account id that is not listed — including the `default` one every send without an explicit account resolves to — inherits the channel block verbatim, and a partial block cannot present a certificate. Config validation rejects the layout without it.
 
 ## Access control (DMs + groups)
 

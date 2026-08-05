@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
+import { listSignalAccountIds, resolveSignalAccount } from "../signal/accounts.js";
+import { resolveSignalTlsOptions } from "../signal/tls.js";
 import { validateConfigObject } from "./config.js";
 
 function expectValidConfig(result: ReturnType<typeof validateConfigObject>) {
@@ -79,9 +82,31 @@ describe("config signal mTLS", () => {
     expect(issues[0]?.path).toBe("channels.signal.accounts.work.tlsCaFile");
   });
 
-  it("accepts the shared-CA layout: CA at channel level, cert/key per account", () => {
-    // The channel block is partial on its own, but no account resolves to that
-    // view — every account merges the CA with its own keypair.
+  it("accepts the shared-CA layout when an explicit default account completes it", () => {
+    // The channel block is partial on its own; every account that resolves —
+    // including the implicit "default" — merges the CA with its own keypair.
+    const res = validateConfigObject({
+      channels: {
+        signal: {
+          httpUrl: "https://signal-proxy:8443",
+          tlsCaFile: "/certs/ca.crt",
+          accounts: {
+            default: { tlsCertFile: "/certs/default.crt", tlsKeyFile: "/certs/default.key" },
+            alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
+            ops: { tlsCertFile: "/certs/ops.crt", tlsKeyFile: "/certs/ops.key" },
+          },
+        },
+      },
+    });
+
+    const config = expectValidConfig(res);
+    expect(config.channels?.signal?.accounts?.alerts?.tlsCertFile).toBe("/certs/alerts.crt");
+  });
+
+  it("rejects the shared-CA layout without an explicit default account", () => {
+    // resolveSignalAccount synthesizes "default" from the bare channel block for
+    // every accountId-less send, so this shape would validate green and throw at
+    // send time.
     const res = validateConfigObject({
       channels: {
         signal: {
@@ -95,8 +120,32 @@ describe("config signal mTLS", () => {
       },
     });
 
-    const config = expectValidConfig(res);
-    expect(config.channels?.signal?.accounts?.alerts?.tlsCertFile).toBe("/certs/alerts.crt");
+    const issues = expectInvalidConfig(res);
+    expect(issues[0]?.path).toBe("channels.signal.tlsCertFile");
+    expect(issues[0]?.message).toMatch(
+      /partial and unlisted accounts \(including the implicit "default" used by accountId-less sends\) inherit it as-is/,
+    );
+    expect(issues[0]?.message).toMatch(
+      /complete the channel-level block, or add an explicit channels\.signal\.accounts\.default entry/,
+    );
+  });
+
+  it("rejects a partial default account under the shared-CA layout", () => {
+    const res = validateConfigObject({
+      channels: {
+        signal: {
+          httpUrl: "https://signal-proxy:8443",
+          tlsCaFile: "/certs/ca.crt",
+          accounts: {
+            default: { tlsCertFile: "/certs/default.crt" },
+            alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
+          },
+        },
+      },
+    });
+
+    const issues = expectInvalidConfig(res);
+    expect(issues.some((issue) => issue.path === "channels.signal.tlsCertFile")).toBe(true);
   });
 
   it("still rejects an account left partial by the shared-CA layout", () => {
@@ -106,6 +155,7 @@ describe("config signal mTLS", () => {
           httpUrl: "https://signal-proxy:8443",
           tlsCaFile: "/certs/ca.crt",
           accounts: {
+            default: { tlsCertFile: "/certs/default.crt", tlsKeyFile: "/certs/default.key" },
             alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
             ops: { tlsCertFile: "/certs/ops.crt" },
           },
@@ -159,6 +209,7 @@ describe("config signal mTLS", () => {
           httpUrl: "https://signal-proxy:8443",
           tlsCaFile: "/certs/ca.crt",
           accounts: {
+            default: { tlsCertFile: "/certs/default.crt", tlsKeyFile: "/certs/default.key" },
             ops: {
               httpUrl: "http://signal-api:8080",
               tlsCertFile: "/certs/ops.crt",
@@ -192,5 +243,96 @@ describe("config signal mTLS", () => {
 
     const config = expectValidConfig(res);
     expect(config.channels?.signal?.accounts?.work?.tlsCertFile).toBe("/certs/work.crt");
+  });
+});
+
+// Two reviews in a row found defects where the validator accepted a shape the
+// runtime then rejected. Validation tests that only assert what the validator
+// does cannot catch that class, so this walks each accepted shape through the
+// actual runtime resolution — including the accountId-less path, which
+// `resolveSignalAccount` synthesizes from the bare channel block.
+describe("config signal mTLS validator/runtime consistency", () => {
+  const acceptedShapes: Array<{ name: string; signal: Record<string, unknown> }> = [
+    {
+      name: "no TLS anywhere",
+      signal: { httpUrl: "http://signal-api:8080" },
+    },
+    {
+      name: "complete channel-level block",
+      signal: {
+        httpUrl: "https://signal-proxy:8443",
+        tlsCaFile: "/certs/ca.crt",
+        tlsCertFile: "/certs/client.crt",
+        tlsKeyFile: "/certs/client.key",
+      },
+    },
+    {
+      name: "complete channel-level block with a partial account override",
+      signal: {
+        httpUrl: "https://signal-proxy:8443",
+        tlsCaFile: "/certs/ca.crt",
+        tlsCertFile: "/certs/client.crt",
+        tlsKeyFile: "/certs/client.key",
+        accounts: { work: { tlsCertFile: "/certs/work.crt" } },
+      },
+    },
+    {
+      name: "shared-CA layout with an explicit default account (the documented example)",
+      signal: {
+        httpUrl: "https://signal-proxy:8443",
+        tlsCaFile: "/certs/ca.crt",
+        accounts: {
+          default: { tlsCertFile: "/certs/default.crt", tlsKeyFile: "/certs/default.key" },
+          alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
+        },
+      },
+    },
+  ];
+
+  it("pins the account id the schema assumes for unlisted accounts", () => {
+    expect(DEFAULT_ACCOUNT_ID).toBe("default");
+  });
+
+  for (const shape of acceptedShapes) {
+    it(`resolves every account without throwing: ${shape.name}`, () => {
+      const cfg = expectValidConfig(validateConfigObject({ channels: { signal: shape.signal } }));
+
+      // undefined is the accountId-less path taken by outbound delivery.
+      const accountIds: Array<string | undefined> = [undefined, ...listSignalAccountIds(cfg)];
+      for (const accountId of accountIds) {
+        const account = resolveSignalAccount({ cfg, accountId });
+        expect(() => resolveSignalTlsOptions(account.config)).not.toThrow();
+      }
+    });
+  }
+
+  it("resolves the documented shared-CA example's default account to a complete block", () => {
+    const cfg = expectValidConfig(
+      validateConfigObject({
+        channels: {
+          signal: {
+            httpUrl: "https://signal-proxy:8443",
+            tlsCaFile: "/certs/ca.crt",
+            accounts: {
+              default: { tlsCertFile: "/certs/default.crt", tlsKeyFile: "/certs/default.key" },
+              alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(resolveSignalTlsOptions(resolveSignalAccount({ cfg }).config)).toEqual({
+      caFile: "/certs/ca.crt",
+      certFile: "/certs/default.crt",
+      keyFile: "/certs/default.key",
+    });
+    expect(
+      resolveSignalTlsOptions(resolveSignalAccount({ cfg, accountId: "alerts" }).config),
+    ).toEqual({
+      caFile: "/certs/ca.crt",
+      certFile: "/certs/alerts.crt",
+      keyFile: "/certs/alerts.key",
+    });
   });
 });
