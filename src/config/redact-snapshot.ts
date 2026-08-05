@@ -246,14 +246,32 @@ function redactObjectGuessing(
 }
 
 /**
+ * Every spelling a sensitive value can have in the JSON5 SOURCE.
+ *
+ * `collectSensitiveValues` walks the PARSED config, so it yields the decoded
+ * string. A value carrying any character the source had to escape — a newline
+ * above all — is written in the document as `\n`, and matching the decoded form
+ * against the source then finds nothing. GCP service-account private keys are
+ * always multi-line, so this is the difference between redacting the signing key
+ * and emitting it verbatim in `snapshot.raw`.
+ *
+ * `JSON.stringify(value).slice(1, -1)` is the escaped body as a JSON/JSON5
+ * double-quoted string would spell it, which covers `\n`, `\t`, `\"` and `\\`.
+ */
+function rawSourceSpellings(value: string): string[] {
+  const escaped = JSON.stringify(value).slice(1, -1);
+  return escaped === value ? [value] : [value, escaped];
+}
+
+/**
  * Replace known sensitive values in a raw JSON5 string with the sentinel.
  * Values are replaced longest-first to avoid partial matches.
  */
 function redactRawText(raw: string, config: unknown, hints?: ConfigUiHints): string {
-  const sensitiveValues = collectSensitiveValues(config, hints);
-  sensitiveValues.sort((a, b) => b.length - a.length);
+  const spellings = [...new Set(collectSensitiveValues(config, hints).flatMap(rawSourceSpellings))];
+  spellings.sort((a, b) => b.length - a.length);
   let result = raw;
-  for (const value of sensitiveValues) {
+  for (const value of spellings) {
     result = result.replaceAll(value, REDACTED_SENTINEL);
   }
   return result;

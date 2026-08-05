@@ -49,6 +49,42 @@ export const isRetrievableAccountKey = (key: string): boolean => {
   return Object.hasOwn(probe, key) && probe[key] === marker;
 };
 
+const unretrievableKeyMessage = (channelLabel: string, accountId: string): string =>
+  `channels.${channelLabel}.accounts cannot use "${accountId}" as an account key: it is not a plain object key, so the entry is dropped while the config is parsed and the runtime lookup can never match it. The account would silently fall back to the channel-level credentials, and saving the config would erase this block. Rename it to a normalized account id (lowercase, only a-z 0-9 _ -, at most 64 characters).`;
+
+/**
+ * The RETRIEVABILITY half of the guard, on its own.
+ *
+ * Applies to every multi-account channel, including the ones whose resolver is
+ * TOLERANT — it falls back to scanning the record for a key that normalizes to
+ * the requested id, so a non-normalized key like "Alerts" is still reachable and
+ * must NOT be rejected. Retrievability is different in kind: an unretrievable key
+ * is not merely non-normalized, it is *gone* from the parsed value, so there is
+ * nothing left for a tolerant scan to find. That makes this half safe to apply
+ * everywhere — `__proto__` is the only string it rejects, and no naming scheme
+ * and no resolver can make `__proto__` an own key of a plain object.
+ */
+export const validateRetrievableAccountKeys = (
+  raw: unknown,
+  ctx: z.RefinementCtx,
+  channelLabel: string,
+): void => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    // Wrong shape entirely — the record schema reports that.
+    return;
+  }
+  for (const accountId of Object.getOwnPropertyNames(raw)) {
+    if (isRetrievableAccountKey(accountId)) {
+      continue;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [accountId],
+      message: unretrievableKeyMessage(channelLabel, accountId),
+    });
+  }
+};
+
 /**
  * Judge the `accounts` keys on the RAW object, before the record parse: a key the
  * parse drops (see {@link isRetrievableAccountKey}) is not present in the value a
@@ -56,6 +92,11 @@ export const isRetrievableAccountKey = (key: string): boolean => {
  * no longer see. Issues are reported at `[accountId]` — relative to the accounts
  * record — so the caller's schema position supplies the `channels.<channel>.accounts`
  * prefix.
+ *
+ * This is the STRICT variant: retrievability plus the normalization fixed-point
+ * requirement. Only apply it to channels whose resolver does a normalize-then-EXACT
+ * lookup; a tolerant resolver reaches non-normalized keys, so use
+ * {@link validateRetrievableAccountKeys} there instead.
  */
 export const validateAccountKeys = (
   raw: unknown,
@@ -71,7 +112,7 @@ export const validateAccountKeys = (
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: [accountId],
-        message: `channels.${channelLabel}.accounts cannot use "${accountId}" as an account key: it is not a plain object key, so the entry is dropped while the config is parsed and the runtime lookup can never match it. The account would silently fall back to the channel-level credentials, and saving the config would erase this block. Rename it to a normalized account id (lowercase, only a-z 0-9 _ -, at most 64 characters).`,
+        message: unretrievableKeyMessage(channelLabel, accountId),
       });
       continue;
     }
@@ -106,6 +147,23 @@ export const accountsRecord = <ValueSchema extends z.ZodTypeAny>(
   z.preprocess(
     (raw, ctx) => {
       validateAccountKeys(raw, ctx, channelLabel);
+      return raw;
+    },
+    z.record(z.string(), valueSchema),
+  );
+
+/**
+ * {@link accountsRecord} for channels with a TOLERANT resolver: retrievability
+ * only, no fixed-point requirement. Rejects exactly the keys that cannot survive
+ * the parse (`__proto__`), which no resolver — tolerant or not — can recover.
+ */
+export const retrievableAccountsRecord = <ValueSchema extends z.ZodTypeAny>(
+  valueSchema: ValueSchema,
+  channelLabel: string,
+) =>
+  z.preprocess(
+    (raw, ctx) => {
+      validateRetrievableAccountKeys(raw, ctx, channelLabel);
       return raw;
     },
     z.record(z.string(), valueSchema),

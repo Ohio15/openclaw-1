@@ -458,3 +458,15 @@ export type { ProcessedLineMessage } from "../line/markdown-to-line.js";
 
 // Media utilities
 export { loadWebMedia, type WebMediaResult } from "../web/media.js";
+
+// Own-property-only object access. Channel plugins index their `accounts` record
+// by operator-supplied ids, and a bare `obj[key]` answers "__proto__" with
+// `Object.prototype` and "constructor" with the global `Object`, so a resolver
+// "finds" an account the config never declared.
+export { getOwnProperty, hasOwnKey, setOwnProperty } from "../safe-object.js";
+// Shared `channels.<channel>.accounts` key guards for plugin config schemas.
+export {
+  accountsRecord,
+  isRetrievableAccountKey,
+  retrievableAccountsRecord,
+} from "../config/account-keys.js";

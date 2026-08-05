@@ -179,3 +179,42 @@ const createMSTeamsPlugin = (): ChannelPlugin => ({
     resolveAccount: () => ({}),
   },
 });
+
+// A bare `accounts[id]` answers "constructor" with the truthy global `Object`,
+// which short-circuits the case-insensitive fallback scan below it — so a
+// configured "Constructor" account never contributes its capabilities.
+describe("resolveChannelCapabilities reads the accounts record own-property-only", () => {
+  beforeEach(() => {
+    setActivePluginRegistry(baseRegistry);
+  });
+
+  it("reaches a non-normalized prototype-named account key", () => {
+    const cfg = {
+      channels: {
+        telegram: {
+          capabilities: ["channelLevel"],
+          accounts: { Constructor: { capabilities: ["perAccount"] } },
+        },
+      },
+    } as unknown as OpenClawConfig;
+    expect(
+      resolveChannelCapabilities({ cfg, channel: "telegram", accountId: "constructor" }),
+    ).toEqual(["perAccount"]);
+  });
+
+  it("falls back to channel capabilities for an unconfigured prototype-named account", () => {
+    const cfg = {
+      channels: {
+        telegram: {
+          capabilities: ["channelLevel"],
+          accounts: { ops: { capabilities: ["perAccount"] } },
+        },
+      },
+    } as unknown as OpenClawConfig;
+    for (const accountId of ["__proto__", "constructor", "prototype"]) {
+      expect(resolveChannelCapabilities({ cfg, channel: "telegram", accountId })).toEqual([
+        "channelLevel",
+      ]);
+    }
+  });
+});

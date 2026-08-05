@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
-import { accountsRecord } from "./account-keys.js";
+import { accountsRecord, retrievableAccountsRecord } from "./account-keys.js";
 import {
   normalizeTelegramCommandDescription,
   normalizeTelegramCommandName,
@@ -169,7 +169,13 @@ export const TelegramAccountSchema = TelegramAccountSchemaBase.superRefine((valu
 });
 
 export const TelegramConfigSchema = TelegramAccountSchemaBase.extend({
-  accounts: z.record(z.string(), TelegramAccountSchema.optional()).optional(),
+  // `resolveTelegramAccount` is TOLERANT — it falls back to scanning the record
+  // for a key that normalizes to the requested id — so non-normalized keys stay
+  // reachable and stay accepted. An UNRETRIEVABLE key is a different failure: the
+  // record parse drops it outright, so there is nothing left for the tolerant
+  // scan to find, the account silently falls back to the channel-level bot token,
+  // and the next config write erases the block. Retrievability-only guard.
+  accounts: retrievableAccountsRecord(TelegramAccountSchema.optional(), "telegram").optional(),
 }).superRefine((value, ctx) => {
   requireOpenAllowFrom({
     policy: value.dmPolicy,
@@ -452,7 +458,17 @@ export const GoogleChatAccountSchema = z
     groupPolicy: GroupPolicySchema.optional().default("allowlist"),
     groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     groups: z.record(z.string(), GoogleChatGroupSchema.optional()).optional(),
-    serviceAccount: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+    // The full GCP service-account JSON, `private_key` included — a credential in
+    // either shape. Neither `serviceAccount` nor `private_key` matches the
+    // name-pattern fallback in redact-snapshot, so without an explicit
+    // registration the key is emitted VERBATIM in the redacted config snapshot
+    // (channel level and `accounts.*` alike). The record's VALUE schema is
+    // registered too: that is what marks `…serviceAccount.*` sensitive so the
+    // inline-JSON form is redacted field by field, not just the string form.
+    serviceAccount: z
+      .union([z.string(), z.record(z.string(), z.unknown().register(sensitive))])
+      .optional()
+      .register(sensitive),
     serviceAccountFile: z.string().optional(),
     audienceType: z.enum(["app-url", "project-number"]).optional(),
     audience: z.string().optional(),
@@ -964,7 +980,10 @@ export const IrcAccountSchema = IrcAccountSchemaBase.superRefine((value, ctx) =>
 });
 
 export const IrcConfigSchema = IrcAccountSchemaBase.extend({
-  accounts: z.record(z.string(), IrcAccountSchema.optional()).optional(),
+  // Tolerant resolver (see the telegram note): non-normalized keys are reachable,
+  // unretrievable ones are dropped by the parse and would silently fall back to
+  // the channel-level server password. Retrievability-only guard.
+  accounts: retrievableAccountsRecord(IrcAccountSchema.optional(), "irc").optional(),
 }).superRefine((value, ctx) => {
   refineIrcAllowFromAndNickserv(value, ctx);
 });

@@ -1,9 +1,11 @@
 import JSON5 from "json5";
 import { describe, expect, it } from "vitest";
 import { resolveDiscordAccount } from "../discord/accounts.js";
+import { resolveDiscordToken } from "../discord/token.js";
 import { resolveIMessageAccount } from "../imessage/accounts.js";
 import { normalizeAccountId } from "../routing/session-key.js";
 import { resolveSlackAccount } from "../slack/accounts.js";
+import { resolveTelegramAccount } from "../telegram/accounts.js";
 import { resolveWhatsAppAccount } from "../web/accounts.js";
 import { validateConfigObject } from "./config.js";
 
@@ -160,22 +162,200 @@ describe("config account keys resolve to their own credential", () => {
     const resolved = resolveWhatsAppAccount({ cfg, accountId: "ops-eu" });
     expect(resolved.sendReadReceipts).toBe(false);
   });
+});
 
-  it("discord: resolving an undefined prototype-named account yields a plain view, not Object.prototype", () => {
-    // Defense-in-depth for the resolver's own-only read (`getOwnProperty`): a
-    // request for a prototype-named account that was never configured must fall
-    // through to the channel block with a plain object, never surface
-    // Object.prototype / the global Object constructor.
+// Own-only resolver reads (`getOwnProperty`).
+//
+// A prototype-named account id that the config never declared must resolve as
+// ABSENT. A bare `accounts[id]` answers "constructor" with the global `Object`
+// and "__proto__" with `Object.prototype` — objects the operator never wrote —
+// and both are truthy, which is what makes them dangerous: a resolver that tests
+// the direct hit for truthiness treats the prototype object as a real account.
+//
+// These cases carry a POPULATED accounts block on purpose. The previous version
+// of this test used a config with no `accounts` key at all, so every resolver
+// early-returned before reaching the line under test and the case could not fail.
+// PROTOTYPE_NAMED_IDS are the only two strings that are simultaneously a
+// `normalizeAccountId` fixed point (hence a reachable account id) and truthy on a
+// plain object; "prototype" is carried along as the control that is neither.
+
+const PROTOTYPE_NAMED_IDS = ["__proto__", "constructor", "prototype"];
+
+describe("resolvers read the accounts record own-property-only", () => {
+  it("discord: a prototype-named id that is not configured falls through to the channel block", () => {
     const cfg = expectValidConfig(
-      validateConfigObject({ channels: { discord: { token: "channel-bot-token" } } }),
+      validateConfigObject({
+        channels: {
+          discord: {
+            token: "channel-bot-token",
+            accounts: { ops: { token: "ops-bot-token" } },
+          },
+        },
+      }),
     );
-    for (const accountId of ["__proto__", "constructor", "prototype"]) {
+    for (const accountId of PROTOTYPE_NAMED_IDS) {
       const resolved = resolveDiscordAccount({ cfg, accountId });
-      expect(typeof resolved.config).toBe("object");
       expect(Object.getPrototypeOf(resolved.config)).toBe(Object.prototype);
-      // No account-level token was defined for these ids, and only the DEFAULT
-      // account inherits the channel-level token, so resolution is "none".
+      // Not the other account's token, and not the channel token either: only the
+      // DEFAULT account inherits the channel-level token.
       expect(resolved.token).toBe("");
+      expect(resolved.tokenSource).toBe("none");
+      expect(resolved.name).toBeUndefined();
+      // The prototype objects carry no per-account settings, so nothing they own
+      // may appear in the merged view.
+      expect(Object.hasOwn(resolved.config, "accounts")).toBe(false);
     }
   });
+
+  it("discord/token: a prototype-named id resolves no token from the accounts record", () => {
+    const cfg = expectValidConfig(
+      validateConfigObject({
+        channels: {
+          discord: {
+            token: "channel-bot-token",
+            accounts: { ops: { token: "ops-bot-token" } },
+          },
+        },
+      }),
+    );
+    for (const accountId of PROTOTYPE_NAMED_IDS) {
+      expect(resolveDiscordToken(cfg, { accountId })).toEqual({ token: "", source: "none" });
+    }
+  });
+
+  it("slack: a prototype-named id that is not configured falls through to the channel block", () => {
+    const cfg = expectValidConfig(
+      validateConfigObject({
+        channels: {
+          slack: {
+            botToken: "xoxb-channel",
+            accounts: { ops: { botToken: "xoxb-ops" } },
+          },
+        },
+      }),
+    );
+    for (const accountId of PROTOTYPE_NAMED_IDS) {
+      const resolved = resolveSlackAccount({ cfg, accountId });
+      expect(resolved.botToken).not.toBe("xoxb-ops");
+      expect(resolved.name).toBeUndefined();
+      expect(Object.getPrototypeOf(resolved.config)).toBe(Object.prototype);
+    }
+  });
+
+  it("imessage: a prototype-named id that is not configured falls through to the channel block", () => {
+    const cfg = expectValidConfig(
+      validateConfigObject({
+        channels: {
+          imessage: {
+            dbPath: "/channel.db",
+            accounts: { ops: { dbPath: "/ops.db" } },
+          },
+        },
+      }),
+    );
+    for (const accountId of PROTOTYPE_NAMED_IDS) {
+      const resolved = resolveIMessageAccount({ cfg, accountId });
+      expect(resolved.config.dbPath).toBe("/channel.db");
+      expect(resolved.name).toBeUndefined();
+      expect(Object.getPrototypeOf(resolved.config)).toBe(Object.prototype);
+    }
+  });
+
+  it("whatsapp: a prototype-named id does not inherit a name from the global Object", () => {
+    // WhatsApp reads `accountCfg?.name` off the raw lookup result instead of off a
+    // spread copy, so a bare `accounts["constructor"]` surfaces `Object.name` —
+    // the string "Object" — as the account's display name.
+    const cfg = expectValidConfig(
+      validateConfigObject({
+        channels: {
+          whatsapp: {
+            sendReadReceipts: true,
+            accounts: { ops: { sendReadReceipts: false } },
+          },
+        },
+      }),
+    );
+    for (const accountId of PROTOTYPE_NAMED_IDS) {
+      const resolved = resolveWhatsAppAccount({ cfg, accountId });
+      expect(resolved.name).toBeUndefined();
+      // Falls through to the channel-level setting, not the "ops" account's.
+      expect(resolved.sendReadReceipts).toBe(true);
+    }
+  });
+});
+
+// Telegram and IRC have TOLERANT resolvers: a direct hit is tried first, then the
+// record is scanned for a key that normalizes to the requested id. That makes
+// non-normalized keys legitimately reachable — so the strict fixed-point guard
+// must NOT be applied to them — but it also means a truthy direct hit SKIPS the
+// scan. "constructor" is a normalizeAccountId fixed point, so `accounts["constructor"]`
+// returning the global `Object` silently suppresses the scan and the configured
+// account never contributes its own credential. That is the same wrong-identity
+// outcome the strict channels have, reached by a different route.
+
+describe("tolerant resolvers still reach a non-normalized prototype-named key", () => {
+  it("telegram: a 'Constructor' account resolves to its OWN bot token", () => {
+    const cfg = expectValidConfig(
+      validateConfigObject({
+        channels: {
+          telegram: {
+            botToken: "channel-bot-token",
+            accounts: { Constructor: { botToken: "ops-bot-token", name: "ops" } },
+          },
+        },
+      }),
+    );
+    const resolved = resolveTelegramAccount({ cfg, accountId: "constructor" });
+    expect(resolved.token).toBe("ops-bot-token");
+    expect(resolved.token).not.toBe("channel-bot-token");
+    expect(resolved.name).toBe("ops");
+  });
+
+  it("telegram: a non-normalized key stays accepted by the schema (tolerant resolver)", () => {
+    const cfg = expectValidConfig(
+      validateConfigObject({
+        channels: {
+          telegram: {
+            botToken: "channel-bot-token",
+            accounts: { "Ops.EU": { botToken: "ops-bot-token" } },
+          },
+        },
+      }),
+    );
+    expect(resolveTelegramAccount({ cfg, accountId: "ops-eu" }).token).toBe("ops-bot-token");
+  });
+});
+
+// The retrievability half of the guard, applied to the tolerant channels. An
+// unretrievable key is not merely non-normalized — the record parse drops it, so
+// there is nothing left for the tolerant scan to find and the account silently
+// falls back to the channel-level credential.
+
+describe.each(["telegram", "irc"])("config %s accounts key retrievability", (channel) => {
+  it("rejects an accounts key the record parse would silently drop (__proto__)", () => {
+    const raw = parseJson5(`{
+      channels: {
+        ${channel}: {
+          accounts: { "__proto__": {} },
+        },
+      },
+    }`);
+    const accountsObj = (raw as { channels: Record<string, { accounts: object }> }).channels[
+      channel
+    ].accounts;
+    expect(Object.hasOwn(accountsObj, "__proto__")).toBe(true);
+
+    const issues = expectInvalidConfig(validateConfigObject(raw));
+    expect(issues.map((issue) => issue.path)).toContain(`channels.${channel}.accounts.__proto__`);
+  });
+
+  for (const key of NON_NORMALIZED_KEYS) {
+    it(`keeps a non-normalized key the tolerant resolver can still reach: ${JSON.stringify(key)}`, () => {
+      // The fixed-point half of the guard must NOT be applied here: these keys are
+      // reachable, so rejecting them would break working configs.
+      expectValidConfig(
+        validateConfigObject({ channels: { [channel]: { accounts: { [key]: {} } } } }),
+      );
+    });
+  }
 });

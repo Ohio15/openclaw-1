@@ -1,5 +1,6 @@
 import type { OpenClawConfig } from "../../config/config.js";
 import { normalizeAccountId } from "../../routing/session-key.js";
+import { getOwnProperty, hasOwnKey } from "../../safe-object.js";
 import type { ChannelId } from "./types.js";
 
 type ChannelConfigWithAccounts = {
@@ -11,13 +12,20 @@ function resolveAccountConfig(accounts: ChannelConfigWithAccounts["accounts"], a
   if (!accounts || typeof accounts !== "object") {
     return undefined;
   }
-  if (accountId in accounts) {
-    return accounts[accountId];
+  // Own-only: `"constructor" in accounts` is true on every object, so an operator
+  // who denies config writes for an account named "constructor" would get the
+  // global `Object` back, whose `configWrites` is undefined — the deny silently
+  // degrades to the channel-level default, which fails OPEN.
+  const record = accounts as Record<string, unknown>;
+  if (hasOwnKey(record, accountId)) {
+    return getOwnProperty(record, accountId) as { configWrites?: boolean } | undefined;
   }
   const matchKey = Object.keys(accounts).find(
     (key) => key.toLowerCase() === accountId.toLowerCase(),
   );
-  return matchKey ? accounts[matchKey] : undefined;
+  return matchKey
+    ? (getOwnProperty(record, matchKey) as { configWrites?: boolean } | undefined)
+    : undefined;
 }
 
 export function resolveChannelConfigWrites(params: {

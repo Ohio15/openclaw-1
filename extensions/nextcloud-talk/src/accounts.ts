@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { getOwnProperty } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import type { CoreConfig, NextcloudTalkAccountConfig } from "./types.js";
 
@@ -63,13 +64,20 @@ function resolveAccountConfig(
   if (!accounts || typeof accounts !== "object") {
     return undefined;
   }
-  const direct = accounts[accountId] as NextcloudTalkAccountConfig | undefined;
+  // Own-only: a bare `accounts[accountId]` short-circuits on the prototype chain.
+  // "constructor" is a `normalizeAccountId` fixed point — a reachable account id —
+  // yet it answers with the global `Object`, which is truthy, so the tolerant scan
+  // below never runs and a configured "Constructor" account is unreachable.
+  const record = accounts as Record<string, unknown>;
+  const direct = getOwnProperty(record, accountId) as NextcloudTalkAccountConfig | undefined;
   if (direct) {
     return direct;
   }
   const normalized = normalizeAccountId(accountId);
   const matchKey = Object.keys(accounts).find((key) => normalizeAccountId(key) === normalized);
-  return matchKey ? (accounts[matchKey] as NextcloudTalkAccountConfig | undefined) : undefined;
+  return matchKey
+    ? (getOwnProperty(record, matchKey) as NextcloudTalkAccountConfig | undefined)
+    : undefined;
 }
 
 function mergeNextcloudTalkAccountConfig(

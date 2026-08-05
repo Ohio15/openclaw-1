@@ -1,4 +1,5 @@
 import { MatrixClient } from "@vector-im/matrix-bot-sdk";
+import { getOwnProperty } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import { getMatrixRuntime } from "../../runtime.js";
 import type { CoreConfig } from "../../types.js";
@@ -37,12 +38,21 @@ export function resolveMatrixConfigForAccount(
   const matrixBase = cfg.channels?.matrix ?? {};
   const accounts = cfg.channels?.matrix?.accounts;
 
-  // Try to get account-specific config first (direct lookup, then case-insensitive fallback)
-  let accountConfig = accounts?.[normalizedAccountId];
-  if (!accountConfig && accounts) {
-    for (const key of Object.keys(accounts)) {
+  // Try to get account-specific config first (direct lookup, then case-insensitive
+  // fallback). Own-only: a bare `accounts[id]` answers "constructor" — a
+  // `normalizeAccountId` fixed point, so a reachable account id — with the truthy
+  // global `Object`, which would skip the fallback scan and merge nothing, leaving
+  // the account on the CHANNEL-level access token: the wrong Matrix identity for a
+  // config that reads as complete.
+  type MatrixAccountEntry = NonNullable<typeof accounts>[string];
+  const accountEntries = accounts as Record<string, MatrixAccountEntry> | undefined;
+  let accountConfig: MatrixAccountEntry | undefined = accountEntries
+    ? (getOwnProperty(accountEntries, normalizedAccountId) as MatrixAccountEntry | undefined)
+    : undefined;
+  if (!accountConfig && accountEntries) {
+    for (const key of Object.keys(accountEntries)) {
       if (normalizeAccountId(key) === normalizedAccountId) {
-        accountConfig = accounts[key];
+        accountConfig = getOwnProperty(accountEntries, key) as MatrixAccountEntry | undefined;
         break;
       }
     }
