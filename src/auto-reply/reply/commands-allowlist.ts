@@ -3,6 +3,7 @@ import { resolveChannelConfigWrites } from "../../channels/plugins/config-writes
 import { listPairingChannels } from "../../channels/plugins/pairing.js";
 import type { ChannelId } from "../../channels/plugins/types.js";
 import { normalizeChannelId } from "../../channels/registry.js";
+import { isRetrievableAccountKey } from "../../config/account-keys.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import {
   readConfigFileSnapshot,
@@ -19,6 +20,7 @@ import {
   removeChannelAllowFromStoreEntry,
 } from "../../pairing/pairing-store.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../../routing/session-key.js";
+import { getOwnProperty, setOwnProperty } from "../../safe-object.js";
 import { resolveSignalAccount } from "../../signal/accounts.js";
 import { resolveSlackAccount } from "../../slack/accounts.js";
 import { resolveSlackUserAllowlist } from "../../slack/resolve-users.js";
@@ -170,35 +172,112 @@ function formatEntryList(entries: string[], resolved?: Map<string, string>): str
     .join(", ");
 }
 
+type AccountTargetResolution =
+  | {
+      ok: true;
+      target: Record<string, unknown>;
+      pathPrefix: string;
+      accountId: string;
+    }
+  | { ok: false; message: string };
+
+/**
+ * Get `parent[key]` as a plain object, creating it when it is absent.
+ *
+ * Own-property only, in BOTH directions, because every key here comes from the
+ * config document or from the command line. `parent[key] ??= {}` reads through
+ * the prototype chain: for `"__proto__"` it yields `Object.prototype` — truthy,
+ * so the `??=` never assigns — and the caller then writes the allowlist onto the
+ * prototype of every object in the process instead of into the config. That is
+ * both a process-wide pollution (every account config without an own `dm` block
+ * starts inheriting the attacker's `allowFrom`) and a silent no-op on disk.
+ */
+function ensureOwnObject(
+  parent: Record<string, unknown>,
+  key: string,
+): { ok: true; value: Record<string, unknown> } | { ok: false } {
+  const existing = getOwnProperty(parent, key);
+  if (existing !== undefined && existing !== null) {
+    if (typeof existing !== "object" || Array.isArray(existing)) {
+      return { ok: false };
+    }
+    return { ok: true, value: existing as Record<string, unknown> };
+  }
+  const created: Record<string, unknown> = {};
+  setOwnProperty(parent, key, created);
+  return { ok: true, value: created };
+}
+
 function resolveAccountTarget(
   parsed: Record<string, unknown>,
   channelId: ChannelId,
   accountId?: string | null,
-) {
-  const channels = (parsed.channels ??= {}) as Record<string, unknown>;
-  const channel = (channels[channelId] ??= {}) as Record<string, unknown>;
+): AccountTargetResolution {
+  const channels = ensureOwnObject(parsed, "channels");
+  if (!channels.ok) {
+    return { ok: false, message: "Config field channels is not an object; fix it first." };
+  }
+  const channel = ensureOwnObject(channels.value, channelId);
+  if (!channel.ok) {
+    return {
+      ok: false,
+      message: `Config field channels.${channelId} is not an object; fix it first.`,
+    };
+  }
   const normalizedAccountId = normalizeAccountId(accountId);
-  const hasAccounts = Boolean(channel.accounts && typeof channel.accounts === "object");
+  const existingAccounts = getOwnProperty(channel.value, "accounts");
+  const hasAccounts = Boolean(existingAccounts && typeof existingAccounts === "object");
   const useAccount = normalizedAccountId !== DEFAULT_ACCOUNT_ID || hasAccounts;
   if (!useAccount) {
-    return { target: channel, pathPrefix: `channels.${channelId}`, accountId: normalizedAccountId };
+    return {
+      ok: true,
+      target: channel.value,
+      pathPrefix: `channels.${channelId}`,
+      accountId: normalizedAccountId,
+    };
   }
-  const accounts = (channel.accounts ??= {}) as Record<string, unknown>;
-  const account = (accounts[normalizedAccountId] ??= {}) as Record<string, unknown>;
+  if (!isRetrievableAccountKey(normalizedAccountId)) {
+    // The same rule the config schema enforces on `channels.*.accounts` keys:
+    // a key a plain object cannot own is not an account, it is a write onto the
+    // prototype. Reject it here too — the operator gets a real message instead
+    // of a "success" reply for a config change that was never persisted.
+    return {
+      ok: false,
+      message: `"${normalizedAccountId}" cannot be used as an account id: it is not a plain object key, so the account block can never be stored or looked up. Use a normalized account id (lowercase, only a-z 0-9 _ -, at most 64 characters).`,
+    };
+  }
+  const accounts = ensureOwnObject(channel.value, "accounts");
+  if (!accounts.ok) {
+    return {
+      ok: false,
+      message: `Config field channels.${channelId}.accounts is not an object; fix it first.`,
+    };
+  }
+  const account = ensureOwnObject(accounts.value, normalizedAccountId);
+  if (!account.ok) {
+    return {
+      ok: false,
+      message: `Config field channels.${channelId}.accounts.${normalizedAccountId} is not an object; fix it first.`,
+    };
+  }
   return {
-    target: account,
+    ok: true,
+    target: account.value,
     pathPrefix: `channels.${channelId}.accounts.${normalizedAccountId}`,
     accountId: normalizedAccountId,
   };
 }
 
+// The nested helpers below walk objects rebuilt from the config document, so
+// they read and write own properties only — same rule as `ensureOwnObject`,
+// applied consistently so it stays greppable rather than case-by-case.
 function getNestedValue(root: Record<string, unknown>, path: string[]): unknown {
   let current: unknown = root;
   for (const key of path) {
     if (!current || typeof current !== "object") {
       return undefined;
     }
-    current = (current as Record<string, unknown>)[key];
+    current = getOwnProperty(current as Record<string, unknown>, key);
   }
   return current;
 }
@@ -209,11 +288,14 @@ function ensureNestedObject(
 ): Record<string, unknown> {
   let current = root;
   for (const key of path) {
-    const existing = current[key];
+    const existing = getOwnProperty(current, key);
     if (!existing || typeof existing !== "object") {
-      current[key] = {};
+      const created: Record<string, unknown> = {};
+      setOwnProperty(current, key, created);
+      current = created;
+      continue;
     }
-    current = current[key] as Record<string, unknown>;
+    current = existing as Record<string, unknown>;
   }
   return current;
 }
@@ -223,11 +305,11 @@ function setNestedValue(root: Record<string, unknown>, path: string[], value: un
     return;
   }
   if (path.length === 1) {
-    root[path[0]] = value;
+    setOwnProperty(root, path[0], value);
     return;
   }
   const parent = ensureNestedObject(root, path.slice(0, -1));
-  parent[path[path.length - 1]] = value;
+  setOwnProperty(parent, path[path.length - 1], value);
 }
 
 function deleteNestedValue(root: Record<string, unknown>, path: string[]) {
@@ -563,11 +645,14 @@ export const handleAllowlistCommand: CommandHandler = async (params, allowTextCo
       };
     }
     const parsedConfig = structuredClone(snapshot.parsed as Record<string, unknown>);
-    const {
-      target,
-      pathPrefix,
-      accountId: normalizedAccountId,
-    } = resolveAccountTarget(parsedConfig, channelId, accountId);
+    const resolvedTarget = resolveAccountTarget(parsedConfig, channelId, accountId);
+    if (!resolvedTarget.ok) {
+      return {
+        shouldContinue: false,
+        reply: { text: `⚠️ ${resolvedTarget.message}` },
+      };
+    }
+    const { target, pathPrefix, accountId: normalizedAccountId } = resolvedTarget;
     const existing: string[] = [];
     const existingPaths =
       scope === "dm" && (channelId === "slack" || channelId === "discord")

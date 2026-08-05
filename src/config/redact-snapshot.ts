@@ -1,5 +1,10 @@
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getOwnProperty, hasOwnKey, setOwnProperty } from "../safe-object.js";
+import {
+  findDecodedMatches,
+  type LiteralReplacement,
+  scanJson5StringLiterals,
+} from "./json5-strings.js";
 import { isSensitiveConfigPath, type ConfigUiHints } from "./schema.hints.js";
 import type { ConfigFileSnapshot } from "./types.openclaw.js";
 
@@ -246,14 +251,14 @@ function redactObjectGuessing(
 }
 
 /**
- * Every spelling a sensitive value can have in the JSON5 SOURCE.
+ * Verbatim spellings of a sensitive value, for the text OUTSIDE string literals.
  *
- * `collectSensitiveValues` walks the PARSED config, so it yields the decoded
- * string. A value carrying any character the source had to escape — a newline
- * above all — is written in the document as `\n`, and matching the decoded form
- * against the source then finds nothing. GCP service-account private keys are
- * always multi-line, so this is the difference between redacting the signing key
- * and emitting it verbatim in `snapshot.raw`.
+ * This is the SECONDARY net only. A credential pasted into a `//` comment, or
+ * left in some other non-literal position, is not something the literal scanner
+ * looks at, and it was covered by the original `replaceAll` implementation — so
+ * it stays covered. It is deliberately NOT the primary mechanism: enumerating
+ * spellings is unbounded (see {@link redactRawLiterals}) and every spelling this
+ * list forgets is a credential emitted verbatim.
  *
  * `JSON.stringify(value).slice(1, -1)` is the escaped body as a JSON/JSON5
  * double-quoted string would spell it, which covers `\n`, `\t`, `\"` and `\\`.
@@ -264,15 +269,76 @@ function rawSourceSpellings(value: string): string[] {
 }
 
 /**
- * Replace known sensitive values in a raw JSON5 string with the sentinel.
- * Values are replaced longest-first to avoid partial matches.
+ * Redact sensitive values from the raw source by MEANING, not by spelling.
+ *
+ * `collectSensitiveValues` walks the PARSED config, so it yields decoded
+ * strings, while the document spells them however the operator wrote them:
+ * `\n`, `\u000a`, `\x0a`, a line continuation, a single-quoted literal holding a
+ * double quote, a unicode escape for an ordinary printable character. Searching
+ * the source for the decoded value — or for any fixed set of re-encodings of it
+ * — misses every spelling not on the list, and each miss emits the credential
+ * verbatim in `snapshot.raw`.
+ *
+ * So the match is done on the DECODED text of each string literal in the source
+ * (see `scanJson5StringLiterals`) and the edit is applied to the source span
+ * that produced it. That is spelling-independent by construction, and it edits
+ * only the matched span, so the comments and formatting `raw` exists to preserve
+ * survive untouched.
  */
-function redactRawText(raw: string, config: unknown, hints?: ConfigUiHints): string {
-  const spellings = [...new Set(collectSensitiveValues(config, hints).flatMap(rawSourceSpellings))];
-  spellings.sort((a, b) => b.length - a.length);
-  let result = raw;
+function redactRawLiterals(raw: string, secrets: readonly string[]): string {
+  const edits: LiteralReplacement[] = [];
+  for (const literal of scanJson5StringLiterals(raw)) {
+    edits.push(...findDecodedMatches(literal, secrets));
+  }
+  if (edits.length === 0) {
+    return raw;
+  }
+  let result = "";
+  let cursor = 0;
+  for (const edit of edits) {
+    if (edit.start < cursor) {
+      // Overlapping edits cannot happen (matches are per-literal and ordered),
+      // but splicing blindly on one would corrupt the document.
+      continue;
+    }
+    result += raw.slice(cursor, edit.start) + REDACTED_SENTINEL;
+    cursor = edit.end;
+  }
+  return result + raw.slice(cursor);
+}
+
+/**
+ * Replace known sensitive values in a raw JSON5 string with the sentinel.
+ *
+ * Returns `null` when redaction cannot be guaranteed: handing out a partially
+ * redacted source is the one outcome that must never happen, so the raw view is
+ * dropped instead (the same call the invalid-snapshot branch makes).
+ */
+function redactRawText(raw: string, config: unknown, hints?: ConfigUiHints): string | null {
+  const secrets = [...new Set(collectSensitiveValues(config, hints))].filter(
+    (value) => value.length > 0,
+  );
+  if (secrets.length === 0) {
+    return raw;
+  }
+  let result: string;
+  try {
+    result = redactRawLiterals(raw, secrets);
+  } catch (err) {
+    log.error(`Failed to redact raw config source; withholding it: ${String(err)}`);
+    return null;
+  }
+  const spellings = [...new Set(secrets.flatMap(rawSourceSpellings))].toSorted(
+    (a, b) => b.length - a.length,
+  );
   for (const value of spellings) {
     result = result.replaceAll(value, REDACTED_SENTINEL);
+  }
+  for (const secret of secrets) {
+    if (result.includes(secret)) {
+      log.error("Raw config source still contains a sensitive value after redaction; withholding");
+      return null;
+    }
   }
   return result;
 }
