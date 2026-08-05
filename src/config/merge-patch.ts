@@ -1,4 +1,5 @@
-import { isPlainObject, setOwnProperty } from "../utils.js";
+import { getOwnProperty, setOwnProperty } from "../safe-object.js";
+import { isPlainObject } from "../utils.js";
 
 type PlainObject = Record<string, unknown>;
 
@@ -58,11 +59,6 @@ function mergeObjectArraysById(
   return merged;
 }
 
-/** Own value only: `result.__proto__` otherwise reads `Object.prototype`. */
-function readOwn(target: PlainObject, key: string): unknown {
-  return Object.hasOwn(target, key) ? target[key] : undefined;
-}
-
 export function applyMergePatch(
   base: unknown,
   patch: unknown,
@@ -79,7 +75,7 @@ export function applyMergePatch(
       delete result[key];
       continue;
     }
-    const baseValue = readOwn(result, key);
+    const baseValue = getOwnProperty(result, key);
     if (options.mergeObjectArraysById && Array.isArray(baseValue) && Array.isArray(value)) {
       const mergedArray = mergeObjectArraysById(baseValue, value, options);
       if (mergedArray) {

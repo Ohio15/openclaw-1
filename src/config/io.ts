@@ -12,6 +12,7 @@ import {
   shouldDeferShellEnvFallback,
   shouldEnableShellEnvFallback,
 } from "../infra/shell-env.js";
+import { getOwnProperty, hasOwnKey, setOwnProperty } from "../safe-object.js";
 import { VERSION } from "../version.js";
 import { DuplicateAgentDirError, findDuplicateAgentDirs } from "./agent-dirs.js";
 import { rotateConfigBackups } from "./backup-rotation.js";
@@ -187,28 +188,32 @@ function createMergePatch(base: unknown, target: unknown): unknown {
   const patch: Record<string, unknown> = {};
   const keys = new Set([...Object.keys(base), ...Object.keys(target)]);
   for (const key of keys) {
-    const hasBase = key in base;
-    const hasTarget = key in target;
+    // Own-only throughout: `key in base` is true for "__proto__" on every object,
+    // and `patch[key] = ...` for that key would drive the `Object.prototype`
+    // setter instead of recording the change — the patch written back to disk
+    // would silently omit the entry.
+    const hasBase = hasOwnKey(base, key);
+    const hasTarget = hasOwnKey(target, key);
     if (!hasTarget) {
-      patch[key] = null;
+      setOwnProperty(patch, key, null);
       continue;
     }
-    const targetValue = target[key];
+    const targetValue = getOwnProperty(target, key);
     if (!hasBase) {
-      patch[key] = cloneUnknown(targetValue);
+      setOwnProperty(patch, key, cloneUnknown(targetValue));
       continue;
     }
-    const baseValue = base[key];
+    const baseValue = getOwnProperty(base, key);
     if (isPlainObject(baseValue) && isPlainObject(targetValue)) {
       const childPatch = createMergePatch(baseValue, targetValue);
       if (isPlainObject(childPatch) && Object.keys(childPatch).length === 0) {
         continue;
       }
-      patch[key] = childPatch;
+      setOwnProperty(patch, key, childPatch);
       continue;
     }
     if (!isDeepStrictEqual(baseValue, targetValue)) {
-      patch[key] = cloneUnknown(targetValue);
+      setOwnProperty(patch, key, cloneUnknown(targetValue));
     }
   }
   return patch;
@@ -257,13 +262,18 @@ function collectChangedPaths(
     const keys = new Set([...Object.keys(base), ...Object.keys(target)]);
     for (const key of keys) {
       const childPath = path ? `${path}.${key}` : key;
-      const hasBase = key in base;
-      const hasTarget = key in target;
+      const hasBase = hasOwnKey(base, key);
+      const hasTarget = hasOwnKey(target, key);
       if (!hasTarget || !hasBase) {
         output.add(childPath);
         continue;
       }
-      collectChangedPaths(base[key], target[key], childPath, output);
+      collectChangedPaths(
+        getOwnProperty(base, key),
+        getOwnProperty(target, key),
+        childPath,
+        output,
+      );
     }
     return;
   }
@@ -333,7 +343,7 @@ function restoreEnvRefsFromMap(
       if (updated !== child) {
         changed = true;
       }
-      next[key] = updated;
+      setOwnProperty(next, key, updated);
     }
     return changed ? next : value;
   }

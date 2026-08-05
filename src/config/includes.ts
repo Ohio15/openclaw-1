@@ -13,6 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import JSON5 from "json5";
+import { getOwnProperty, hasOwnKey, setOwnProperty } from "../safe-object.js";
 import { isPlainObject } from "../utils.js";
 
 export const INCLUDE_KEY = "$include";
@@ -61,7 +62,16 @@ export function deepMerge(target: unknown, source: unknown): unknown {
   if (isPlainObject(target) && isPlainObject(source)) {
     const result: Record<string, unknown> = { ...target };
     for (const key of Object.keys(source)) {
-      result[key] = key in result ? deepMerge(result[key], source[key]) : source[key];
+      // Own-only on both sides: `key in result` is true for "__proto__" on every
+      // object, which would merge the include's value INTO `Object.prototype`
+      // instead of into the document.
+      setOwnProperty(
+        result,
+        key,
+        hasOwnKey(result, key)
+          ? deepMerge(getOwnProperty(result, key), getOwnProperty(source, key))
+          : getOwnProperty(source, key),
+      );
     }
     return result;
   }
@@ -102,7 +112,7 @@ class IncludeProcessor {
   private processObject(obj: Record<string, unknown>): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
-      result[key] = this.process(value);
+      setOwnProperty(result, key, this.process(value));
     }
     return result;
   }
@@ -126,7 +136,7 @@ class IncludeProcessor {
     // Merge included content with sibling keys
     const rest: Record<string, unknown> = {};
     for (const key of otherKeys) {
-      rest[key] = this.process(obj[key]);
+      setOwnProperty(rest, key, this.process(getOwnProperty(obj, key)));
     }
     return deepMerge(included, rest);
   }

@@ -22,6 +22,7 @@
 
 // Pattern for valid uppercase env var names: starts with letter or underscore,
 // followed by letters, numbers, or underscores (all uppercase)
+import { setOwnProperty } from "../safe-object.js";
 import { isPlainObject } from "../utils.js";
 
 const ENV_VAR_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
@@ -149,7 +150,7 @@ function substituteAny(value: unknown, env: NodeJS.ProcessEnv, path: string): un
     const result: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
       const childPath = path ? `${path}.${key}` : key;
-      result[key] = substituteAny(val, env, childPath);
+      setOwnProperty(result, key, substituteAny(val, env, childPath));
     }
     return result;
   }
