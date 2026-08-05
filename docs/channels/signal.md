@@ -224,7 +224,9 @@ Why the channel-level block cannot be partial: OpenClaw synthesizes an account f
 
 Config validation therefore enforces a whole-block rule: **if any TLS key is set anywhere in `channels.signal` (channel level or any account), the channel-level block itself must carry all three of `tlsCaFile`/`tlsCertFile`/`tlsKeyFile` and resolve to an `https://` URL.** Per-account keys may only override that baseline; they may not be the sole source of it, and an account may not blank it back out. The guarantee is that no config which loads can resolve — for any account id, listed or not — to a plaintext transport or to a partial block that fails at send time.
 
-Concretely rejected: TLS on a named account with a plaintext (or TLS-less) channel block; a channel-level CA with the keypairs only on accounts, even when an explicit `accounts.default` completes it; an account whose overrides clear the inherited paths.
+Account keys must also be written in normalized account-id form: lowercase, only `a-z`, `0-9`, `_` and `-`, at most 64 characters. OpenClaw normalizes an incoming account id before looking it up under `accounts`, so a key like `Alerts`, `ops.eu` or `DEFAULT` is never matched — its settings, TLS material included, would be silently ignored and the account would present the channel-level certificate instead. Such keys are rejected at config load; use the normalized spelling (`alerts`, `ops-eu`, `default`).
+
+Concretely rejected: TLS on a named account with a plaintext (or TLS-less) channel block; a channel-level CA with the keypairs only on accounts, even when an explicit `accounts.default` completes it; an account whose overrides clear the inherited paths; an `accounts` key that is not already in normalized form.
 
 ## Access control (DMs + groups)
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 import {
   normalizeTelegramCommandDescription,
   normalizeTelegramCommandName,
@@ -701,11 +702,12 @@ export const SignalAccountSchema = SignalAccountSchemaBase.superRefine((value, c
 const SIGNAL_TLS_KEYS = ["tlsCaFile", "tlsCertFile", "tlsKeyFile"] as const;
 
 /**
- * Mirrors `DEFAULT_ACCOUNT_ID` from routing/session-key. Duplicated rather than
- * imported to keep the config schema free of runtime imports; the consistency
- * test in config.signal-tls.test.ts pins the two together.
+ * The id an accountId-less send resolves to, taken from the routing module that
+ * actually performs the resolution rather than restated here: this schema now
+ * has to agree with `normalizeAccountId` key-for-key, and a second copy of the
+ * default id is one more place for the two to drift apart.
  */
-const SIGNAL_DEFAULT_ACCOUNT_ID = "default";
+const SIGNAL_DEFAULT_ACCOUNT_ID = DEFAULT_ACCOUNT_ID;
 
 type SignalTlsKeys = Partial<Record<(typeof SIGNAL_TLS_KEYS)[number], string | undefined>>;
 
@@ -799,6 +801,26 @@ export const SignalConfigSchema = SignalAccountSchemaBase.extend({
   // inherits, and it is what keeps this rule in exact contract with
   // `resolveSignalTlsOptions`: no accepted config can resolve to a partial block
   // (a runtime throw) or to silent plaintext while mTLS is configured elsewhere.
+  //
+  // None of that holds for a key the runtime cannot look up. `resolveSignalAccount`
+  // normalizes the requested id (`normalizeAccountId`) and then indexes `accounts`
+  // with the normalized string, so a config key that is not already in normalized
+  // form — "Alerts", "ops.eu", "DEFAULT", anything over 64 characters — is dead
+  // config: it is validated here as a complete per-account identity, and at
+  // runtime the lookup misses and the account silently inherits the channel-level
+  // client certificate. Wrong identity at the mTLS boundary, green config.
+  // Reject the key at the boundary instead of loosening the resolver's lookup.
+  for (const accountId of Object.keys(value.accounts ?? {})) {
+    const normalized = normalizeAccountId(accountId);
+    if (accountId === normalized) {
+      continue;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["accounts", accountId],
+      message: `channels.signal.accounts keys must already be in normalized account-id form (lowercase, only a-z 0-9 _ -, at most 64 characters); this key is never matched at runtime and its settings — including any TLS material — would be silently ignored. Rename it to "${normalized}".`,
+    });
+  }
   const accountEntries = Object.entries(value.accounts ?? {}).flatMap(([accountId, account]) =>
     account ? [[accountId, account] as const] : [],
   );
@@ -807,13 +829,10 @@ export const SignalConfigSchema = SignalAccountSchemaBase.extend({
   const channelTlsComplete = channelTlsPresent.length === SIGNAL_TLS_KEYS.length;
   if (anyAccountDefinesTls && !channelTlsComplete) {
     const missing = SIGNAL_TLS_KEYS.filter((key) => !channelTlsPresent.includes(key));
-    const configuredOn = accountEntries
-      .filter(([, account]) => definesSignalTlsKey(account))
-      .map(([accountId]) => accountId);
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: [missing[0]],
-      message: `channels.signal configures TLS on ${configuredOn.map((id) => `accounts.${id}`).join(", ")} but the channel-level block is incomplete (missing: ${missing.join(", ")}). Every accountId not listed under channels.signal.accounts — including the implicit "${SIGNAL_DEFAULT_ACCOUNT_ID}" used by accountId-less sends — resolves to the channel-level block verbatim, which would ${channelTlsPresent.length === 0 ? "silently fall back to plaintext" : "throw at send time"}. Set tlsCaFile, tlsCertFile and tlsKeyFile (and an https:// httpUrl) at channels.signal, then override per account as needed.`,
+      message: `channels.signal configures TLS under channels.signal.accounts but the channel-level block is incomplete (missing: ${missing.join(", ")}). Every accountId not listed under channels.signal.accounts — including the implicit "${SIGNAL_DEFAULT_ACCOUNT_ID}" used by accountId-less sends — resolves to the channel-level block verbatim, which would ${channelTlsPresent.length === 0 ? "silently fall back to plaintext" : "throw at send time"}. Set tlsCaFile, tlsCertFile and tlsKeyFile (and an https:// httpUrl) at channels.signal, then override per account as needed.`,
     });
   } else {
     // Either no TLS anywhere (no-op) or a complete channel-level block, which

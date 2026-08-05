@@ -32,9 +32,21 @@ required on this transport for that reason; an unreadable or unexpected
 `/v1/accounts` payload is reported unhealthy rather than assumed healthy.
 
 When the backend sits behind a TLS proxy demanding a client certificate, set
-`channels.signal.tlsCaFile`/`tlsCertFile`/`tlsKeyFile` (all three or none). HTTP
-requests then carry an undici dispatcher holding that CA and keypair, and the
-`rest` receive WebSocket is opened with the same material.
+`channels.signal.tlsCaFile`/`tlsCertFile`/`tlsKeyFile`. HTTP requests then carry
+an undici dispatcher holding that CA and keypair, and the `rest` receive
+WebSocket is opened with the same material.
+
+The rule is whole-block, not per-key: if any TLS key is set anywhere under
+`channels.signal` (channel level or any account), the **channel-level** block
+must itself carry all three paths and resolve to an `https://` URL, because
+every account id not listed under `accounts` — including the implicit `default`
+that accountId-less sends use — resolves to that block verbatim. Per-account
+keys may only override that baseline, never be its sole source, and an account
+may not blank it back out. Keys under `channels.signal.accounts` must also
+already be in normalized account-id form (lowercase, `a-z 0-9 _ -`, ≤64 chars);
+any other spelling is never matched at runtime, so it is rejected rather than
+silently ignored. All of this is enforced at config load and again at request
+time.
 
 See [Signal](/channels/signal) for setup and endpoints.
 
