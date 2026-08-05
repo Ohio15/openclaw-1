@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { accountsRecord } from "./account-keys.js";
 import { ToolPolicySchema } from "./zod-schema.agent-runtime.js";
 import { ChannelHeartbeatVisibilitySchema } from "./zod-schema.channels.js";
 import {
@@ -96,7 +97,11 @@ export const WhatsAppAccountSchema = WhatsAppSharedSchema.extend({
   });
 
 export const WhatsAppConfigSchema = WhatsAppSharedSchema.extend({
-  accounts: z.record(z.string(), WhatsAppAccountSchema.optional()).optional(),
+  // `resolveWhatsAppAccount` looks up `accounts[accountId]` by exact key while
+  // callers pass a `normalizeAccountId`-normalized id, so a non-normalized or
+  // unretrievable key is unreachable and the account silently inherits the
+  // channel-level auth. Shared guard closes that class here.
+  accounts: accountsRecord(WhatsAppAccountSchema.optional(), "whatsapp").optional(),
   mediaMaxMb: z.number().int().positive().optional().default(50),
   actions: z
     .object({

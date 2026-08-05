@@ -223,6 +223,12 @@ export function mapSensitivePaths(
   } else if (currentSchema instanceof z.ZodIntersection) {
     next = mapSensitivePaths(currentSchema._def.left as z.ZodType, path, next);
     next = mapSensitivePaths(currentSchema._def.right as z.ZodType, path, next);
+  } else if (currentSchema instanceof z.ZodPipe) {
+    // `z.preprocess(fn, schema)` compiles to a ZodPipe (transform -> schema).
+    // The parsed shape is the OUTPUT schema, so walk it — otherwise a record
+    // wrapped in a preprocess guard (e.g. the shared accounts-key fence) hides
+    // its per-account sensitive fields from redaction hints.
+    next = mapSensitivePaths(currentSchema._def.out as z.ZodType, path, next);
   }
 
   return next;

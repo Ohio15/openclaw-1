@@ -5,6 +5,7 @@ import type { OpenClawConfig } from "../config/config.js";
 import { resolveOAuthDir } from "../config/paths.js";
 import type { DmPolicy, GroupPolicy, WhatsAppAccountConfig } from "../config/types.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
+import { getOwnProperty } from "../safe-object.js";
 import { resolveUserPath } from "../utils.js";
 import { hasWebCredsSync } from "./auth-store.js";
 
@@ -72,8 +73,13 @@ function resolveAccountConfig(
   if (!accounts || typeof accounts !== "object") {
     return undefined;
   }
-  const entry = accounts[accountId] as WhatsAppAccountConfig | undefined;
-  return entry;
+  // Own-only: a bare `accounts[accountId]` lookup answers "__proto__" with
+  // `Object.prototype` and "constructor" with `Object` for configs that do not
+  // define those accounts, handing resolution a non-account object instead of
+  // falling through to the channel block.
+  return getOwnProperty(accounts as Record<string, unknown>, accountId) as
+    | WhatsAppAccountConfig
+    | undefined;
 }
 
 function resolveDefaultAuthDir(accountId: string): string {

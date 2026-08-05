@@ -3,6 +3,7 @@ import { createAccountListHelpers } from "../channels/plugins/account-helpers.js
 import type { OpenClawConfig } from "../config/config.js";
 import type { SlackAccountConfig } from "../config/types.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
+import { getOwnProperty } from "../safe-object.js";
 import { resolveSlackAppToken, resolveSlackBotToken } from "./token.js";
 
 export type SlackTokenSource = "env" | "config" | "none";
@@ -41,7 +42,13 @@ function resolveAccountConfig(
   if (!accounts || typeof accounts !== "object") {
     return undefined;
   }
-  return accounts[accountId] as SlackAccountConfig | undefined;
+  // Own-only: a bare `accounts[accountId]` lookup answers "__proto__" with
+  // `Object.prototype` and "constructor" with `Object` for configs that do not
+  // define those accounts, handing the merge a non-account object instead of
+  // falling through to the channel block.
+  return getOwnProperty(accounts as Record<string, unknown>, accountId) as
+    | SlackAccountConfig
+    | undefined;
 }
 
 function mergeSlackAccountConfig(cfg: OpenClawConfig, accountId: string): SlackAccountConfig {

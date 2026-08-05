@@ -1,6 +1,7 @@
 import type { BaseTokenResolution } from "../channels/plugins/types.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
+import { getOwnProperty } from "../safe-object.js";
 
 export type DiscordTokenSource = "env" | "config" | "none";
 
@@ -25,10 +26,14 @@ export function resolveDiscordToken(
 ): DiscordTokenResolution {
   const accountId = normalizeAccountId(opts.accountId);
   const discordCfg = cfg?.channels?.discord;
-  const accountCfg =
-    accountId !== DEFAULT_ACCOUNT_ID
-      ? discordCfg?.accounts?.[accountId]
-      : discordCfg?.accounts?.[DEFAULT_ACCOUNT_ID];
+  // Own-only lookup: a bare `accounts[id]` answers "__proto__"/"constructor"
+  // with a prototype object for configs that never defined them, which would
+  // hand token resolution a non-account object instead of falling through to the
+  // channel-level token.
+  const accounts = discordCfg?.accounts as Record<string, unknown> | undefined;
+  const accountCfg = accounts
+    ? (getOwnProperty(accounts, accountId) as { token?: string | null } | undefined)
+    : undefined;
   const accountToken = normalizeDiscordToken(accountCfg?.token ?? undefined);
   if (accountToken) {
     return { token: accountToken, source: "config" };

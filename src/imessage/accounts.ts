@@ -2,6 +2,7 @@ import { createAccountListHelpers } from "../channels/plugins/account-helpers.js
 import type { OpenClawConfig } from "../config/config.js";
 import type { IMessageAccountConfig } from "../config/types.js";
 import { normalizeAccountId } from "../routing/session-key.js";
+import { getOwnProperty } from "../safe-object.js";
 
 export type ResolvedIMessageAccount = {
   accountId: string;
@@ -23,7 +24,13 @@ function resolveAccountConfig(
   if (!accounts || typeof accounts !== "object") {
     return undefined;
   }
-  return accounts[accountId] as IMessageAccountConfig | undefined;
+  // Own-only: a bare `accounts[accountId]` lookup answers "__proto__" with
+  // `Object.prototype` and "constructor" with `Object` for configs that do not
+  // define those accounts, handing the merge a non-account object instead of
+  // falling through to the channel block.
+  return getOwnProperty(accounts as Record<string, unknown>, accountId) as
+    | IMessageAccountConfig
+    | undefined;
 }
 
 function mergeIMessageAccountConfig(cfg: OpenClawConfig, accountId: string): IMessageAccountConfig {
