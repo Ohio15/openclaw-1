@@ -655,6 +655,9 @@ export const SignalAccountSchemaBase = z
     autoStart: z.boolean().optional(),
     startupTimeoutMs: z.number().int().min(1000).max(120000).optional(),
     transport: z.enum(["json-rpc", "rest"]).optional(),
+    tlsCaFile: z.string().optional(),
+    tlsCertFile: z.string().optional(),
+    tlsKeyFile: z.string().optional(),
     receiveMode: z.union([z.literal("on-start"), z.literal("manual")]).optional(),
     ignoreAttachments: z.boolean().optional(),
     ignoreStories: z.boolean().optional(),
@@ -695,6 +698,36 @@ export const SignalAccountSchema = SignalAccountSchemaBase.superRefine((value, c
   });
 });
 
+const SIGNAL_TLS_KEYS = ["tlsCaFile", "tlsCertFile", "tlsKeyFile"] as const;
+
+type SignalTlsKeys = Partial<Record<(typeof SIGNAL_TLS_KEYS)[number], string | undefined>>;
+
+/**
+ * Client-certificate material is all-or-nothing: a partial block cannot
+ * complete a handshake, and accepting it would leave the transport plaintext
+ * against an operator who believes it is not. Checked on the merged view
+ * (channel-level keys folded under account-level ones) because that is what
+ * `resolveSignalAccount` hands to the client at runtime — an account that
+ * overrides only the cert while inheriting the CA is valid.
+ */
+const requireCompleteSignalTls = (params: {
+  value: SignalTlsKeys;
+  ctx: z.RefinementCtx;
+  path: Array<string | number>;
+  configPath: string;
+}) => {
+  const present = SIGNAL_TLS_KEYS.filter((key) => Boolean(params.value[key]?.trim()));
+  if (present.length === 0 || present.length === SIGNAL_TLS_KEYS.length) {
+    return;
+  }
+  const missing = SIGNAL_TLS_KEYS.filter((key) => !present.includes(key));
+  params.ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: [...params.path, missing[0]],
+    message: `${params.configPath} requires all of tlsCaFile, tlsCertFile, tlsKeyFile when any is set (missing: ${missing.join(", ")})`,
+  });
+};
+
 export const SignalConfigSchema = SignalAccountSchemaBase.extend({
   accounts: z.record(z.string(), SignalAccountSchema.optional()).optional(),
 }).superRefine((value, ctx) => {
@@ -705,6 +738,22 @@ export const SignalConfigSchema = SignalAccountSchemaBase.extend({
     path: ["allowFrom"],
     message: 'channels.signal.dmPolicy="open" requires channels.signal.allowFrom to include "*"',
   });
+  requireCompleteSignalTls({ value, ctx, path: [], configPath: "channels.signal" });
+  for (const [accountId, account] of Object.entries(value.accounts ?? {})) {
+    if (!account) {
+      continue;
+    }
+    requireCompleteSignalTls({
+      value: {
+        tlsCaFile: account.tlsCaFile ?? value.tlsCaFile,
+        tlsCertFile: account.tlsCertFile ?? value.tlsCertFile,
+        tlsKeyFile: account.tlsKeyFile ?? value.tlsKeyFile,
+      },
+      ctx,
+      path: ["accounts", accountId],
+      configPath: `channels.signal.accounts.${accountId}`,
+    });
+  }
 });
 
 export const IrcGroupSchema = z

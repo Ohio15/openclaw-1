@@ -3,12 +3,18 @@ import WebSocket from "ws";
 import { resolveFetch } from "../infra/fetch.js";
 import { rawDataToString } from "../infra/ws.js";
 import { fetchWithTimeout } from "../utils/fetch-timeout.js";
+import { type SignalTlsOptions, signalTlsWsOptions, withSignalTlsDispatcher } from "./tls.js";
 
 export type SignalTransport = "json-rpc" | "rest";
 
 export type SignalRpcOptions = {
   baseUrl: string;
   timeoutMs?: number;
+  /**
+   * Client-certificate material for a backend behind an mTLS front. Omitted on
+   * every plaintext deployment, where the request init is unchanged.
+   */
+  tls?: SignalTlsOptions;
   /**
    * Wire protocol used to talk to the signal backend.
    * - "json-rpc" (default): POST a JSON-RPC envelope to `${baseUrl}/api/v1/rpc`,
@@ -78,11 +84,14 @@ export async function signalRpcRequest<T = unknown>(
   });
   const res = await fetchWithTimeout(
     `${baseUrl}/api/v1/rpc`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    },
+    withSignalTlsDispatcher(
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      },
+      opts.tls,
+    ),
     opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     getRequiredFetch(),
   );
@@ -184,11 +193,14 @@ async function signalRestRequest<T>(
 
   const res = await fetchWithTimeout(
     `${baseUrl}/v2/send`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
+    withSignalTlsDispatcher(
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      opts.tls,
+    ),
     timeoutMs,
     getRequiredFetch(),
   );
@@ -222,18 +234,22 @@ async function signalRestRequest<T>(
  *
  * Probing the wrong path reports the channel permanently unhealthy, so the
  * transport must be threaded in by every caller that knows it.
+ *
+ * `tls` is the client-certificate material for an mTLS-fronted backend; omit it
+ * (the default) for the unchanged plaintext path.
  */
 export async function signalCheck(
   baseUrl: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   transport: SignalTransport = "json-rpc",
+  tls?: SignalTlsOptions,
 ): Promise<{ ok: boolean; status?: number | null; error?: string | null }> {
   const normalized = normalizeBaseUrl(baseUrl);
   const path = transport === "rest" ? "/v1/health" : "/api/v1/check";
   try {
     const res = await fetchWithTimeout(
       `${normalized}${path}`,
-      { method: "GET" },
+      withSignalTlsDispatcher({ method: "GET" }, tls),
       timeoutMs,
       getRequiredFetch(),
     );
@@ -265,11 +281,12 @@ export async function signalCheck(
 export async function signalRestAbout(
   baseUrl: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  tls?: SignalTlsOptions,
 ): Promise<unknown> {
   const normalized = normalizeBaseUrl(baseUrl);
   const res = await fetchWithTimeout(
     `${normalized}/v1/about`,
-    { method: "GET" },
+    withSignalTlsDispatcher({ method: "GET" }, tls),
     timeoutMs,
     getRequiredFetch(),
   );
@@ -325,11 +342,12 @@ function extractRestAccountNumber(entry: unknown): string | null {
 export async function signalRestAccounts(
   baseUrl: string,
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  tls?: SignalTlsOptions,
 ): Promise<string[]> {
   const normalized = normalizeBaseUrl(baseUrl);
   const res = await fetchWithTimeout(
     `${normalized}/v1/accounts`,
-    { method: "GET" },
+    withSignalTlsDispatcher({ method: "GET" }, tls),
     timeoutMs,
     getRequiredFetch(),
   );
@@ -364,6 +382,7 @@ export async function streamSignalEvents(params: {
   baseUrl: string;
   account?: string;
   abortSignal?: AbortSignal;
+  tls?: SignalTlsOptions;
   onEvent: (event: SignalSseEvent) => void;
 }): Promise<void> {
   const baseUrl = normalizeBaseUrl(params.baseUrl);
@@ -376,11 +395,17 @@ export async function streamSignalEvents(params: {
   if (!fetchImpl) {
     throw new Error("fetch is not available");
   }
-  const res = await fetchImpl(url, {
-    method: "GET",
-    headers: { Accept: "text/event-stream" },
-    signal: params.abortSignal,
-  });
+  const res = await fetchImpl(
+    url,
+    withSignalTlsDispatcher(
+      {
+        method: "GET",
+        headers: { Accept: "text/event-stream" },
+        signal: params.abortSignal,
+      },
+      params.tls,
+    ),
+  );
   if (!res.ok || !res.body) {
     throw new Error(`Signal SSE failed (${res.status} ${res.statusText || "error"})`);
   }
@@ -502,6 +527,7 @@ export async function streamSignalWsEvents(params: {
   baseUrl: string;
   account?: string;
   abortSignal?: AbortSignal;
+  tls?: SignalTlsOptions;
   onEvent: (event: SignalSseEvent) => void;
 }): Promise<void> {
   const account = params.account?.trim();
@@ -515,7 +541,11 @@ export async function streamSignalWsEvents(params: {
   }
 
   const url = toWebSocketReceiveUrl(params.baseUrl, account);
-  const ws = new WebSocket(url);
+  // `ws` forwards unknown client options to tls.connect(), so the same CA and
+  // client keypair used for the REST calls also secure the receive socket.
+  // Passing `undefined` keeps the plaintext call shape identical.
+  const wsOptions = signalTlsWsOptions(params.tls);
+  const ws = wsOptions ? new WebSocket(url, wsOptions) : new WebSocket(url);
 
   await new Promise<void>((resolve, reject) => {
     let settled = false;

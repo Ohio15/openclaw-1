@@ -6,12 +6,15 @@ import { loadConfig } from "../config/config.js";
 import { resolveSignalAccount } from "./accounts.js";
 import { signalRpcRequest } from "./client.js";
 import { resolveSignalRpcContext } from "./rpc-context.js";
+import type { SignalTlsOptions } from "./tls.js";
 
 export type SignalReactionOpts = {
   baseUrl?: string;
   account?: string;
   accountId?: string;
   timeoutMs?: number;
+  /** Client-certificate material for an mTLS-fronted backend. */
+  tls?: SignalTlsOptions;
   targetAuthor?: string;
   targetAuthorUuid?: string;
   groupId?: string;
@@ -79,7 +82,7 @@ async function sendReactionSignalCore(params: {
     cfg: loadConfig(),
     accountId: params.opts.accountId,
   });
-  const { baseUrl, account } = resolveSignalRpcContext(params.opts, accountInfo);
+  const { baseUrl, account, tls } = resolveSignalRpcContext(params.opts, accountInfo);
 
   const normalizedRecipient = normalizeSignalUuid(params.recipient);
   const groupId = params.opts.groupId?.trim();
@@ -122,6 +125,7 @@ async function sendReactionSignalCore(params: {
   const result = await signalRpcRequest<{ timestamp?: number }>("sendReaction", requestParams, {
     baseUrl,
     timeoutMs: params.opts.timeoutMs,
+    tls,
   });
 
   return {

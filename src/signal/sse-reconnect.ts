@@ -3,6 +3,7 @@ import type { BackoffPolicy } from "../infra/backoff.js";
 import { computeBackoff, sleepWithAbort } from "../infra/backoff.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { type SignalSseEvent, streamSignalEvents, streamSignalWsEvents } from "./client.js";
+import type { SignalTlsOptions } from "./tls.js";
 
 const DEFAULT_RECONNECT_POLICY: BackoffPolicy = {
   initialMs: 1_000,
@@ -15,6 +16,7 @@ type SignalReceiveStream = (params: {
   baseUrl: string;
   account?: string;
   abortSignal?: AbortSignal;
+  tls?: SignalTlsOptions;
   onEvent: (event: SignalSseEvent) => void;
 }) => Promise<void>;
 
@@ -22,6 +24,8 @@ type RunSignalReceiveLoopParams = {
   baseUrl: string;
   account?: string;
   abortSignal?: AbortSignal;
+  /** Client-certificate material for an mTLS-fronted backend. */
+  tls?: SignalTlsOptions;
   runtime: RuntimeEnv;
   onEvent: (event: SignalSseEvent) => void;
   policy?: Partial<BackoffPolicy>;
@@ -34,7 +38,7 @@ type RunSignalReceiveLoopParams = {
 async function runSignalReceiveLoop(
   stream: SignalReceiveStream,
   label: string,
-  { baseUrl, account, abortSignal, runtime, onEvent, policy }: RunSignalReceiveLoopParams,
+  { baseUrl, account, abortSignal, tls, runtime, onEvent, policy }: RunSignalReceiveLoopParams,
 ) {
   const reconnectPolicy = {
     ...DEFAULT_RECONNECT_POLICY,
@@ -55,6 +59,7 @@ async function runSignalReceiveLoop(
         baseUrl,
         account,
         abortSignal,
+        tls,
         onEvent: (event) => {
           reconnectAttempts = 0;
           onEvent(event);

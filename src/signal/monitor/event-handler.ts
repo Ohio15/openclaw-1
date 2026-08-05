@@ -206,6 +206,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
           baseUrl: deps.baseUrl,
           account: deps.account,
           accountId: deps.accountId,
+          tls: deps.tls,
         });
       },
       onStartError: (err) => {
@@ -479,6 +480,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
                   account: deps.account,
                   maxBytes: deps.mediaMaxBytes,
                   accountId: deps.accountId,
+                  tls: deps.tls,
                 },
               );
             } catch (err) {
@@ -647,6 +649,7 @@ export function createSignalEventHandler(deps: SignalEventHandlerDeps) {
           baseUrl: deps.baseUrl,
           account: deps.account,
           accountId: deps.accountId,
+          tls: deps.tls,
         });
       } catch (err) {
         logVerbose(`signal read receipt failed for ${senderDisplay}: ${String(err)}`);

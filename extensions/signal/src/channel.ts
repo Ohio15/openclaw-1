@@ -18,6 +18,7 @@ import {
   resolveChannelMediaMaxBytes,
   resolveDefaultSignalAccountId,
   resolveSignalAccount,
+  resolveSignalTlsOptions,
   setAccountEnabledInConfigSection,
   signalOnboardingAdapter,
   SignalConfigSchema,
@@ -276,6 +277,10 @@ export const signalPlugin: ChannelPlugin<ResolvedSignalAccount> = {
         timeoutMs,
         transport,
         account.config.account,
+        // Undefined unless the account configures the mTLS block; without it the
+        // probe would fail the handshake against a client-cert-gated front and
+        // report a healthy backend as unreachable.
+        resolveSignalTlsOptions(account.config),
       );
     },
     buildAccountSnapshot: ({ account, runtime, probe }) => ({

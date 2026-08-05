@@ -399,6 +399,7 @@ export {
   resolveSignalAccount,
   type ResolvedSignalAccount,
 } from "../signal/accounts.js";
+export { resolveSignalTlsOptions, type SignalTlsOptions } from "../signal/tls.js";
 export { signalOnboardingAdapter } from "../channels/plugins/onboarding/signal.js";
 export {
   looksLikeSignalTargetId,

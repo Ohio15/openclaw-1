@@ -51,6 +51,21 @@ export type SignalAccountConfig = {
    * skipped gracefully rather than delivered.
    */
   transport?: "json-rpc" | "rest";
+  /**
+   * Client-certificate (mTLS) material for a backend fronted by a TLS proxy
+   * that requires `ssl_verify_client on` — e.g. an nginx sidecar in front of
+   * signal-cli-rest-api. Applies to both the HTTP requests and the "rest"
+   * receive WebSocket.
+   *
+   * All three are required together; setting only some is a config error. When
+   * none are set the transport is plaintext exactly as before.
+   */
+  /** PEM CA bundle that signs the proxy's server certificate. */
+  tlsCaFile?: string;
+  /** PEM client certificate presented to the proxy. */
+  tlsCertFile?: string;
+  /** PEM private key for `tlsCertFile`. */
+  tlsKeyFile?: string;
   /** Max time to wait for signal-cli daemon startup (ms, cap 120000). */
   startupTimeoutMs?: number;
   receiveMode?: "on-start" | "manual";

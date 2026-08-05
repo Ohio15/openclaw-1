@@ -31,6 +31,11 @@ account unhealthy when its number is absent. `channels.signal.account` is
 required on this transport for that reason; an unreadable or unexpected
 `/v1/accounts` payload is reported unhealthy rather than assumed healthy.
 
+When the backend sits behind a TLS proxy demanding a client certificate, set
+`channels.signal.tlsCaFile`/`tlsCertFile`/`tlsKeyFile` (all three or none). HTTP
+requests then carry an undici dispatcher holding that CA and keypair, and the
+`rest` receive WebSocket is opened with the same material.
+
 See [Signal](/channels/signal) for setup and endpoints.
 
 ## Pattern B: stdio child process (legacy: imsg)

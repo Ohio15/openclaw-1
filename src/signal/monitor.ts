@@ -16,6 +16,7 @@ import { isSignalSenderAllowed, type resolveSignalSender } from "./identity.js";
 import { createSignalEventHandler } from "./monitor/event-handler.js";
 import { sendMessageSignal } from "./send.js";
 import { runSignalSseLoop, runSignalWsLoop } from "./sse-reconnect.js";
+import { resolveSignalTlsOptions, type SignalTlsOptions } from "./tls.js";
 
 type SignalReactionMessage = {
   emoji?: string | null;
@@ -45,6 +46,8 @@ export type MonitorSignalOpts = {
   baseUrl?: string;
   /** Override the account's inbound/outbound transport (default: account config). */
   transport?: SignalTransport;
+  /** Override the account's client-certificate material (default: account config). */
+  tls?: SignalTlsOptions;
   autoStart?: boolean;
   startupTimeoutMs?: number;
   cliPath?: string;
@@ -158,6 +161,7 @@ async function waitForSignalDaemonReady(params: {
    * gate could never observe ready on that transport.
    */
   transport: SignalTransport;
+  tls?: SignalTlsOptions;
   abortSignal?: AbortSignal;
   timeoutMs: number;
   logAfterMs: number;
@@ -179,7 +183,7 @@ async function waitForSignalDaemonReady(params: {
     abortSignal: params.abortSignal,
     runtime: params.runtime,
     check: async () => {
-      const res = await signalCheck(params.baseUrl, 1000, params.transport);
+      const res = await signalCheck(params.baseUrl, 1000, params.transport, params.tls);
       if (res.ok) {
         return { ok: true };
       }
@@ -199,6 +203,7 @@ async function fetchAttachment(params: {
   sender?: string;
   groupId?: string;
   maxBytes: number;
+  tls?: SignalTlsOptions;
 }): Promise<{ path: string; contentType?: string } | null> {
   const { attachment } = params;
   if (!attachment?.id) {
@@ -225,6 +230,7 @@ async function fetchAttachment(params: {
 
   const result = await signalRpcRequest<{ data?: string }>("getAttachment", rpcParams, {
     baseUrl: params.baseUrl,
+    tls: params.tls,
   });
   if (!result?.data) {
     return null;
@@ -249,9 +255,20 @@ async function deliverReplies(params: {
   maxBytes: number;
   textLimit: number;
   chunkMode: "length" | "newline";
+  tls?: SignalTlsOptions;
 }) {
-  const { replies, target, baseUrl, account, accountId, runtime, maxBytes, textLimit, chunkMode } =
-    params;
+  const {
+    replies,
+    target,
+    baseUrl,
+    account,
+    accountId,
+    runtime,
+    maxBytes,
+    textLimit,
+    chunkMode,
+    tls,
+  } = params;
   for (const payload of replies) {
     const mediaList = payload.mediaUrls ?? (payload.mediaUrl ? [payload.mediaUrl] : []);
     const text = payload.text ?? "";
@@ -265,6 +282,7 @@ async function deliverReplies(params: {
           account,
           maxBytes,
           accountId,
+          tls,
         });
       }
     } else {
@@ -278,6 +296,7 @@ async function deliverReplies(params: {
           mediaUrl: url,
           maxBytes,
           accountId,
+          tls,
         });
       }
     }
@@ -343,6 +362,9 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
   // its inbound stream is a per-account WebSocket. "json-rpc" keeps the daemon +
   // SSE path unchanged.
   const transport: SignalTransport = opts.transport ?? accountInfo.config.transport ?? "json-rpc";
+  // Undefined unless the account configures tlsCaFile/tlsCertFile/tlsKeyFile,
+  // so plaintext deployments keep every request and socket exactly as before.
+  const tls = opts.tls ?? resolveSignalTlsOptions(accountInfo.config);
   const dmPolicy = accountInfo.config.dmPolicy ?? "pairing";
   const allowFrom = normalizeAllowList(opts.allowFrom ?? accountInfo.config.allowFrom);
   const groupAllowFrom = normalizeAllowList(
@@ -427,6 +449,7 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       await waitForSignalDaemonReady({
         baseUrl,
         transport,
+        tls,
         abortSignal: parentAbort,
         timeoutMs: startupTimeoutMs,
         logAfterMs: 10_000,
@@ -461,8 +484,9 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       ignoreAttachments,
       sendReadReceipts,
       readReceiptsViaDaemon,
-      fetchAttachment,
-      deliverReplies: (params) => deliverReplies({ ...params, chunkMode }),
+      tls,
+      fetchAttachment: (params) => fetchAttachment({ ...params, tls }),
+      deliverReplies: (params) => deliverReplies({ ...params, chunkMode, tls }),
       resolveSignalReactionTargets,
       isSignalReactionMessage,
       shouldEmitSignalReactionNotification,
@@ -478,6 +502,7 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
       baseUrl,
       account,
       abortSignal: sseAbort.signal,
+      tls,
       runtime,
       onEvent: (event) => {
         void handleEvent(event).catch((err) => {

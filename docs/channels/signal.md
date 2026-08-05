@@ -179,6 +179,27 @@ If you want to manage `signal-cli` yourself (slow JVM cold starts, container ini
 
 This skips auto-spawn and the startup wait inside OpenClaw. For slow starts when auto-spawning, set `channels.signal.startupTimeoutMs`.
 
+## Client certificates (mTLS)
+
+If the backend sits behind a TLS proxy that requires a client certificate (for example an nginx sidecar in front of `signal-cli-rest-api` with `ssl_verify_client on`), point OpenClaw at the proxy and give it the certificate material:
+
+```json5
+{
+  channels: {
+    signal: {
+      transport: "rest",
+      httpUrl: "https://signal-proxy:8443",
+      autoStart: false,
+      tlsCaFile: "/certs/ca.crt",
+      tlsCertFile: "/certs/openclaw.crt",
+      tlsKeyFile: "/certs/openclaw.key",
+    },
+  },
+}
+```
+
+All three keys are required together — setting only some is a config error. They apply to every request the channel makes (send, health, `/v1/about`, `/v1/accounts`, attachment fetches) and to the `rest` receive WebSocket. The files are read once at startup, so rotating certificates requires a gateway restart. Omit all three for the default plaintext transport.
+
 ## Access control (DMs + groups)
 
 DMs:
@@ -302,6 +323,7 @@ Provider options:
 - `channels.signal.httpUrl`: full daemon URL (overrides host/port).
 - `channels.signal.httpHost`, `channels.signal.httpPort`: daemon bind (default 127.0.0.1:8080).
 - `channels.signal.autoStart`: auto-spawn daemon (default true if `httpUrl` unset).
+- `channels.signal.tlsCaFile`, `channels.signal.tlsCertFile`, `channels.signal.tlsKeyFile`: client-certificate material for an mTLS-fronted backend (all three required together; unset = plaintext).
 - `channels.signal.startupTimeoutMs`: startup wait timeout in ms (cap 120000).
 - `channels.signal.receiveMode`: `on-start | manual`.
 - `channels.signal.ignoreAttachments`: skip attachment downloads.
