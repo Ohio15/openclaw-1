@@ -82,9 +82,11 @@ export async function signalRpcRequest<T = unknown>(
     params,
     id,
   });
+  const url = `${baseUrl}/api/v1/rpc`;
   const res = await fetchWithTimeout(
-    `${baseUrl}/api/v1/rpc`,
+    url,
     withSignalTlsDispatcher(
+      url,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -191,9 +193,11 @@ async function signalRestRequest<T>(
     );
   }
 
+  const url = `${baseUrl}/v2/send`;
   const res = await fetchWithTimeout(
-    `${baseUrl}/v2/send`,
+    url,
     withSignalTlsDispatcher(
+      url,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -249,7 +253,7 @@ export async function signalCheck(
   try {
     const res = await fetchWithTimeout(
       `${normalized}${path}`,
-      withSignalTlsDispatcher({ method: "GET" }, tls),
+      withSignalTlsDispatcher(`${normalized}${path}`, { method: "GET" }, tls),
       timeoutMs,
       getRequiredFetch(),
     );
@@ -286,7 +290,7 @@ export async function signalRestAbout(
   const normalized = normalizeBaseUrl(baseUrl);
   const res = await fetchWithTimeout(
     `${normalized}/v1/about`,
-    withSignalTlsDispatcher({ method: "GET" }, tls),
+    withSignalTlsDispatcher(`${normalized}/v1/about`, { method: "GET" }, tls),
     timeoutMs,
     getRequiredFetch(),
   );
@@ -347,7 +351,7 @@ export async function signalRestAccounts(
   const normalized = normalizeBaseUrl(baseUrl);
   const res = await fetchWithTimeout(
     `${normalized}/v1/accounts`,
-    withSignalTlsDispatcher({ method: "GET" }, tls),
+    withSignalTlsDispatcher(`${normalized}/v1/accounts`, { method: "GET" }, tls),
     timeoutMs,
     getRequiredFetch(),
   );
@@ -398,6 +402,7 @@ export async function streamSignalEvents(params: {
   const res = await fetchImpl(
     url,
     withSignalTlsDispatcher(
+      url.toString(),
       {
         method: "GET",
         headers: { Accept: "text/event-stream" },
@@ -544,7 +549,7 @@ export async function streamSignalWsEvents(params: {
   // `ws` forwards unknown client options to tls.connect(), so the same CA and
   // client keypair used for the REST calls also secure the receive socket.
   // Passing `undefined` keeps the plaintext call shape identical.
-  const wsOptions = signalTlsWsOptions(params.tls);
+  const wsOptions = signalTlsWsOptions(url, params.tls);
   const ws = wsOptions ? new WebSocket(url, wsOptions) : new WebSocket(url);
 
   await new Promise<void>((resolve, reject) => {

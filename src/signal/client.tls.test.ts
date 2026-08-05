@@ -7,6 +7,7 @@ import {
   signalRestAbout,
   signalRestAccounts,
   signalRpcRequest,
+  streamSignalEvents,
   streamSignalWsEvents,
 } from "./client.js";
 import { getSignalTlsDispatcher, resetSignalTlsCachesForTests } from "./tls.js";
@@ -120,6 +121,44 @@ describe("signal client TLS on the HTTP path", () => {
     expect(requestInit(0).dispatcher).toBe(requestInit(1).dispatcher);
   });
 
+  it("attaches the dispatcher to the JSON-RPC POST path", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ result: { version: "0.13.22" } })),
+    );
+
+    await signalRpcRequest("version", undefined, { baseUrl: "https://signal-proxy:8443", tls });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://signal-proxy:8443/api/v1/rpc");
+    expect(requestInit().dispatcher).toBe(getSignalTlsDispatcher(tls));
+  });
+
+  it("attaches the dispatcher to the SSE event stream", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("data: {}\n\n", { status: 200 }));
+
+    await streamSignalEvents({
+      baseUrl: "https://signal-proxy:8443",
+      account: "+15559990000",
+      onEvent: () => {},
+      tls,
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "https://signal-proxy:8443/api/v1/events",
+    );
+    expect(requestInit().dispatcher).toBe(getSignalTlsDispatcher(tls));
+  });
+
+  it("refuses to issue a request when TLS is configured against a plaintext base URL", async () => {
+    await expect(signalCheck("http://signal-api:8080", 1000, "rest", tls)).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/is not https/),
+    });
+    await expect(
+      signalRpcRequest("version", undefined, { baseUrl: "http://signal-api:8080", tls }),
+    ).rejects.toThrow(/is not https/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("sends no dispatcher key at all when TLS is not configured", async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
@@ -144,6 +183,18 @@ describe("streamSignalWsEvents TLS", () => {
     expect(options.ca.toString()).toBe("ca-pem");
     expect(options.cert.toString()).toBe("cert-pem");
     expect(options.key.toString()).toBe("key-pem");
+  });
+
+  it("refuses to open a plaintext socket when TLS is configured", async () => {
+    await expect(
+      streamSignalWsEvents({
+        baseUrl: "http://signal-api:8080",
+        account: "+15559990000",
+        tls,
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow(/is not wss/);
+    expect(wsConstructorCalls).toHaveLength(0);
   });
 
   it("constructs the socket with the url alone when TLS is not configured", async () => {

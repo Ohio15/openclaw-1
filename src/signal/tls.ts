@@ -150,18 +150,46 @@ export function getSignalTlsDispatcher(opts: SignalTlsOptions): Dispatcher {
 }
 
 /**
+ * Fail closed when TLS material is configured but the URL cannot carry it.
+ *
+ * undici performs no handshake on an `http:` origin and `ws` drops tls options
+ * on a `ws:` URL, so a client certificate paired with a plaintext base URL is
+ * silently inert — the exact "configured mTLS, still shipping plaintext" state
+ * this feature exists to prevent. Refuse the request instead.
+ */
+function assertSecureSignalOrigin(url: string, expected: "https:" | "wss:"): void {
+  let protocol: string;
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    throw new Error(`Signal TLS: cannot determine the scheme of "${url}"`);
+  }
+  if (protocol === expected) {
+    return;
+  }
+  throw new Error(
+    `Signal TLS is configured (tlsCaFile/tlsCertFile/tlsKeyFile) but the target "${url}" is not ${expected.replace(":", "")}. ` +
+      "Point channels.signal.httpUrl at the https:// endpoint of the TLS front, or remove the TLS options.",
+  );
+}
+
+/**
  * Attach the client-certificate dispatcher to a request init.
  *
  * Returns `init` untouched when TLS is not configured, so the plaintext path is
- * byte-for-byte what it was before mTLS support existed.
+ * byte-for-byte what it was before mTLS support existed. Throws when TLS is
+ * configured against a non-https URL rather than issuing a plaintext request
+ * that looks secure.
  */
 export function withSignalTlsDispatcher(
+  url: string,
   init: RequestInit,
   tls: SignalTlsOptions | undefined,
 ): RequestInitWithDispatcher {
   if (!tls) {
     return init;
   }
+  assertSecureSignalOrigin(url, "https:");
   const withDispatcher: RequestInitWithDispatcher = {
     ...init,
     dispatcher: getSignalTlsDispatcher(tls),
@@ -169,18 +197,30 @@ export function withSignalTlsDispatcher(
   return withDispatcher;
 }
 
-/** ws client options carrying the same material as the HTTP dispatcher. */
+/**
+ * ws client options carrying the same material as the HTTP dispatcher.
+ *
+ * Throws on a `ws:` URL for the same reason {@link withSignalTlsDispatcher}
+ * does: `ws` would accept the options object and open a plaintext socket.
+ */
 export function signalTlsWsOptions(
+  url: string,
   tls: SignalTlsOptions | undefined,
 ): { ca: Buffer; cert: Buffer; key: Buffer } | undefined {
   if (!tls) {
     return undefined;
   }
+  assertSecureSignalOrigin(url, "wss:");
   return readSignalTlsMaterial(tls);
 }
 
 /** Test-only: drop cached material/dispatchers so file changes are re-read. */
 export function resetSignalTlsCachesForTests(): void {
   materialCache.clear();
+  for (const dispatcher of dispatcherCache.values()) {
+    // Discarding an Agent without closing it leaks its keep-alive sockets for
+    // the rest of the run; tests build many.
+    void dispatcher.close().catch(() => {});
+  }
   dispatcherCache.clear();
 }

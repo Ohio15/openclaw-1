@@ -198,7 +198,25 @@ If the backend sits behind a TLS proxy that requires a client certificate (for e
 }
 ```
 
-All three keys are required together — setting only some is a config error. They apply to every request the channel makes (send, health, `/v1/about`, `/v1/accounts`, attachment fetches) and to the `rest` receive WebSocket. The files are read once at startup, so rotating certificates requires a gateway restart. Omit all three for the default plaintext transport.
+All three keys are required together — setting only some is a config error — and the base URL must be `https://`, since a client certificate is never presented over plaintext. Both rules are enforced at config load and again at request time.
+
+They apply to every request the channel makes (send, health, `/v1/about`, `/v1/accounts`, attachment fetches) and to the `rest` receive WebSocket. The certificate files are read lazily on first use and then cached: a bad path surfaces as an error on the first request rather than at startup, and rotating certificates requires a gateway restart. Omit all three for the default plaintext transport.
+
+In a multi-account setup the keys merge the same way the rest of the section does, so a shared CA can live at the channel level with a per-account certificate:
+
+```json5
+{
+  channels: {
+    signal: {
+      httpUrl: "https://signal-proxy:8443",
+      tlsCaFile: "/certs/ca.crt",
+      accounts: {
+        alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
+      },
+    },
+  },
+}
+```
 
 ## Access control (DMs + groups)
 

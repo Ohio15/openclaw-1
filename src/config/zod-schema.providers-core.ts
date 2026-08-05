@@ -702,31 +702,69 @@ const SIGNAL_TLS_KEYS = ["tlsCaFile", "tlsCertFile", "tlsKeyFile"] as const;
 
 type SignalTlsKeys = Partial<Record<(typeof SIGNAL_TLS_KEYS)[number], string | undefined>>;
 
+type SignalTlsView = SignalTlsKeys & {
+  httpUrl?: string;
+  httpHost?: string;
+  httpPort?: number;
+};
+
 /**
- * Client-certificate material is all-or-nothing: a partial block cannot
- * complete a handshake, and accepting it would leave the transport plaintext
- * against an operator who believes it is not. Checked on the merged view
- * (channel-level keys folded under account-level ones) because that is what
- * `resolveSignalAccount` hands to the client at runtime — an account that
- * overrides only the cert while inheriting the CA is valid.
+ * The base URL `resolveSignalAccount` derives at runtime. Kept in step with
+ * `src/signal/accounts.ts` — validating a different URL than the one the client
+ * dials would let a plaintext origin through.
+ */
+const resolveSignalBaseUrlForValidation = (value: SignalTlsView): string => {
+  const explicit = value.httpUrl?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const host = value.httpHost?.trim() || "127.0.0.1";
+  return `http://${host}:${value.httpPort ?? 8080}`;
+};
+
+/**
+ * Client-certificate material is all-or-nothing, and only means anything over
+ * https.
+ *
+ * A partial block cannot complete a handshake. A complete block against an
+ * `http://` base URL is worse than useless: undici performs no handshake on a
+ * plaintext origin and `ws` discards tls options on a `ws:` URL, so the gateway
+ * would ship plaintext while the operator believes it is presenting a
+ * certificate. Both are rejected here and again at request time.
  */
 const requireCompleteSignalTls = (params: {
-  value: SignalTlsKeys;
+  value: SignalTlsView;
   ctx: z.RefinementCtx;
   path: Array<string | number>;
   configPath: string;
 }) => {
   const present = SIGNAL_TLS_KEYS.filter((key) => Boolean(params.value[key]?.trim()));
-  if (present.length === 0 || present.length === SIGNAL_TLS_KEYS.length) {
+  if (present.length === 0) {
     return;
   }
-  const missing = SIGNAL_TLS_KEYS.filter((key) => !present.includes(key));
+  if (present.length !== SIGNAL_TLS_KEYS.length) {
+    const missing = SIGNAL_TLS_KEYS.filter((key) => !present.includes(key));
+    params.ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [...params.path, missing[0]],
+      message: `${params.configPath} requires all of tlsCaFile, tlsCertFile, tlsKeyFile when any is set (missing: ${missing.join(", ")})`,
+    });
+    return;
+  }
+  const baseUrl = resolveSignalBaseUrlForValidation(params.value);
+  if (/^https:\/\//i.test(baseUrl)) {
+    return;
+  }
   params.ctx.addIssue({
     code: z.ZodIssueCode.custom,
-    path: [...params.path, missing[0]],
-    message: `${params.configPath} requires all of tlsCaFile, tlsCertFile, tlsKeyFile when any is set (missing: ${missing.join(", ")})`,
+    path: [...params.path, "httpUrl"],
+    message: `${params.configPath} sets tlsCaFile/tlsCertFile/tlsKeyFile but resolves to "${baseUrl}"; client certificates are only presented over https. Set ${params.configPath}.httpUrl to the https:// endpoint of the TLS front.`,
   });
 };
+
+/** Does this account define any TLS key of its own (vs. inheriting all)? */
+const definesSignalTlsKey = (value: SignalTlsKeys): boolean =>
+  SIGNAL_TLS_KEYS.some((key) => Boolean(value[key]?.trim()));
 
 export const SignalConfigSchema = SignalAccountSchemaBase.extend({
   accounts: z.record(z.string(), SignalAccountSchema.optional()).optional(),
@@ -738,16 +776,29 @@ export const SignalConfigSchema = SignalAccountSchemaBase.extend({
     path: ["allowFrom"],
     message: 'channels.signal.dmPolicy="open" requires channels.signal.allowFrom to include "*"',
   });
-  requireCompleteSignalTls({ value, ctx, path: [], configPath: "channels.signal" });
-  for (const [accountId, account] of Object.entries(value.accounts ?? {})) {
-    if (!account) {
-      continue;
-    }
+  // `resolveSignalAccount` merges channel-level keys under account-level ones,
+  // so the channel block is only a config on its own when no account contributes
+  // to it. The shared-CA layout — tlsCaFile at channel level, cert/key per
+  // account — is deliberately valid, and judging the channel block standalone
+  // would reject it. When an account does define TLS keys, only merged views are
+  // judged, and a complete channel block is still scheme-checked because
+  // accounts absent from `accounts` inherit it wholesale.
+  const accountEntries = Object.entries(value.accounts ?? {}).flatMap(([accountId, account]) =>
+    account ? [[accountId, account] as const] : [],
+  );
+  const anyAccountDefinesTls = accountEntries.some(([, account]) => definesSignalTlsKey(account));
+  if (!anyAccountDefinesTls || SIGNAL_TLS_KEYS.every((key) => Boolean(value[key]?.trim()))) {
+    requireCompleteSignalTls({ value, ctx, path: [], configPath: "channels.signal" });
+  }
+  for (const [accountId, account] of accountEntries) {
     requireCompleteSignalTls({
       value: {
         tlsCaFile: account.tlsCaFile ?? value.tlsCaFile,
         tlsCertFile: account.tlsCertFile ?? value.tlsCertFile,
         tlsKeyFile: account.tlsKeyFile ?? value.tlsKeyFile,
+        httpUrl: account.httpUrl ?? value.httpUrl,
+        httpHost: account.httpHost ?? value.httpHost,
+        httpPort: account.httpPort ?? value.httpPort,
       },
       ctx,
       path: ["accounts", accountId],

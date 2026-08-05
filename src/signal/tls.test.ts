@@ -7,6 +7,7 @@ import {
   readSignalTlsMaterial,
   resetSignalTlsCachesForTests,
   resolveSignalTlsOptions,
+  signalTlsWsOptions,
   withSignalTlsDispatcher,
 } from "./tls.js";
 
@@ -107,16 +108,51 @@ describe("getSignalTlsDispatcher", () => {
 describe("withSignalTlsDispatcher", () => {
   it("returns the init untouched when TLS is not configured", () => {
     const init = { method: "GET" as const };
-    const result = withSignalTlsDispatcher(init, undefined);
+    const result = withSignalTlsDispatcher("http://signal-api:8080/v1/health", init, undefined);
     expect(result).toBe(init);
     expect(result).not.toHaveProperty("dispatcher");
   });
 
   it("attaches the cached dispatcher without disturbing the other init keys", () => {
     const init = { method: "POST" as const, headers: { "Content-Type": "application/json" } };
-    const result = withSignalTlsDispatcher(init, { caFile, certFile, keyFile });
+    const result = withSignalTlsDispatcher("https://signal-proxy:8443/v2/send", init, {
+      caFile,
+      certFile,
+      keyFile,
+    });
     expect(result.method).toBe("POST");
     expect(result.headers).toEqual({ "Content-Type": "application/json" });
     expect(result.dispatcher).toBe(getSignalTlsDispatcher({ caFile, certFile, keyFile }));
+  });
+
+  it("refuses a plaintext origin instead of silently dropping the certificate", () => {
+    expect(() =>
+      withSignalTlsDispatcher(
+        "http://signal-api:8080/v2/send",
+        { method: "POST" },
+        { caFile, certFile, keyFile },
+      ),
+    ).toThrow(/is not https/);
+  });
+});
+
+describe("signalTlsWsOptions", () => {
+  it("returns undefined when TLS is not configured", () => {
+    expect(signalTlsWsOptions("ws://signal-api:8080/v1/receive/x", undefined)).toBeUndefined();
+  });
+
+  it("returns the material for a wss url", () => {
+    const options = signalTlsWsOptions("wss://signal-proxy:8443/v1/receive/x", {
+      caFile,
+      certFile,
+      keyFile,
+    });
+    expect(options?.ca.toString()).toBe("ca-pem");
+  });
+
+  it("refuses a plaintext websocket instead of opening one without the certificate", () => {
+    expect(() =>
+      signalTlsWsOptions("ws://signal-api:8080/v1/receive/x", { caFile, certFile, keyFile }),
+    ).toThrow(/is not wss/);
   });
 });

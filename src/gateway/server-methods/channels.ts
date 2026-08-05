@@ -141,11 +141,21 @@ export const channelsHandlers: GatewayRequestHandlers = {
             configured = await plugin.config.isConfigured(account, cfg);
           }
           if (configured) {
-            probeResult = await plugin.status.probeAccount({
-              account,
-              timeoutMs,
-              cfg,
-            });
+            try {
+              probeResult = await plugin.status.probeAccount({
+                account,
+                timeoutMs,
+                cfg,
+              });
+            } catch (err) {
+              // A probe that throws (bad TLS material, malformed account config)
+              // must degrade to an unhealthy account, not fail the whole
+              // channels status response for every other channel.
+              probeResult = {
+                ok: false,
+                error: err instanceof Error ? err.message : String(err),
+              };
+            }
             lastProbeAt = Date.now();
           }
         }
