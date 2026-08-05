@@ -15,6 +15,8 @@ services:
       - ${OPENCLAW_CONFIG_DIR}:/home/node/.openclaw
       - ${OPENCLAW_WORKSPACE_DIR}:/home/node/.openclaw/workspace
       - ${SIGNAL_CLI_DATA_DIR}:/home/node/.local/share/signal-cli
+      # Phase-3: gateway client identity (CN=openclaw-gateway) for mTLS to signal-proxy.
+      - /home/ohio_/.signal-proxy/gateway:/certs/signal:ro
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
