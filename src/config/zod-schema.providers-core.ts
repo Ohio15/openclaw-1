@@ -783,52 +783,68 @@ export const SignalConfigSchema = SignalAccountSchemaBase.extend({
     path: ["allowFrom"],
     message: 'channels.signal.dmPolicy="open" requires channels.signal.allowFrom to include "*"',
   });
-  // `resolveSignalAccount` merges channel-level keys under account-level ones,
-  // so the channel block is only a config on its own when no account contributes
-  // to it. The shared-CA layout — tlsCaFile at channel level, cert/key per
-  // account — is deliberately valid, and judging the channel block standalone
-  // would reject it.
+  // `resolveSignalAccount` merges channel-level keys under account-level ones —
+  // and it synthesizes an account for EVERY id that is not listed under
+  // `accounts`, not just the "default" id an accountId-less send resolves to. A
+  // typo'd accountId, a routing key that outlived its account entry, and the
+  // implicit default all merge to the same thing: the bare channel block.
   //
-  // The catch is that `resolveSignalAccount` synthesizes an account for any id
-  // that is not listed under `accounts`, including the "default" id every
-  // accountId-less send resolves to. That synthetic account merges to the bare
-  // channel block, so a partial channel block is only safe when an explicit
-  // `accounts.default` entry completes it — otherwise the config validates green
-  // and then throws on the first default-path send.
+  // So the invariant is class-scoped, not instance-scoped. Guarding only
+  // `accounts.default` (as earlier revisions did) leaves every other unlisted id
+  // resolving to a transport view no validator ever inspected. Whenever any TLS
+  // material appears anywhere in the signal block, the bare channel block must
+  // itself be a complete, https-bound transport config; per-account keys may
+  // then only *override* it, never be the sole source of it. That makes the
+  // channel block the single validated fallback every synthesized account
+  // inherits, and it is what keeps this rule in exact contract with
+  // `resolveSignalTlsOptions`: no accepted config can resolve to a partial block
+  // (a runtime throw) or to silent plaintext while mTLS is configured elsewhere.
   const accountEntries = Object.entries(value.accounts ?? {}).flatMap(([accountId, account]) =>
     account ? [[accountId, account] as const] : [],
   );
   const anyAccountDefinesTls = accountEntries.some(([, account]) => definesSignalTlsKey(account));
   const channelTlsPresent = SIGNAL_TLS_KEYS.filter((key) => Boolean(value[key]?.trim()));
   const channelTlsComplete = channelTlsPresent.length === SIGNAL_TLS_KEYS.length;
-  if (!anyAccountDefinesTls || channelTlsComplete) {
+  if (anyAccountDefinesTls && !channelTlsComplete) {
+    const missing = SIGNAL_TLS_KEYS.filter((key) => !channelTlsPresent.includes(key));
+    const configuredOn = accountEntries
+      .filter(([, account]) => definesSignalTlsKey(account))
+      .map(([accountId]) => accountId);
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [missing[0]],
+      message: `channels.signal configures TLS on ${configuredOn.map((id) => `accounts.${id}`).join(", ")} but the channel-level block is incomplete (missing: ${missing.join(", ")}). Every accountId not listed under channels.signal.accounts — including the implicit "${SIGNAL_DEFAULT_ACCOUNT_ID}" used by accountId-less sends — resolves to the channel-level block verbatim, which would ${channelTlsPresent.length === 0 ? "silently fall back to plaintext" : "throw at send time"}. Set tlsCaFile, tlsCertFile and tlsKeyFile (and an https:// httpUrl) at channels.signal, then override per account as needed.`,
+    });
+  } else {
+    // Either no TLS anywhere (no-op) or a complete channel-level block, which
+    // still has to resolve to an https origin.
     requireCompleteSignalTls({ value, ctx, path: [], configPath: "channels.signal" });
-  } else if (channelTlsPresent.length > 0) {
-    // Partial channel block with per-account TLS: the implicit "default"
-    // account inherits the partial block verbatim unless it is listed.
-    const explicitDefault = value.accounts?.[SIGNAL_DEFAULT_ACCOUNT_ID];
-    const defaultIsComplete =
-      Boolean(explicitDefault) &&
-      SIGNAL_TLS_KEYS.every((key) => Boolean((explicitDefault?.[key] ?? value[key])?.trim()));
-    if (!defaultIsComplete) {
-      const missing = SIGNAL_TLS_KEYS.filter((key) => !channelTlsPresent.includes(key));
+  }
+  const anyTlsAnywhere = channelTlsPresent.length > 0 || anyAccountDefinesTls;
+  for (const [accountId, account] of accountEntries) {
+    // Mirrors `mergeSignalAccountConfig`: account keys shadow channel keys.
+    const merged: SignalTlsView = {
+      tlsCaFile: account.tlsCaFile ?? value.tlsCaFile,
+      tlsCertFile: account.tlsCertFile ?? value.tlsCertFile,
+      tlsKeyFile: account.tlsKeyFile ?? value.tlsKeyFile,
+      httpUrl: account.httpUrl ?? value.httpUrl,
+      httpHost: account.httpHost ?? value.httpHost,
+      httpPort: account.httpPort ?? value.httpPort,
+    };
+    // An account can blank an inherited TLS path with "" — `resolveSignalAccount`
+    // would then hand back a certless view and the send would go out in the
+    // clear against a block the operator configured for mTLS. Opting a single
+    // account out of TLS is not a supported layout; run a second channel for it.
+    if (anyTlsAnywhere && !definesSignalTlsKey(merged)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: [missing[0]],
-        message: `channels.signal TLS block is partial and unlisted accounts (including the implicit "${SIGNAL_DEFAULT_ACCOUNT_ID}" used by accountId-less sends) inherit it as-is (missing: ${missing.join(", ")}) — complete the channel-level block, or add an explicit channels.signal.accounts.${SIGNAL_DEFAULT_ACCOUNT_ID} entry completing it.`,
+        path: ["accounts", accountId, SIGNAL_TLS_KEYS[0]],
+        message: `channels.signal.accounts.${accountId} clears every TLS path while channels.signal configures TLS; that resolves to a plaintext transport. Remove the blank tlsCaFile/tlsCertFile/tlsKeyFile overrides, or point this account at a separate channel.`,
       });
+      continue;
     }
-  }
-  for (const [accountId, account] of accountEntries) {
     requireCompleteSignalTls({
-      value: {
-        tlsCaFile: account.tlsCaFile ?? value.tlsCaFile,
-        tlsCertFile: account.tlsCertFile ?? value.tlsCertFile,
-        tlsKeyFile: account.tlsKeyFile ?? value.tlsKeyFile,
-        httpUrl: account.httpUrl ?? value.httpUrl,
-        httpHost: account.httpHost ?? value.httpHost,
-        httpPort: account.httpPort ?? value.httpPort,
-      },
+      value: merged,
       ctx,
       path: ["accounts", accountId],
       configPath: `channels.signal.accounts.${accountId}`,

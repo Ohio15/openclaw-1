@@ -202,7 +202,7 @@ All three keys are required together — setting only some is a config error —
 
 They apply to every request the channel makes (send, health, `/v1/about`, `/v1/accounts`, attachment fetches) and to the `rest` receive WebSocket. The certificate files are read lazily on first use and then cached: a bad path surfaces as an error on the first request rather than at startup, and rotating certificates requires a gateway restart. Omit all three for the default plaintext transport.
 
-In a multi-account setup the keys merge the same way the rest of the section does, so a shared CA can live at the channel level with a per-account certificate:
+In a multi-account setup the keys merge the same way the rest of the section does, so a shared CA can live at the channel level with a per-account certificate. The channel-level block must still be a complete, `https://` transport on its own — accounts layer on top of it:
 
 ```json5
 {
@@ -210,8 +210,9 @@ In a multi-account setup the keys merge the same way the rest of the section doe
     signal: {
       httpUrl: "https://signal-proxy:8443",
       tlsCaFile: "/certs/ca.crt",
+      tlsCertFile: "/certs/default.crt",
+      tlsKeyFile: "/certs/default.key",
       accounts: {
-        default: { tlsCertFile: "/certs/default.crt", tlsKeyFile: "/certs/default.key" },
         alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
       },
     },
@@ -219,7 +220,11 @@ In a multi-account setup the keys merge the same way the rest of the section doe
 }
 ```
 
-The explicit `default` entry is required whenever the channel-level block is partial: any account id that is not listed — including the `default` one every send without an explicit account resolves to — inherits the channel block verbatim, and a partial block cannot present a certificate. Config validation rejects the layout without it.
+Why the channel-level block cannot be partial: OpenClaw synthesizes an account from the bare channel block for **every** account id that is not listed under `accounts` — the implicit `default` that accountId-less sends resolve to, a typo'd id, a routing key that outlived its account entry. Those ids never pass through per-account config, so whatever the channel block says is what they dial.
+
+Config validation therefore enforces a whole-block rule: **if any TLS key is set anywhere in `channels.signal` (channel level or any account), the channel-level block itself must carry all three of `tlsCaFile`/`tlsCertFile`/`tlsKeyFile` and resolve to an `https://` URL.** Per-account keys may only override that baseline; they may not be the sole source of it, and an account may not blank it back out. The guarantee is that no config which loads can resolve — for any account id, listed or not — to a plaintext transport or to a partial block that fails at send time.
+
+Concretely rejected: TLS on a named account with a plaintext (or TLS-less) channel block; a channel-level CA with the keypairs only on accounts, even when an explicit `accounts.default` completes it; an account whose overrides clear the inherited paths.
 
 ## Access control (DMs + groups)
 
