@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 import {
   normalizeTelegramCommandDescription,
   normalizeTelegramCommandName,
@@ -655,6 +656,9 @@ export const SignalAccountSchemaBase = z
     autoStart: z.boolean().optional(),
     startupTimeoutMs: z.number().int().min(1000).max(120000).optional(),
     transport: z.enum(["json-rpc", "rest"]).optional(),
+    tlsCaFile: z.string().optional(),
+    tlsCertFile: z.string().optional(),
+    tlsKeyFile: z.string().optional(),
     receiveMode: z.union([z.literal("on-start"), z.literal("manual")]).optional(),
     ignoreAttachments: z.boolean().optional(),
     ignoreStories: z.boolean().optional(),
@@ -695,8 +699,166 @@ export const SignalAccountSchema = SignalAccountSchemaBase.superRefine((value, c
   });
 });
 
+const SIGNAL_TLS_KEYS = ["tlsCaFile", "tlsCertFile", "tlsKeyFile"] as const;
+
+/**
+ * The id an accountId-less send resolves to, taken from the routing module that
+ * actually performs the resolution rather than restated here: this schema now
+ * has to agree with `normalizeAccountId` key-for-key, and a second copy of the
+ * default id is one more place for the two to drift apart.
+ */
+const SIGNAL_DEFAULT_ACCOUNT_ID = DEFAULT_ACCOUNT_ID;
+
+type SignalTlsKeys = Partial<Record<(typeof SIGNAL_TLS_KEYS)[number], string | undefined>>;
+
+type SignalTlsView = SignalTlsKeys & {
+  httpUrl?: string;
+  httpHost?: string;
+  httpPort?: number;
+};
+
+/**
+ * The base URL `resolveSignalAccount` derives at runtime. Kept in step with
+ * `src/signal/accounts.ts` — validating a different URL than the one the client
+ * dials would let a plaintext origin through.
+ *
+ * Exported for the contract test that asserts this derivation equals
+ * `resolveSignalAccount(...).baseUrl` for the same config: the https-vs-plaintext
+ * decision below is only as good as that equality, and a test that merely checks
+ * *which key* the issue lands on cannot see the two drifting apart.
+ */
+export const resolveSignalBaseUrlForValidation = (value: SignalTlsView): string => {
+  const explicit = value.httpUrl?.trim();
+  if (explicit) {
+    return explicit;
+  }
+  const host = value.httpHost?.trim() || "127.0.0.1";
+  return `http://${host}:${value.httpPort ?? 8080}`;
+};
+
+/**
+ * Client-certificate material is all-or-nothing, and only means anything over
+ * https.
+ *
+ * A partial block cannot complete a handshake. A complete block against an
+ * `http://` base URL is worse than useless: undici performs no handshake on a
+ * plaintext origin and `ws` discards tls options on a `ws:` URL, so the gateway
+ * would ship plaintext while the operator believes it is presenting a
+ * certificate. Both are rejected here and again at request time.
+ */
+const requireCompleteSignalTls = (params: {
+  value: SignalTlsView;
+  ctx: z.RefinementCtx;
+  path: Array<string | number>;
+  configPath: string;
+}) => {
+  const present = SIGNAL_TLS_KEYS.filter((key) => Boolean(params.value[key]?.trim()));
+  if (present.length === 0) {
+    return;
+  }
+  if (present.length !== SIGNAL_TLS_KEYS.length) {
+    const missing = SIGNAL_TLS_KEYS.filter((key) => !present.includes(key));
+    params.ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [...params.path, missing[0]],
+      message: `${params.configPath} requires all of tlsCaFile, tlsCertFile, tlsKeyFile when any is set (missing: ${missing.join(", ")})`,
+    });
+    return;
+  }
+  const baseUrl = resolveSignalBaseUrlForValidation(params.value);
+  if (/^https:\/\//i.test(baseUrl)) {
+    return;
+  }
+  params.ctx.addIssue({
+    code: z.ZodIssueCode.custom,
+    path: [...params.path, "httpUrl"],
+    message: `${params.configPath} sets tlsCaFile/tlsCertFile/tlsKeyFile but resolves to "${baseUrl}"; client certificates are only presented over https. Set ${params.configPath}.httpUrl to the https:// endpoint of the TLS front.`,
+  });
+};
+
+/** Does this account define any TLS key of its own (vs. inheriting all)? */
+const definesSignalTlsKey = (value: SignalTlsKeys): boolean =>
+  SIGNAL_TLS_KEYS.some((key) => Boolean(value[key]?.trim()));
+
+/**
+ * Can `key` exist as a plain own data property — i.e. can
+ * `accounts[normalizeAccountId(id)]` ever retrieve the entry the operator wrote?
+ *
+ * `__proto__` is the one string that answers no, and it is a `normalizeAccountId`
+ * fixed point, so a key check alone waves it through. Assigning it on a plain
+ * object invokes the `Object.prototype` setter instead of creating an own
+ * property; zod's record parse knows this and skips the key outright
+ * (`if (key === "__proto__") continue` in `_parseRecord`), so the entry is gone
+ * from the parsed value before any refinement of that value can see it. The
+ * config then loads green, every send for that id silently presents the
+ * CHANNEL-level client certificate, and the next `writeConfigFile` persists the
+ * config with the account block erased.
+ *
+ * Probing the assignment rather than hard-coding the known key keeps this tied to
+ * the mechanism instead of to zod's current implementation detail. `constructor`
+ * and `prototype` are ordinary own keys and stay accepted.
+ */
+const isRetrievableAccountKey = (key: string): boolean => {
+  const probe: Record<string, unknown> = {};
+  const marker = Symbol("account-key-probe");
+  try {
+    probe[key] = marker;
+  } catch {
+    return false;
+  }
+  return Object.hasOwn(probe, key) && probe[key] === marker;
+};
+
+/**
+ * The `accounts` keys have to be judged on the RAW object, before the record
+ * parse: a key the parse drops (see `isRetrievableAccountKey`) is not present in
+ * the value a `superRefine` receives, so a guard that runs later cannot fail a
+ * config it can no longer see.
+ */
+const checkSignalAccountKeys = (raw: unknown, ctx: z.RefinementCtx): void => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    // Wrong shape entirely — the record schema reports that.
+    return;
+  }
+  for (const accountId of Object.getOwnPropertyNames(raw)) {
+    if (!isRetrievableAccountKey(accountId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [accountId],
+        message: `channels.signal.accounts cannot use "${accountId}" as an account key: it is not a plain object key, so the entry is dropped while the config is parsed and the runtime lookup can never match it. The account would silently present the channel-level client certificate, and saving the config would erase this block. Rename it to a normalized account id (lowercase, only a-z 0-9 _ -, at most 64 characters).`,
+      });
+      continue;
+    }
+    // `resolveSignalAccount` normalizes the requested id (`normalizeAccountId`)
+    // and then indexes `accounts` with the normalized string, so a config key
+    // that is not already in normalized form — "Alerts", "ops.eu", "DEFAULT",
+    // anything over 64 characters — is dead config: it is validated as a
+    // complete per-account identity, and at runtime the lookup misses and the
+    // account silently inherits the channel-level client certificate. Wrong
+    // identity at the mTLS boundary, green config. Reject the key at the
+    // boundary instead of loosening the resolver's lookup.
+    const normalized = normalizeAccountId(accountId);
+    if (accountId === normalized) {
+      continue;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [accountId],
+      message: `channels.signal.accounts keys must already be in normalized account-id form (lowercase, only a-z 0-9 _ -, at most 64 characters); this key is never matched at runtime and its settings — including any TLS material — would be silently ignored. Rename it to "${normalized}".`,
+    });
+  }
+};
+
+const SignalAccountsSchema = z.preprocess(
+  (raw, ctx) => {
+    checkSignalAccountKeys(raw, ctx);
+    return raw;
+  },
+  z.record(z.string(), SignalAccountSchema.optional()),
+);
+
 export const SignalConfigSchema = SignalAccountSchemaBase.extend({
-  accounts: z.record(z.string(), SignalAccountSchema.optional()).optional(),
+  accounts: SignalAccountsSchema.optional(),
 }).superRefine((value, ctx) => {
   requireOpenAllowFrom({
     policy: value.dmPolicy,
@@ -705,6 +867,73 @@ export const SignalConfigSchema = SignalAccountSchemaBase.extend({
     path: ["allowFrom"],
     message: 'channels.signal.dmPolicy="open" requires channels.signal.allowFrom to include "*"',
   });
+  // `resolveSignalAccount` merges channel-level keys under account-level ones —
+  // and it synthesizes an account for EVERY id that is not listed under
+  // `accounts`, not just the "default" id an accountId-less send resolves to. A
+  // typo'd accountId, a routing key that outlived its account entry, and the
+  // implicit default all merge to the same thing: the bare channel block.
+  //
+  // So the invariant is class-scoped, not instance-scoped. Guarding only
+  // `accounts.default` (as earlier revisions did) leaves every other unlisted id
+  // resolving to a transport view no validator ever inspected. Whenever any TLS
+  // material appears anywhere in the signal block, the bare channel block must
+  // itself be a complete, https-bound transport config; per-account keys may
+  // then only *override* it, never be the sole source of it. That makes the
+  // channel block the single validated fallback every synthesized account
+  // inherits, and it is what keeps this rule in exact contract with
+  // `resolveSignalTlsOptions`: no accepted config can resolve to a partial block
+  // (a runtime throw) or to silent plaintext while mTLS is configured elsewhere.
+  //
+  // Keys the runtime cannot look up are rejected before this point, on the raw
+  // object — see `checkSignalAccountKeys`.
+  const accountEntries = Object.entries(value.accounts ?? {}).flatMap(([accountId, account]) =>
+    account ? [[accountId, account] as const] : [],
+  );
+  const anyAccountDefinesTls = accountEntries.some(([, account]) => definesSignalTlsKey(account));
+  const channelTlsPresent = SIGNAL_TLS_KEYS.filter((key) => Boolean(value[key]?.trim()));
+  const channelTlsComplete = channelTlsPresent.length === SIGNAL_TLS_KEYS.length;
+  if (anyAccountDefinesTls && !channelTlsComplete) {
+    const missing = SIGNAL_TLS_KEYS.filter((key) => !channelTlsPresent.includes(key));
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [missing[0]],
+      message: `channels.signal configures TLS under channels.signal.accounts but the channel-level block is incomplete (missing: ${missing.join(", ")}). Every accountId not listed under channels.signal.accounts — including the implicit "${SIGNAL_DEFAULT_ACCOUNT_ID}" used by accountId-less sends — resolves to the channel-level block verbatim, which would ${channelTlsPresent.length === 0 ? "silently fall back to plaintext" : "throw at send time"}. Set tlsCaFile, tlsCertFile and tlsKeyFile (and an https:// httpUrl) at channels.signal, then override per account as needed.`,
+    });
+  } else {
+    // Either no TLS anywhere (no-op) or a complete channel-level block, which
+    // still has to resolve to an https origin.
+    requireCompleteSignalTls({ value, ctx, path: [], configPath: "channels.signal" });
+  }
+  const anyTlsAnywhere = channelTlsPresent.length > 0 || anyAccountDefinesTls;
+  for (const [accountId, account] of accountEntries) {
+    // Mirrors `mergeSignalAccountConfig`: account keys shadow channel keys.
+    const merged: SignalTlsView = {
+      tlsCaFile: account.tlsCaFile ?? value.tlsCaFile,
+      tlsCertFile: account.tlsCertFile ?? value.tlsCertFile,
+      tlsKeyFile: account.tlsKeyFile ?? value.tlsKeyFile,
+      httpUrl: account.httpUrl ?? value.httpUrl,
+      httpHost: account.httpHost ?? value.httpHost,
+      httpPort: account.httpPort ?? value.httpPort,
+    };
+    // An account can blank an inherited TLS path with "" — `resolveSignalAccount`
+    // would then hand back a certless view and the send would go out in the
+    // clear against a block the operator configured for mTLS. Opting a single
+    // account out of TLS is not a supported layout; run a second channel for it.
+    if (anyTlsAnywhere && !definesSignalTlsKey(merged)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["accounts", accountId, SIGNAL_TLS_KEYS[0]],
+        message: `channels.signal.accounts.${accountId} clears every TLS path while channels.signal configures TLS; that resolves to a plaintext transport. Remove the blank tlsCaFile/tlsCertFile/tlsKeyFile overrides, or point this account at a separate channel.`,
+      });
+      continue;
+    }
+    requireCompleteSignalTls({
+      value: merged,
+      ctx,
+      path: ["accounts", accountId],
+      configPath: `channels.signal.accounts.${accountId}`,
+    });
+  }
 });
 
 export const IrcGroupSchema = z

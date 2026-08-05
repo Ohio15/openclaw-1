@@ -4,6 +4,7 @@ import type { OpenClawConfig } from "../../config/config.js";
 import type { DmPolicy, GroupPolicy, SignalReactionNotificationMode } from "../../config/types.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import type { SignalSender } from "../identity.js";
+import type { SignalTlsOptions } from "../tls.js";
 
 export type SignalEnvelope = {
   sourceNumber?: string | null;
@@ -87,6 +88,13 @@ export type SignalEventHandlerDeps = {
   ignoreAttachments: boolean;
   sendReadReceipts: boolean;
   readReceiptsViaDaemon: boolean;
+  /**
+   * Client-certificate material for an mTLS-fronted backend. Passed explicitly
+   * on every outbound call here because these all supply `baseUrl` + `account`,
+   * which makes `resolveSignalRpcContext` skip account resolution and therefore
+   * never read the TLS block from config.
+   */
+  tls?: SignalTlsOptions;
   fetchAttachment: (params: {
     baseUrl: string;
     account?: string;

@@ -201,14 +201,19 @@ describe("waitForSignalDaemonReady health path", () => {
     });
 
     await expect(check()).resolves.toEqual({ ok: true });
-    expect(signalCheckMock).toHaveBeenCalledWith("http://signal-api:8080", 1000, "rest");
+    expect(signalCheckMock).toHaveBeenCalledWith("http://signal-api:8080", 1000, "rest", undefined);
   });
 
   it("polls the daemon check path on the default json-rpc transport", async () => {
     const check = await captureReadinessCheck({ autoStart: true });
 
     await expect(check()).resolves.toEqual({ ok: true });
-    expect(signalCheckMock).toHaveBeenCalledWith("http://127.0.0.1:8080", 1000, "json-rpc");
+    expect(signalCheckMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8080",
+      1000,
+      "json-rpc",
+      undefined,
+    );
   });
 });
 

@@ -1,3 +1,4 @@
+import { getOwnProperty, setOwnProperty } from "../safe-object.js";
 import { isPlainObject } from "../utils.js";
 import { parseConfigPath, setConfigValueAtPath, unsetConfigValueAtPath } from "./config-paths.js";
 import type { OpenClawConfig } from "./types.js";
@@ -15,7 +16,7 @@ function mergeOverrides(base: unknown, override: unknown): unknown {
     if (value === undefined) {
       continue;
     }
-    next[key] = mergeOverrides((base as OverrideTree)[key], value);
+    setOwnProperty(next, key, mergeOverrides(getOwnProperty(base, key), value));
   }
   return next;
 }

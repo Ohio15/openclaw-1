@@ -2,6 +2,7 @@ import { createAccountListHelpers } from "../channels/plugins/account-helpers.js
 import type { OpenClawConfig } from "../config/config.js";
 import type { SignalAccountConfig } from "../config/types.js";
 import { normalizeAccountId } from "../routing/session-key.js";
+import { getOwnProperty } from "../safe-object.js";
 
 export type ResolvedSignalAccount = {
   accountId: string;
@@ -24,7 +25,13 @@ function resolveAccountConfig(
   if (!accounts || typeof accounts !== "object") {
     return undefined;
   }
-  return accounts[accountId] as SignalAccountConfig | undefined;
+  // Own-only: a bare `accounts[accountId]` lookup answers "__proto__" with
+  // `Object.prototype` and "constructor" with `Object` for any config that does
+  // not define those accounts, handing the merge a non-account object instead of
+  // falling through to the channel block.
+  return getOwnProperty(accounts as Record<string, unknown>, accountId) as
+    | SignalAccountConfig
+    | undefined;
 }
 
 function mergeSignalAccountConfig(cfg: OpenClawConfig, accountId: string): SignalAccountConfig {
@@ -32,7 +39,19 @@ function mergeSignalAccountConfig(cfg: OpenClawConfig, accountId: string): Signa
     accounts?: unknown;
   };
   const account = resolveAccountConfig(cfg, accountId) ?? {};
-  return { ...base, ...account };
+  // An own key whose value is `undefined` is an ABSENT override, not a request to
+  // clear the inherited value. A plain spread says otherwise, and the config
+  // validator does not: it merges this block with `account.x ?? channel.x`, so a
+  // spread here would hand back a view no validator inspected — an account with
+  // `tlsCertFile: undefined` over a complete channel block validates green and
+  // then throws at send time, and one with all three undefined slips past the
+  // blank-override guard and resolves certless. Filtering makes the runtime agree
+  // with the accepted-config contract; it only changes shapes that were already
+  // broken.
+  const overrides = Object.fromEntries(
+    Object.entries(account).filter(([, value]) => value !== undefined),
+  );
+  return { ...base, ...overrides };
 }
 
 export function resolveSignalAccount(params: {

@@ -1,9 +1,16 @@
 import { loadConfig } from "../config/config.js";
 import { resolveSignalAccount } from "./accounts.js";
 import type { SignalTransport } from "./client.js";
+import { resolveSignalTlsOptions, type SignalTlsOptions } from "./tls.js";
 
 export function resolveSignalRpcContext(
-  opts: { baseUrl?: string; account?: string; accountId?: string; transport?: SignalTransport },
+  opts: {
+    baseUrl?: string;
+    account?: string;
+    accountId?: string;
+    transport?: SignalTransport;
+    tls?: SignalTlsOptions;
+  },
   accountInfo?: ReturnType<typeof resolveSignalAccount>,
 ) {
   const hasBaseUrl = Boolean(opts.baseUrl?.trim());
@@ -23,5 +30,9 @@ export function resolveSignalRpcContext(
   const account = opts.account?.trim() || resolvedAccount?.config.account?.trim();
   const transport: SignalTransport =
     opts.transport ?? resolvedAccount?.config.transport ?? "json-rpc";
-  return { baseUrl, account, transport };
+  // Callers that already know both baseUrl and account skip account resolution
+  // above, so they must pass `tls` explicitly or the request would fall back to
+  // a plaintext client against an mTLS front.
+  const tls = opts.tls ?? resolveSignalTlsOptions(resolvedAccount?.config);
+  return { baseUrl, account, transport, tls };
 }

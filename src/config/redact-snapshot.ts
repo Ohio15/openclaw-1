@@ -1,4 +1,5 @@
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { getOwnProperty, hasOwnKey, setOwnProperty } from "../safe-object.js";
 import { isSensitiveConfigPath, type ConfigUiHints } from "./schema.hints.js";
 import type { ConfigFileSnapshot } from "./types.openclaw.js";
 
@@ -151,15 +152,19 @@ function redactObjectWithLookup(
       const wildcardPath = prefix ? `${prefix}.*` : "*";
       let matched = false;
       for (const candidate of [path, wildcardPath]) {
-        result[key] = value;
+        setOwnProperty(result, key, value);
         if (lookup.has(candidate)) {
           matched = true;
           // Hey, greptile, look here, this **IS** only applied to strings
           if (typeof value === "string" && !isEnvVarPlaceholder(value)) {
-            result[key] = REDACTED_SENTINEL;
+            setOwnProperty(result, key, REDACTED_SENTINEL);
             values.push(value);
           } else if (typeof value === "object" && value !== null) {
-            result[key] = redactObjectWithLookup(value, lookup, candidate, values, hints);
+            setOwnProperty(
+              result,
+              key,
+              redactObjectWithLookup(value, lookup, candidate, values, hints),
+            );
           }
           break;
         }
@@ -172,10 +177,10 @@ function redactObjectWithLookup(
           isSensitivePath(path) &&
           !isEnvVarPlaceholder(value)
         ) {
-          result[key] = REDACTED_SENTINEL;
+          setOwnProperty(result, key, REDACTED_SENTINEL);
           values.push(value);
         } else if (typeof value === "object" && value !== null) {
-          result[key] = redactObjectGuessing(value, path, values, hints);
+          setOwnProperty(result, key, redactObjectGuessing(value, path, values, hints));
         }
       }
     }
@@ -226,12 +231,12 @@ function redactObjectGuessing(
         typeof value === "string" &&
         !isEnvVarPlaceholder(value)
       ) {
-        result[key] = REDACTED_SENTINEL;
+        setOwnProperty(result, key, REDACTED_SENTINEL);
         values.push(value);
       } else if (typeof value === "object" && value !== null) {
-        result[key] = redactObjectGuessing(value, dotPath, values, hints);
+        setOwnProperty(result, key, redactObjectGuessing(value, dotPath, values, hints));
       } else {
-        result[key] = value;
+        setOwnProperty(result, key, value);
       }
     }
     return result;
@@ -377,8 +382,11 @@ function restoreOriginalValueOrThrow(params: {
   path: string;
   original: Record<string, unknown>;
 }): unknown {
-  if (params.key in params.original) {
-    return params.original[params.key];
+  // Own-only: `key in original` is true for "__proto__" on every object, so the
+  // sentinel would be "restored" to `Object.prototype` instead of reporting that
+  // there is no original value to restore.
+  if (hasOwnKey(params.original, params.key)) {
+    return getOwnProperty(params.original, params.key);
   }
   log.warn(`Cannot un-redact config key ${params.path} as it doesn't have any value`);
   throw new RedactionError(params.path);
@@ -430,7 +438,7 @@ function restoreRedactedValuesWithLookup(
       : {};
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(incoming as Record<string, unknown>)) {
-    result[key] = value;
+    setOwnProperty(result, key, value);
     const path = prefix ? `${prefix}.${key}` : key;
     const wildcardPath = prefix ? `${prefix}.*` : "*";
     let matched = false;
@@ -438,9 +446,23 @@ function restoreRedactedValuesWithLookup(
       if (lookup.has(candidate)) {
         matched = true;
         if (value === REDACTED_SENTINEL) {
-          result[key] = restoreOriginalValueOrThrow({ key, path: candidate, original: orig });
+          setOwnProperty(
+            result,
+            key,
+            restoreOriginalValueOrThrow({ key, path: candidate, original: orig }),
+          );
         } else if (typeof value === "object" && value !== null) {
-          result[key] = restoreRedactedValuesWithLookup(value, orig[key], lookup, candidate, hints);
+          setOwnProperty(
+            result,
+            key,
+            restoreRedactedValuesWithLookup(
+              value,
+              getOwnProperty(orig, key),
+              lookup,
+              candidate,
+              hints,
+            ),
+          );
         }
         break;
       }
@@ -448,9 +470,13 @@ function restoreRedactedValuesWithLookup(
     if (!matched && isExtensionPath(path)) {
       const markedNonSensitive = isExplicitlyNonSensitivePath(hints, [path, wildcardPath]);
       if (!markedNonSensitive && isSensitivePath(path) && value === REDACTED_SENTINEL) {
-        result[key] = restoreOriginalValueOrThrow({ key, path, original: orig });
+        setOwnProperty(result, key, restoreOriginalValueOrThrow({ key, path, original: orig }));
       } else if (typeof value === "object" && value !== null) {
-        result[key] = restoreRedactedValuesGuessing(value, orig[key], path, hints);
+        setOwnProperty(
+          result,
+          key,
+          restoreRedactedValuesGuessing(value, getOwnProperty(orig, key), path, hints),
+        );
       }
     }
   }
@@ -507,11 +533,15 @@ function restoreRedactedValuesGuessing(
       isSensitivePath(path) &&
       value === REDACTED_SENTINEL
     ) {
-      result[key] = restoreOriginalValueOrThrow({ key, path, original: orig });
+      setOwnProperty(result, key, restoreOriginalValueOrThrow({ key, path, original: orig }));
     } else if (typeof value === "object" && value !== null) {
-      result[key] = restoreRedactedValuesGuessing(value, orig[key], path, hints);
+      setOwnProperty(
+        result,
+        key,
+        restoreRedactedValuesGuessing(value, getOwnProperty(orig, key), path, hints),
+      );
     } else {
-      result[key] = value;
+      setOwnProperty(result, key, value);
     }
   }
   return result;

@@ -14,6 +14,8 @@
  * resolves to), the new value is kept as-is.
  */
 
+import { getOwnProperty, hasOwnKey, setOwnProperty } from "../safe-object.js";
+
 const ENV_VAR_PATTERN = /\$\{[A-Z_][A-Z0-9_]*\}/;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -126,11 +128,11 @@ export function restoreEnvVarRefs(
   if (isPlainObject(incoming) && isPlainObject(parsed)) {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(incoming)) {
-      if (key in parsed) {
-        result[key] = restoreEnvVarRefs(value, parsed[key], env);
+      if (hasOwnKey(parsed, key)) {
+        setOwnProperty(result, key, restoreEnvVarRefs(value, getOwnProperty(parsed, key), env));
       } else {
         // New key added by caller — keep as-is
-        result[key] = value;
+        setOwnProperty(result, key, value);
       }
     }
     return result;

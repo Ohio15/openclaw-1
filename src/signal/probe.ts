@@ -6,6 +6,7 @@ import {
   signalRpcRequest,
   type SignalTransport,
 } from "./client.js";
+import type { SignalTlsOptions } from "./tls.js";
 
 export type SignalProbe = BaseProbeResult & {
   status?: number | null;
@@ -85,12 +86,15 @@ function warnMissingTransportOnce(): void {
  *
  * @param account E.164 sender number. Required on the "rest" transport;
  *   ignored on "json-rpc", whose behavior is unchanged.
+ * @param tls Client-certificate material when the backend sits behind an mTLS
+ *   front. Omitted on plaintext deployments, where every request is unchanged.
  */
 export async function probeSignal(
   baseUrl: string,
   timeoutMs: number,
   transport?: SignalTransport,
   account?: string | null,
+  tls?: SignalTlsOptions,
 ): Promise<SignalProbe> {
   if (!transport) {
     warnMissingTransportOnce();
@@ -105,7 +109,7 @@ export async function probeSignal(
     version: null,
     versionSource: null,
   };
-  const check = await signalCheck(baseUrl, timeoutMs, resolvedTransport);
+  const check = await signalCheck(baseUrl, timeoutMs, resolvedTransport, tls);
   if (!check.ok) {
     return {
       ...result,
@@ -130,7 +134,7 @@ export async function probeSignal(
     }
     let registered: string[];
     try {
-      registered = await signalRestAccounts(baseUrl, timeoutMs);
+      registered = await signalRestAccounts(baseUrl, timeoutMs, tls);
     } catch (err) {
       // Fail closed: an unreadable account list is not evidence of health.
       return {
@@ -157,10 +161,11 @@ export async function probeSignal(
     // `version` to /api/v1/rpc 404s there. Its build info is on GET /v1/about.
     const version =
       resolvedTransport === "rest"
-        ? await signalRestAbout(baseUrl, timeoutMs)
+        ? await signalRestAbout(baseUrl, timeoutMs, tls)
         : await signalRpcRequest("version", undefined, {
             baseUrl,
             timeoutMs,
+            tls,
           });
     result.version = parseSignalVersion(version);
     result.versionSource = result.version

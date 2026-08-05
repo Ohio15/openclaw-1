@@ -58,7 +58,12 @@ describe("probeSignal", () => {
 
     await probeSignal("http://127.0.0.1:8080", 1000);
 
-    expect(signalCheckMock).toHaveBeenCalledWith("http://127.0.0.1:8080", 1000, "json-rpc");
+    expect(signalCheckMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:8080",
+      1000,
+      "json-rpc",
+      undefined,
+    );
     expect(signalRestAboutMock).not.toHaveBeenCalled();
   });
 
@@ -68,7 +73,7 @@ describe("probeSignal", () => {
 
     const res = await probeSignal("http://signal-api:8080", 1000, "rest", ACCOUNT);
 
-    expect(signalCheckMock).toHaveBeenCalledWith("http://signal-api:8080", 1000, "rest");
+    expect(signalCheckMock).toHaveBeenCalledWith("http://signal-api:8080", 1000, "rest", undefined);
     expect(res.ok).toBe(true);
     expect(res.status).toBe(204);
   });
@@ -79,7 +84,7 @@ describe("probeSignal", () => {
 
     const res = await probeSignal("http://signal-api:8080", 1000, "rest", ACCOUNT);
 
-    expect(signalRestAboutMock).toHaveBeenCalledWith("http://signal-api:8080", 1000);
+    expect(signalRestAboutMock).toHaveBeenCalledWith("http://signal-api:8080", 1000, undefined);
     // POST /api/v1/rpc does not exist on signal-cli-rest-api; never call it.
     expect(signalRpcRequestMock).not.toHaveBeenCalled();
     expect(res.version).toBe("0.98");
@@ -154,7 +159,7 @@ describe("probeSignal rest account assertion", () => {
 
     const res = await probeSignal("http://signal-api:8080", 1000, "rest", ACCOUNT);
 
-    expect(signalRestAccountsMock).toHaveBeenCalledWith("http://signal-api:8080", 1000);
+    expect(signalRestAccountsMock).toHaveBeenCalledWith("http://signal-api:8080", 1000, undefined);
     expect(res.ok).toBe(true);
     expect(res.error).toBe(null);
   });

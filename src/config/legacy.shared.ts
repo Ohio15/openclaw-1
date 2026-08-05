@@ -11,6 +11,7 @@ export type LegacyConfigMigration = {
 };
 
 import { isSafeExecutableValue } from "../infra/exec-safety.js";
+import { getOwnProperty, setOwnProperty } from "../safe-object.js";
 import { isRecord } from "../utils.js";
 export { isRecord };
 
@@ -21,12 +22,15 @@ export const ensureRecord = (
   root: Record<string, unknown>,
   key: string,
 ): Record<string, unknown> => {
-  const existing = root[key];
+  // Own-only read: `root["__proto__"]` on an object that does not own the key
+  // yields `Object.prototype`, which `isRecord` accepts — the migration would
+  // then write the legacy block onto the prototype of every plain object.
+  const existing = getOwnProperty(root, key);
   if (isRecord(existing)) {
     return existing;
   }
   const next: Record<string, unknown> = {};
-  root[key] = next;
+  setOwnProperty(root, key, next);
   return next;
 };
 
@@ -35,9 +39,9 @@ export const mergeMissing = (target: Record<string, unknown>, source: Record<str
     if (value === undefined) {
       continue;
     }
-    const existing = target[key];
+    const existing = getOwnProperty(target, key);
     if (existing === undefined) {
-      target[key] = value;
+      setOwnProperty(target, key, value);
       continue;
     }
     if (isRecord(existing) && isRecord(value)) {

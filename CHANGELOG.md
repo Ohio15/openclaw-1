@@ -4,6 +4,10 @@ Docs: https://docs.openclaw.ai
 
 ## 2026.2.16 (Unreleased)
 
+### Breaking
+
+- Signal: `channels.signal.accounts` keys must be written in normalized account-id form — lowercase, only `a-z`, `0-9`, `_` and `-`, at most 64 characters — and a key that cannot exist as a plain object key (`__proto__`) is rejected outright. A config carrying such a key now fails to load instead of loading with the entry ignored: the key is preserved as a genuine own property through the entire read pipeline — `$include` resolution and `${VAR}` substitution included — so it reaches validation and is rejected at `channels.signal.accounts.__proto__` rather than being silently dropped before validation runs. Nothing that worked before stops working: OpenClaw normalizes an account id before looking it up under `accounts`, so keys like `Alerts`, `ops.eu` or `DEFAULT` were never matched at runtime and their settings — TLS material included — were already being silently ignored, with the account falling back to the channel-level client certificate. Rename affected keys to their normalized spelling (`alerts`, `ops-eu`, `default`); the error message names the replacement.
+
 ### Changes
 
 - Agents/Subagents: add an accepted response note for `sessions_spawn` explaining polling subagents are disabled for one-off calls. Thanks @tyler6204.

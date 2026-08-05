@@ -179,6 +179,57 @@ If you want to manage `signal-cli` yourself (slow JVM cold starts, container ini
 
 This skips auto-spawn and the startup wait inside OpenClaw. For slow starts when auto-spawning, set `channels.signal.startupTimeoutMs`.
 
+## Client certificates (mTLS)
+
+If the backend sits behind a TLS proxy that requires a client certificate (for example an nginx sidecar in front of `signal-cli-rest-api` with `ssl_verify_client on`), point OpenClaw at the proxy and give it the certificate material:
+
+```json5
+{
+  channels: {
+    signal: {
+      transport: "rest",
+      httpUrl: "https://signal-proxy:8443",
+      autoStart: false,
+      tlsCaFile: "/certs/ca.crt",
+      tlsCertFile: "/certs/openclaw.crt",
+      tlsKeyFile: "/certs/openclaw.key",
+    },
+  },
+}
+```
+
+All three keys are required together — setting only some is a config error — and the base URL must be `https://`, since a client certificate is never presented over plaintext. Both rules are enforced at config load and again at request time.
+
+They apply to every request the channel makes (send, health, `/v1/about`, `/v1/accounts`, attachment fetches) and to the `rest` receive WebSocket. The certificate files are read lazily on first use and then cached: a bad path surfaces as an error on the first request rather than at startup, and rotating certificates requires a gateway restart. Omit all three for the default plaintext transport.
+
+In a multi-account setup the keys merge the same way the rest of the section does, so a shared CA can live at the channel level with a per-account certificate. The channel-level block must still be a complete, `https://` transport on its own — accounts layer on top of it:
+
+```json5
+{
+  channels: {
+    signal: {
+      httpUrl: "https://signal-proxy:8443",
+      tlsCaFile: "/certs/ca.crt",
+      tlsCertFile: "/certs/default.crt",
+      tlsKeyFile: "/certs/default.key",
+      accounts: {
+        alerts: { tlsCertFile: "/certs/alerts.crt", tlsKeyFile: "/certs/alerts.key" },
+      },
+    },
+  },
+}
+```
+
+Why the channel-level block cannot be partial: OpenClaw synthesizes an account from the bare channel block for **every** account id that is not listed under `accounts` — the implicit `default` that accountId-less sends resolve to, a typo'd id, a routing key that outlived its account entry. Those ids never pass through per-account config, so whatever the channel block says is what they dial.
+
+Config validation therefore enforces a whole-block rule: **if any TLS key is set anywhere in `channels.signal` (channel level or any account), the channel-level block itself must carry all three of `tlsCaFile`/`tlsCertFile`/`tlsKeyFile` and resolve to an `https://` URL.** Per-account keys may only override that baseline; they may not be the sole source of it, and an account may not blank it back out. The guarantee is that no config which loads can resolve — for any account id, listed or not — to a plaintext transport or to a partial block that fails at send time.
+
+Account keys must also be written in normalized account-id form: lowercase, only `a-z`, `0-9`, `_` and `-`, at most 64 characters. OpenClaw normalizes an incoming account id before looking it up under `accounts`, so a key like `Alerts`, `ops.eu` or `DEFAULT` is never matched — its settings, TLS material included, would be silently ignored and the account would present the channel-level certificate instead. Such keys are rejected at config load; use the normalized spelling (`alerts`, `ops-eu`, `default`). The same applies to `__proto__`, which survives normalization unchanged but cannot exist as a plain-object entry at all: left unchecked it is dropped while the config is parsed, so the account would present the channel-level certificate and saving the config would erase the block. It is rejected before that drop — the config read pipeline (`$include` resolution and `${VAR}` substitution) preserves the key as a genuine own property all the way to validation, and validation fails it at `channels.signal.accounts.__proto__` rather than silently discarding it.
+
+> **Migration:** this is a load-breaking change for configs that already contain such a key. It does not change any behaviour that worked before — those keys were never matched at runtime, so their settings were already being ignored — but a config that used to load with the entry inert now fails to load until the key is renamed. The error names the normalized spelling to use.
+
+Concretely rejected: TLS on a named account with a plaintext (or TLS-less) channel block; a channel-level CA with the keypairs only on accounts, even when an explicit `accounts.default` completes it; an account whose overrides clear the inherited paths; an `accounts` key that is not already in normalized form.
+
 ## Access control (DMs + groups)
 
 DMs:
@@ -302,6 +353,7 @@ Provider options:
 - `channels.signal.httpUrl`: full daemon URL (overrides host/port).
 - `channels.signal.httpHost`, `channels.signal.httpPort`: daemon bind (default 127.0.0.1:8080).
 - `channels.signal.autoStart`: auto-spawn daemon (default true if `httpUrl` unset).
+- `channels.signal.tlsCaFile`, `channels.signal.tlsCertFile`, `channels.signal.tlsKeyFile`: client-certificate material for an mTLS-fronted backend (all three required together; unset = plaintext).
 - `channels.signal.startupTimeoutMs`: startup wait timeout in ms (cap 120000).
 - `channels.signal.receiveMode`: `on-start | manual`.
 - `channels.signal.ignoreAttachments`: skip attachment downloads.

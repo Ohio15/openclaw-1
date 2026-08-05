@@ -6,6 +6,7 @@ import { resolveSignalAccount } from "./accounts.js";
 import { signalRpcRequest, type SignalTransport } from "./client.js";
 import { markdownToSignalText, type SignalTextStyleRange } from "./format.js";
 import { resolveSignalRpcContext } from "./rpc-context.js";
+import type { SignalTlsOptions } from "./tls.js";
 
 export type SignalSendOpts = {
   baseUrl?: string;
@@ -19,6 +20,12 @@ export type SignalSendOpts = {
   textStyles?: SignalTextStyleRange[];
   /** Override account-level transport choice. Default: account config. */
   transport?: SignalTransport;
+  /**
+   * Client-certificate material for an mTLS-fronted backend. Required from
+   * callers that pass both `baseUrl` and `account` (those skip account
+   * resolution, so the config's TLS block is never read for them).
+   */
+  tls?: SignalTlsOptions;
 };
 
 export type SignalSendResult = {
@@ -26,7 +33,10 @@ export type SignalSendResult = {
   timestamp?: number;
 };
 
-export type SignalRpcOpts = Pick<SignalSendOpts, "baseUrl" | "account" | "accountId" | "timeoutMs">;
+export type SignalRpcOpts = Pick<
+  SignalSendOpts,
+  "baseUrl" | "account" | "accountId" | "timeoutMs" | "tls"
+>;
 
 export type SignalReceiptType = "read" | "viewed";
 
@@ -107,7 +117,7 @@ export async function sendMessageSignal(
     cfg,
     accountId: opts.accountId,
   });
-  const { baseUrl, account, transport } = resolveSignalRpcContext(opts, accountInfo);
+  const { baseUrl, account, transport, tls } = resolveSignalRpcContext(opts, accountInfo);
   const target = parseTarget(to);
   let message = text ?? "";
   let messageFromPlaceholder = false;
@@ -186,6 +196,7 @@ export async function sendMessageSignal(
     baseUrl,
     timeoutMs: opts.timeoutMs,
     transport,
+    tls,
   });
   const timestamp = result?.timestamp;
   return {
@@ -198,7 +209,7 @@ export async function sendTypingSignal(
   to: string,
   opts: SignalRpcOpts & { stop?: boolean } = {},
 ): Promise<boolean> {
-  const { baseUrl, account } = resolveSignalRpcContext(opts);
+  const { baseUrl, account, tls } = resolveSignalRpcContext(opts);
   const targetParams = buildTargetParams(parseTarget(to), {
     recipient: true,
     group: true,
@@ -216,6 +227,7 @@ export async function sendTypingSignal(
   await signalRpcRequest("sendTyping", params, {
     baseUrl,
     timeoutMs: opts.timeoutMs,
+    tls,
   });
   return true;
 }
@@ -228,7 +240,7 @@ export async function sendReadReceiptSignal(
   if (!Number.isFinite(targetTimestamp) || targetTimestamp <= 0) {
     return false;
   }
-  const { baseUrl, account } = resolveSignalRpcContext(opts);
+  const { baseUrl, account, tls } = resolveSignalRpcContext(opts);
   const targetParams = buildTargetParams(parseTarget(to), {
     recipient: true,
   });
@@ -246,6 +258,7 @@ export async function sendReadReceiptSignal(
   await signalRpcRequest("sendReceipt", params, {
     baseUrl,
     timeoutMs: opts.timeoutMs,
+    tls,
   });
   return true;
 }
