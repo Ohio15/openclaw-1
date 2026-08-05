@@ -1,8 +1,12 @@
+import JSON5 from "json5";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
 import { listSignalAccountIds, resolveSignalAccount } from "../signal/accounts.js";
 import { resolveSignalTlsOptions } from "../signal/tls.js";
 import { validateConfigObject } from "./config.js";
+import { applyMergePatch } from "./merge-patch.js";
+import { restoreRedactedValues } from "./redact-snapshot.js";
+import { resolveSignalBaseUrlForValidation } from "./zod-schema.providers-core.js";
 
 function expectValidConfig(result: ReturnType<typeof validateConfigObject>) {
   expect(result.ok).toBe(true);
@@ -350,6 +354,23 @@ describe("config signal mTLS validator/runtime consistency", () => {
         },
       },
     },
+    {
+      // An own key whose value is `undefined`: the validator reads it as an
+      // absent override (`account.x ?? channel.x`), so the resolver has to as
+      // well. A plain spread would blank the inherited path instead and this
+      // shape would resolve to a partial block that throws at send time.
+      name: "account overrides present but undefined",
+      signal: {
+        httpUrl: "https://signal-proxy:8443",
+        tlsCaFile: "/certs/ca.crt",
+        tlsCertFile: "/certs/default.crt",
+        tlsKeyFile: "/certs/default.key",
+        accounts: {
+          ops: { tlsCertFile: undefined },
+          alerts: { tlsCaFile: undefined, tlsCertFile: undefined, tlsKeyFile: undefined },
+        },
+      },
+    },
   ];
 
   // Shapes that resolve, for at least one reachable accountId, to a transport
@@ -622,6 +643,15 @@ describe("config signal mTLS validator/runtime consistency", () => {
         }
         const merged = resolved.config as RawBlock;
         for (const [key, want] of Object.entries(entry)) {
+          if (want === undefined) {
+            // An own key set to `undefined` is an ABSENT override, not a request
+            // to clear the inherited value — the same reading the schema's `??`
+            // merge takes. It must inherit, not blank out.
+            expect(merged[key], `${accountId}.${key} (undefined override)`).toEqual(
+              bareChannelView[key],
+            );
+            continue;
+          }
           // Every key the entry declares survives the merge — proof the lookup
           // found THIS entry rather than falling through to the channel block.
           expect(merged[key], `${accountId}.${key}`).toEqual(want);
@@ -668,5 +698,295 @@ describe("config signal mTLS validator/runtime consistency", () => {
       certFile: "/certs/alerts.crt",
       keyFile: "/certs/alerts.key",
     });
+  });
+});
+
+// `normalizeAccountId` is not the whole reachability story: a key can survive
+// normalization unchanged and still never exist as an entry. `__proto__` is that
+// key — assigning it on a plain object drives the `Object.prototype` setter
+// instead of creating an own property, so the record parse drops it, the config
+// loads green, every send for that id presents the CHANNEL-level client
+// certificate, and the next config write persists the block erased.
+describe("config signal accounts keys that cannot exist as entries", () => {
+  const CHANNEL_BLOCK = `
+      httpUrl: "https://signal-proxy:8443",
+      tlsCaFile: "/certs/ca.crt",
+      tlsCertFile: "/certs/default.crt",
+      tlsKeyFile: "/certs/default.key",`;
+
+  // The real file path: JSON5 keeps "__proto__" as an own key of the parsed
+  // object, exactly as `parseConfigJson5` hands it to validation. Building the
+  // fixture with an object literal would set the prototype instead and test
+  // nothing.
+  const configFromJson5 = (accountsBody: string): unknown =>
+    JSON5.parse(`{
+  channels: {
+    signal: {${CHANNEL_BLOCK}
+      accounts: { ${accountsBody} },
+    },
+  },
+}`);
+
+  const signalAccountsOf = (config: unknown): object =>
+    (config as { channels: { signal: { accounts: object } } }).channels.signal.accounts;
+
+  it("rejects an accounts key the record parse would silently drop", () => {
+    const raw = configFromJson5(
+      `"__proto__": { tlsCertFile: "/certs/scoped.crt", tlsKeyFile: "/certs/scoped.key" }`,
+    );
+    // The premise: the key really is an own key of the parsed document, so the
+    // fence has to run before the record parse discards it.
+    expect(Object.hasOwn(signalAccountsOf(raw), "__proto__")).toBe(true);
+    expect(normalizeAccountId("__proto__")).toBe("__proto__");
+
+    const issues = expectInvalidConfig(validateConfigObject(raw));
+    expect(issues.map((issue) => issue.path)).toContain("channels.signal.accounts.__proto__");
+  });
+
+  it("keeps accounts keys that ARE ordinary own keys", () => {
+    // The fence is about retrievability, not about unusual-looking names:
+    // "constructor" and "prototype" are plain own keys and must still resolve to
+    // their own entries, not to the channel-level certificate.
+    const cfg = expectValidConfig(
+      validateConfigObject(
+        configFromJson5(
+          `constructor: { tlsCertFile: "/certs/ctor.crt", tlsKeyFile: "/certs/ctor.key" },
+           prototype: { tlsCertFile: "/certs/proto.crt", tlsKeyFile: "/certs/proto.key" }`,
+        ),
+      ),
+    );
+
+    expect(
+      resolveSignalTlsOptions(resolveSignalAccount({ cfg, accountId: "constructor" }).config),
+    ).toEqual({
+      caFile: "/certs/ca.crt",
+      certFile: "/certs/ctor.crt",
+      keyFile: "/certs/ctor.key",
+    });
+    expect(
+      resolveSignalTlsOptions(resolveSignalAccount({ cfg, accountId: "prototype" }).config),
+    ).toEqual({
+      caFile: "/certs/ca.crt",
+      certFile: "/certs/proto.crt",
+      keyFile: "/certs/proto.key",
+    });
+  });
+
+  it("reaches the same fence through the config.patch merge pipeline", () => {
+    // config.patch parses operator JSON5, merges it over the stored config and
+    // un-redacts it before validating. Every one of those walkers rebuilds
+    // objects key by key, and a plain assignment would drop the key again —
+    // silently discarding the operator's edit while the RPC reports success.
+    const base = {
+      channels: {
+        signal: {
+          httpUrl: "https://signal-proxy:8443",
+          tlsCaFile: "/certs/ca.crt",
+          tlsCertFile: "/certs/default.crt",
+          tlsKeyFile: "/certs/default.key",
+          accounts: { ops: { tlsCertFile: "/certs/ops.crt", tlsKeyFile: "/certs/ops.key" } },
+        },
+      },
+    };
+    const patch = JSON5.parse(
+      `{ channels: { signal: { accounts: { "__proto__": { tlsCertFile: "/certs/scoped.crt", tlsKeyFile: "/certs/scoped.key" } } } } }`,
+    );
+
+    const merged = applyMergePatch(base, patch, { mergeObjectArraysById: true });
+    const mergedAccounts = signalAccountsOf(merged);
+    expect(Object.hasOwn(mergedAccounts, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(mergedAccounts)).toBe(Object.prototype);
+
+    const restored = restoreRedactedValues(merged, base, {});
+    expect(restored.ok).toBe(true);
+    expect(Object.hasOwn(signalAccountsOf(restored.result), "__proto__")).toBe(true);
+
+    const issues = expectInvalidConfig(validateConfigObject(restored.result));
+    expect(issues.map((issue) => issue.path)).toContain("channels.signal.accounts.__proto__");
+  });
+});
+
+// `resolveSignalBaseUrlForValidation` is the https-vs-plaintext decision point:
+// every mTLS rejection above is computed from the URL it derives. Asserting only
+// which key an issue lands on leaves that derivation unpinned — a mutant that
+// drops the port, or changes the default port, keeps every issue path intact.
+//
+// So this fence asserts the CONTRACT directly, between the two real
+// implementations: the URL the validator derives from a merged view must equal
+// the URL `resolveSignalAccount` hands the client for the same config, and both
+// must equal a literal (which pins the defaults that a matching mutation of both
+// sides would otherwise slide past).
+describe("config signal base URL derivation contract", () => {
+  const baseUrlShapes: Array<{
+    name: string;
+    signal: Record<string, unknown>;
+    accountId?: string;
+    expected: string;
+  }> = [
+    {
+      name: "channel httpUrl wins outright",
+      signal: { httpUrl: "https://signal-proxy:8443" },
+      expected: "https://signal-proxy:8443",
+    },
+    {
+      name: "no httpUrl: host and port",
+      signal: { httpHost: "signal-proxy", httpPort: 8443 },
+      expected: "http://signal-proxy:8443",
+    },
+    {
+      name: "host only: default port",
+      signal: { httpHost: "signal-proxy" },
+      expected: "http://signal-proxy:8080",
+    },
+    {
+      name: "nothing at all: default host and port",
+      signal: {},
+      expected: "http://127.0.0.1:8080",
+    },
+    {
+      name: "account httpUrl overrides the channel httpUrl",
+      signal: {
+        httpUrl: "http://signal-api:8080",
+        accounts: { ops: { httpUrl: "https://ops-proxy:8443" } },
+      },
+      accountId: "ops",
+      expected: "https://ops-proxy:8443",
+    },
+    {
+      name: "account host/port does NOT displace an inherited httpUrl",
+      signal: {
+        httpUrl: "http://signal-api:8080",
+        accounts: { ops: { httpHost: "ops-proxy", httpPort: 9443 } },
+      },
+      accountId: "ops",
+      expected: "http://signal-api:8080",
+    },
+    {
+      name: "whitespace httpUrl falls back to host and port",
+      signal: { httpUrl: "   ", httpHost: "signal-proxy", httpPort: 8443 },
+      expected: "http://signal-proxy:8443",
+    },
+    {
+      name: "whitespace account httpUrl blanks the inherited one",
+      signal: {
+        httpUrl: "http://signal-api:8080",
+        accounts: { ops: { httpUrl: "  " } },
+      },
+      accountId: "ops",
+      expected: "http://127.0.0.1:8080",
+    },
+    {
+      name: "mTLS shape: account host/port over a blanked httpUrl",
+      signal: {
+        httpUrl: "https://signal-proxy:8443",
+        tlsCaFile: "/certs/ca.crt",
+        tlsCertFile: "/certs/default.crt",
+        tlsKeyFile: "/certs/default.key",
+        accounts: { ops: { httpHost: "ops-proxy", httpPort: 9443, httpUrl: "" } },
+      },
+      accountId: "ops",
+      expected: "http://ops-proxy:9443",
+    },
+  ];
+
+  for (const shape of baseUrlShapes) {
+    it(`derives the same base URL the client dials: ${shape.name}`, () => {
+      const res = validateConfigObject({ channels: { signal: shape.signal } });
+      // The last shape resolves an account to a plaintext origin while mTLS is
+      // configured, which is exactly what the validator rejects — the URL
+      // contract still has to hold for it, so take the raw config in that case.
+      const cfg = res.ok
+        ? res.config
+        : ({ channels: { signal: shape.signal } } as Parameters<
+            typeof resolveSignalAccount
+          >[0]["cfg"]);
+      const resolved = resolveSignalAccount({ cfg, accountId: shape.accountId });
+
+      // Contract: validator derivation === what the client actually dials.
+      expect(resolveSignalBaseUrlForValidation(resolved.config)).toBe(resolved.baseUrl);
+      // …and both are this URL, so a mutation applied to both sides is caught.
+      expect(resolved.baseUrl).toBe(shape.expected);
+    });
+  }
+
+  it("rejects the shape whose account resolves to a plaintext origin", () => {
+    // Proof that the derivation above is the one the fence acts on.
+    const issues = expectInvalidConfig(
+      validateConfigObject({
+        channels: { signal: baseUrlShapes[baseUrlShapes.length - 1]?.signal },
+      }),
+    );
+    expect(issues.map((issue) => issue.path)).toContain("channels.signal.accounts.ops.httpUrl");
+  });
+});
+
+// The validator merges an account over the channel with `??`; the resolver used
+// to spread. They agree on every key that is absent and disagree on every own
+// key whose value is `undefined` — `??` inherits, spread blanks. That gap let a
+// config validate green and then throw at send time, and let an all-undefined
+// account slip past the blank-override guard and resolve certless.
+describe("config signal undefined account overrides", () => {
+  const channel = {
+    httpUrl: "https://signal-proxy:8443",
+    tlsCaFile: "/certs/ca.crt",
+    tlsCertFile: "/certs/default.crt",
+    tlsKeyFile: "/certs/default.key",
+  };
+  const channelIdentity = {
+    caFile: "/certs/ca.crt",
+    certFile: "/certs/default.crt",
+    keyFile: "/certs/default.key",
+  };
+  const undefinedOverrides: Array<{ name: string; ops: Record<string, unknown> }> = [
+    { name: "a single key", ops: { tlsCertFile: undefined } },
+    {
+      name: "every TLS key",
+      ops: { tlsCaFile: undefined, tlsCertFile: undefined, tlsKeyFile: undefined },
+    },
+  ];
+
+  for (const shape of undefinedOverrides) {
+    it(`treats an undefined override as absent, at both boundaries: ${shape.name}`, () => {
+      // The premise: these really are own keys, not absent ones.
+      expect(Object.hasOwn(shape.ops, "tlsCertFile")).toBe(true);
+
+      const cfg = expectValidConfig(
+        validateConfigObject({
+          channels: { signal: { ...channel, accounts: { ops: shape.ops } } },
+        }),
+      );
+      const resolved = resolveSignalAccount({ cfg, accountId: "ops" });
+
+      // The same outcome the validator accepted the config on: the inherited
+      // channel identity, over the inherited https origin.
+      expect(resolveSignalTlsOptions(resolved.config)).toEqual(channelIdentity);
+      expect(resolved.baseUrl).toBe(channel.httpUrl);
+
+      // …and identical to declaring no override at all.
+      const withoutOverride = expectValidConfig(
+        validateConfigObject({ channels: { signal: { ...channel, accounts: { ops: {} } } } }),
+      );
+      expect(resolveSignalTlsOptions(resolved.config)).toEqual(
+        resolveSignalTlsOptions(
+          resolveSignalAccount({ cfg: withoutOverride, accountId: "ops" }).config,
+        ),
+      );
+    });
+  }
+
+  it("still rejects an account that blanks its inherited TLS paths with empty strings", () => {
+    // `undefined` means "no override"; "" means "clear it", which stays a
+    // rejection. Unifying the undefined semantics must not soften that.
+    const issues = expectInvalidConfig(
+      validateConfigObject({
+        channels: {
+          signal: {
+            ...channel,
+            accounts: { ops: { tlsCaFile: "", tlsCertFile: "", tlsKeyFile: "" } },
+          },
+        },
+      }),
+    );
+    expect(issues.map((issue) => issue.path)).toContain("channels.signal.accounts.ops.tlsCaFile");
   });
 });

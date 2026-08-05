@@ -721,8 +721,13 @@ type SignalTlsView = SignalTlsKeys & {
  * The base URL `resolveSignalAccount` derives at runtime. Kept in step with
  * `src/signal/accounts.ts` — validating a different URL than the one the client
  * dials would let a plaintext origin through.
+ *
+ * Exported for the contract test that asserts this derivation equals
+ * `resolveSignalAccount(...).baseUrl` for the same config: the https-vs-plaintext
+ * decision below is only as good as that equality, and a test that merely checks
+ * *which key* the issue lands on cannot see the two drifting apart.
  */
-const resolveSignalBaseUrlForValidation = (value: SignalTlsView): string => {
+export const resolveSignalBaseUrlForValidation = (value: SignalTlsView): string => {
   const explicit = value.httpUrl?.trim();
   if (explicit) {
     return explicit;
@@ -775,8 +780,85 @@ const requireCompleteSignalTls = (params: {
 const definesSignalTlsKey = (value: SignalTlsKeys): boolean =>
   SIGNAL_TLS_KEYS.some((key) => Boolean(value[key]?.trim()));
 
+/**
+ * Can `key` exist as a plain own data property — i.e. can
+ * `accounts[normalizeAccountId(id)]` ever retrieve the entry the operator wrote?
+ *
+ * `__proto__` is the one string that answers no, and it is a `normalizeAccountId`
+ * fixed point, so a key check alone waves it through. Assigning it on a plain
+ * object invokes the `Object.prototype` setter instead of creating an own
+ * property; zod's record parse knows this and skips the key outright
+ * (`if (key === "__proto__") continue` in `_parseRecord`), so the entry is gone
+ * from the parsed value before any refinement of that value can see it. The
+ * config then loads green, every send for that id silently presents the
+ * CHANNEL-level client certificate, and the next `writeConfigFile` persists the
+ * config with the account block erased.
+ *
+ * Probing the assignment rather than hard-coding the known key keeps this tied to
+ * the mechanism instead of to zod's current implementation detail. `constructor`
+ * and `prototype` are ordinary own keys and stay accepted.
+ */
+const isRetrievableAccountKey = (key: string): boolean => {
+  const probe: Record<string, unknown> = {};
+  const marker = Symbol("account-key-probe");
+  try {
+    probe[key] = marker;
+  } catch {
+    return false;
+  }
+  return Object.hasOwn(probe, key) && probe[key] === marker;
+};
+
+/**
+ * The `accounts` keys have to be judged on the RAW object, before the record
+ * parse: a key the parse drops (see `isRetrievableAccountKey`) is not present in
+ * the value a `superRefine` receives, so a guard that runs later cannot fail a
+ * config it can no longer see.
+ */
+const checkSignalAccountKeys = (raw: unknown, ctx: z.RefinementCtx): void => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    // Wrong shape entirely — the record schema reports that.
+    return;
+  }
+  for (const accountId of Object.getOwnPropertyNames(raw)) {
+    if (!isRetrievableAccountKey(accountId)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [accountId],
+        message: `channels.signal.accounts cannot use "${accountId}" as an account key: it is not a plain object key, so the entry is dropped while the config is parsed and the runtime lookup can never match it. The account would silently present the channel-level client certificate, and saving the config would erase this block. Rename it to a normalized account id (lowercase, only a-z 0-9 _ -, at most 64 characters).`,
+      });
+      continue;
+    }
+    // `resolveSignalAccount` normalizes the requested id (`normalizeAccountId`)
+    // and then indexes `accounts` with the normalized string, so a config key
+    // that is not already in normalized form — "Alerts", "ops.eu", "DEFAULT",
+    // anything over 64 characters — is dead config: it is validated as a
+    // complete per-account identity, and at runtime the lookup misses and the
+    // account silently inherits the channel-level client certificate. Wrong
+    // identity at the mTLS boundary, green config. Reject the key at the
+    // boundary instead of loosening the resolver's lookup.
+    const normalized = normalizeAccountId(accountId);
+    if (accountId === normalized) {
+      continue;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [accountId],
+      message: `channels.signal.accounts keys must already be in normalized account-id form (lowercase, only a-z 0-9 _ -, at most 64 characters); this key is never matched at runtime and its settings — including any TLS material — would be silently ignored. Rename it to "${normalized}".`,
+    });
+  }
+};
+
+const SignalAccountsSchema = z.preprocess(
+  (raw, ctx) => {
+    checkSignalAccountKeys(raw, ctx);
+    return raw;
+  },
+  z.record(z.string(), SignalAccountSchema.optional()),
+);
+
 export const SignalConfigSchema = SignalAccountSchemaBase.extend({
-  accounts: z.record(z.string(), SignalAccountSchema.optional()).optional(),
+  accounts: SignalAccountsSchema.optional(),
 }).superRefine((value, ctx) => {
   requireOpenAllowFrom({
     policy: value.dmPolicy,
@@ -802,25 +884,8 @@ export const SignalConfigSchema = SignalAccountSchemaBase.extend({
   // `resolveSignalTlsOptions`: no accepted config can resolve to a partial block
   // (a runtime throw) or to silent plaintext while mTLS is configured elsewhere.
   //
-  // None of that holds for a key the runtime cannot look up. `resolveSignalAccount`
-  // normalizes the requested id (`normalizeAccountId`) and then indexes `accounts`
-  // with the normalized string, so a config key that is not already in normalized
-  // form — "Alerts", "ops.eu", "DEFAULT", anything over 64 characters — is dead
-  // config: it is validated here as a complete per-account identity, and at
-  // runtime the lookup misses and the account silently inherits the channel-level
-  // client certificate. Wrong identity at the mTLS boundary, green config.
-  // Reject the key at the boundary instead of loosening the resolver's lookup.
-  for (const accountId of Object.keys(value.accounts ?? {})) {
-    const normalized = normalizeAccountId(accountId);
-    if (accountId === normalized) {
-      continue;
-    }
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["accounts", accountId],
-      message: `channels.signal.accounts keys must already be in normalized account-id form (lowercase, only a-z 0-9 _ -, at most 64 characters); this key is never matched at runtime and its settings — including any TLS material — would be silently ignored. Rename it to "${normalized}".`,
-    });
-  }
+  // Keys the runtime cannot look up are rejected before this point, on the raw
+  // object — see `checkSignalAccountKeys`.
   const accountEntries = Object.entries(value.accounts ?? {}).flatMap(([accountId, account]) =>
     account ? [[accountId, account] as const] : [],
   );

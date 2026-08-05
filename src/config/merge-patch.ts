@@ -1,4 +1,4 @@
-import { isPlainObject } from "../utils.js";
+import { isPlainObject, setOwnProperty } from "../utils.js";
 
 type PlainObject = Record<string, unknown>;
 
@@ -58,6 +58,11 @@ function mergeObjectArraysById(
   return merged;
 }
 
+/** Own value only: `result.__proto__` otherwise reads `Object.prototype`. */
+function readOwn(target: PlainObject, key: string): unknown {
+  return Object.hasOwn(target, key) ? target[key] : undefined;
+}
+
 export function applyMergePatch(
   base: unknown,
   patch: unknown,
@@ -74,19 +79,23 @@ export function applyMergePatch(
       delete result[key];
       continue;
     }
-    if (options.mergeObjectArraysById && Array.isArray(result[key]) && Array.isArray(value)) {
-      const mergedArray = mergeObjectArraysById(result[key] as unknown[], value, options);
+    const baseValue = readOwn(result, key);
+    if (options.mergeObjectArraysById && Array.isArray(baseValue) && Array.isArray(value)) {
+      const mergedArray = mergeObjectArraysById(baseValue, value, options);
       if (mergedArray) {
-        result[key] = mergedArray;
+        setOwnProperty(result, key, mergedArray);
         continue;
       }
     }
     if (isPlainObject(value)) {
-      const baseValue = result[key];
-      result[key] = applyMergePatch(isPlainObject(baseValue) ? baseValue : {}, value, options);
+      setOwnProperty(
+        result,
+        key,
+        applyMergePatch(isPlainObject(baseValue) ? baseValue : {}, value, options),
+      );
       continue;
     }
-    result[key] = value;
+    setOwnProperty(result, key, value);
   }
 
   return result;

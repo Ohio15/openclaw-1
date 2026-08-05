@@ -179,3 +179,50 @@ describe("applyMergePatch", () => {
     expect(merged.channels?.telegram?.allowFrom).toEqual(["333"]);
   });
 });
+
+// A patch is operator-supplied JSON5, so it can carry a `__proto__` key. Writing
+// it with `result[key] = value` would drive the `Object.prototype` setter instead
+// of creating an own property: the patched entry disappears from the merged
+// config — the edit is neither applied nor reported — and the merged object
+// starts inheriting from the patch value, so lookups for keys the operator never
+// configured start finding entries. Keeping the key own is what lets config
+// validation see it and reject it with a real message.
+describe("applyMergePatch prototype-shaped keys", () => {
+  it("keeps a __proto__ patch key as an own property instead of re-parenting", () => {
+    const base = { accounts: { ops: { certFile: "/certs/ops.crt" } } };
+    const patch = JSON.parse(
+      '{"accounts":{"__proto__":{"zz-unlisted":{"certFile":"/certs/evil.crt"}}}}',
+    );
+    expect(Object.hasOwn(patch.accounts, "__proto__")).toBe(true);
+
+    const merged = applyMergePatch(base, patch) as { accounts: Record<string, unknown> };
+
+    expect(Object.hasOwn(merged.accounts, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(merged.accounts)).toBe(Object.prototype);
+    // Nothing the operator did not configure became reachable by lookup…
+    expect(merged.accounts["zz-unlisted"]).toBeUndefined();
+    expect(merged.accounts.ops).toEqual({ certFile: "/certs/ops.crt" });
+    // …and no other object was affected.
+    expect(({} as Record<string, unknown>)["zz-unlisted"]).toBeUndefined();
+  });
+
+  it("keeps a __proto__ key carried by the base object", () => {
+    const base = JSON.parse('{"accounts":{"__proto__":{"certFile":"/certs/a.crt"},"ops":{}}}');
+    const merged = applyMergePatch(base, { accounts: { ops: { certFile: "/certs/b.crt" } } }) as {
+      accounts: Record<string, unknown>;
+    };
+
+    expect(Object.hasOwn(merged.accounts, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(merged.accounts)).toBe(Object.prototype);
+  });
+
+  it("deletes a __proto__ key on an explicit null", () => {
+    const base = JSON.parse('{"accounts":{"__proto__":{"certFile":"/certs/a.crt"}}}');
+    const patch = JSON.parse('{"accounts":{"__proto__":null}}');
+
+    const merged = applyMergePatch(base, patch) as { accounts: Record<string, unknown> };
+
+    expect(Object.hasOwn(merged.accounts, "__proto__")).toBe(false);
+    expect(Object.getPrototypeOf(merged.accounts)).toBe(Object.prototype);
+  });
+});

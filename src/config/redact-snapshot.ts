@@ -1,4 +1,5 @@
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { setOwnProperty } from "../utils.js";
 import { isSensitiveConfigPath, type ConfigUiHints } from "./schema.hints.js";
 import type { ConfigFileSnapshot } from "./types.openclaw.js";
 
@@ -430,7 +431,7 @@ function restoreRedactedValuesWithLookup(
       : {};
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(incoming as Record<string, unknown>)) {
-    result[key] = value;
+    setOwnProperty(result, key, value);
     const path = prefix ? `${prefix}.${key}` : key;
     const wildcardPath = prefix ? `${prefix}.*` : "*";
     let matched = false;
@@ -438,9 +439,17 @@ function restoreRedactedValuesWithLookup(
       if (lookup.has(candidate)) {
         matched = true;
         if (value === REDACTED_SENTINEL) {
-          result[key] = restoreOriginalValueOrThrow({ key, path: candidate, original: orig });
+          setOwnProperty(
+            result,
+            key,
+            restoreOriginalValueOrThrow({ key, path: candidate, original: orig }),
+          );
         } else if (typeof value === "object" && value !== null) {
-          result[key] = restoreRedactedValuesWithLookup(value, orig[key], lookup, candidate, hints);
+          setOwnProperty(
+            result,
+            key,
+            restoreRedactedValuesWithLookup(value, orig[key], lookup, candidate, hints),
+          );
         }
         break;
       }
@@ -448,9 +457,9 @@ function restoreRedactedValuesWithLookup(
     if (!matched && isExtensionPath(path)) {
       const markedNonSensitive = isExplicitlyNonSensitivePath(hints, [path, wildcardPath]);
       if (!markedNonSensitive && isSensitivePath(path) && value === REDACTED_SENTINEL) {
-        result[key] = restoreOriginalValueOrThrow({ key, path, original: orig });
+        setOwnProperty(result, key, restoreOriginalValueOrThrow({ key, path, original: orig }));
       } else if (typeof value === "object" && value !== null) {
-        result[key] = restoreRedactedValuesGuessing(value, orig[key], path, hints);
+        setOwnProperty(result, key, restoreRedactedValuesGuessing(value, orig[key], path, hints));
       }
     }
   }
@@ -507,11 +516,11 @@ function restoreRedactedValuesGuessing(
       isSensitivePath(path) &&
       value === REDACTED_SENTINEL
     ) {
-      result[key] = restoreOriginalValueOrThrow({ key, path, original: orig });
+      setOwnProperty(result, key, restoreOriginalValueOrThrow({ key, path, original: orig }));
     } else if (typeof value === "object" && value !== null) {
-      result[key] = restoreRedactedValuesGuessing(value, orig[key], path, hints);
+      setOwnProperty(result, key, restoreRedactedValuesGuessing(value, orig[key], path, hints));
     } else {
-      result[key] = value;
+      setOwnProperty(result, key, value);
     }
   }
   return result;

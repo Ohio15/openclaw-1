@@ -68,6 +68,27 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 }
 
 /**
+ * Copy `key` onto `target` as an own data property.
+ *
+ * Config walkers rebuild objects key by key from operator-supplied documents,
+ * and `target[key] = value` is not safe for a key that document controls: for
+ * `__proto__` it invokes the `Object.prototype` setter instead of creating an own
+ * property, so the entry silently disappears from the rebuilt config — the
+ * operator's setting is neither applied nor reported — and the rebuilt object
+ * starts inheriting from the assigned value. Defining the property keeps every
+ * key own and visible, which is what lets schema validation see it and reject it
+ * with a real message.
+ */
+export function setOwnProperty(target: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(target, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
+/**
  * Type guard for Record<string, unknown> (less strict than isPlainObject).
  * Accepts any non-null object that isn't an array.
  */
