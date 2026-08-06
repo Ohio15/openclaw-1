@@ -1,4 +1,5 @@
 import type { MatrixClient } from "@vector-im/matrix-bot-sdk";
+import { getOwnProperty } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import { getMatrixRuntime } from "../../runtime.js";
 import type { CoreConfig } from "../../types.js";
@@ -21,12 +22,16 @@ function findAccountConfig(
 ): Record<string, unknown> | undefined {
   if (!accounts) return undefined;
   const normalized = normalizeAccountId(accountId);
-  // Direct lookup first
-  if (accounts[normalized]) return accounts[normalized] as Record<string, unknown>;
+  // Direct lookup first. Own-only: a bare `accounts[normalized]` answers
+  // "constructor" — a `normalizeAccountId` fixed point, so a reachable account id —
+  // with the truthy global `Object`, which would skip the fallback scan below and
+  // hand back a non-account object.
+  const direct = getOwnProperty(accounts, normalized);
+  if (direct) return direct as Record<string, unknown>;
   // Case-insensitive fallback
   for (const key of Object.keys(accounts)) {
     if (normalizeAccountId(key) === normalized) {
-      return accounts[key] as Record<string, unknown>;
+      return getOwnProperty(accounts, key) as Record<string, unknown>;
     }
   }
   return undefined;

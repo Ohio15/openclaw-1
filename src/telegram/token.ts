@@ -3,6 +3,7 @@ import type { BaseTokenResolution } from "../channels/plugins/types.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { TelegramAccountConfig } from "../config/types.telegram.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
+import { getOwnProperty } from "../safe-object.js";
 
 export type TelegramTokenSource = "env" | "tokenFile" | "config" | "none";
 
@@ -30,14 +31,21 @@ export function resolveTelegramToken(
     if (!accounts || typeof accounts !== "object" || Array.isArray(accounts)) {
       return undefined;
     }
-    // Direct hit (already normalized key)
-    const direct = accounts[id];
+    // Direct hit (already normalized key). Own-only: a bare `accounts[id]` answers
+    // "constructor" — a `normalizeAccountId` fixed point, so a reachable account
+    // id — with the truthy global `Object`, so the normalized-key fallback below
+    // never runs and a configured "Constructor" account never contributes its own
+    // bot token. Wrong (or no) identity for a config that reads as complete.
+    const record = accounts as Record<string, unknown>;
+    const direct = getOwnProperty(record, id) as TelegramAccountConfig | undefined;
     if (direct) {
       return direct;
     }
     // Fallback: match by normalized key
     const matchKey = Object.keys(accounts).find((key) => normalizeAccountId(key) === id);
-    return matchKey ? accounts[matchKey] : undefined;
+    return matchKey
+      ? (getOwnProperty(record, matchKey) as TelegramAccountConfig | undefined)
+      : undefined;
   };
 
   const accountCfg = resolveAccountCfg(

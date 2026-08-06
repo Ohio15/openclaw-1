@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addSubagentRunForTests,
   listSubagentRunsForRequester,
@@ -833,6 +833,127 @@ describe("handleCommands /allowlist", () => {
     expect(written.channels?.discord?.allowFrom).toEqual(["222"]);
     expect(written.channels?.discord?.dm?.allowFrom).toBeUndefined();
     expect(result.reply?.text).toContain("channels.discord.allowFrom");
+  });
+
+  /**
+   * `--account` is operator-supplied text that is used as an object key on a
+   * document rebuilt from the config file. `accounts[id] ??= {}` reads through
+   * the prototype chain, so `__proto__` resolves to `Object.prototype` — truthy,
+   * so nothing is created — and the allowlist is then written ONTO the prototype
+   * of every object in the process while the reply claims success and the file
+   * on disk never changes.
+   */
+  describe("account ids that are not plain object keys", () => {
+    const protoDescriptors = () =>
+      ["allowFrom", "groupAllowFrom", "dm", "accounts"].map((key) =>
+        Object.getOwnPropertyDescriptor(Object.prototype, key),
+      );
+
+    afterEach(() => {
+      // A failure here means the run itself was polluted; clean up so the rest
+      // of the suite is not judged on a corrupted prototype.
+      for (const key of ["allowFrom", "groupAllowFrom", "dm", "accounts"]) {
+        if (Object.getOwnPropertyDescriptor(Object.prototype, key)) {
+          Reflect.deleteProperty(Object.prototype, key);
+        }
+      }
+    });
+
+    it("rejects --account __proto__ with a real error instead of polluting the prototype", async () => {
+      readConfigFileSnapshotMock.mockResolvedValueOnce({
+        valid: true,
+        parsed: {
+          channels: { telegram: { accounts: { main: { allowFrom: ["123"] } } } },
+        },
+      });
+      validateConfigObjectWithPluginsMock.mockImplementation((config: unknown) => ({
+        ok: true,
+        config,
+      }));
+
+      const cfg = {
+        commands: { text: true, config: true },
+        channels: { telegram: { accounts: { main: { allowFrom: ["123"] } } } },
+      } as unknown as OpenClawConfig;
+      const params = buildPolicyParams("/allowlist add dm 789 --account __proto__", cfg);
+      const result = await handleCommands(params);
+
+      expect(result.shouldContinue).toBe(false);
+      expect(result.reply?.text).toContain("cannot be used as an account id");
+      // No prototype pollution, and no "success" for a write that never happened.
+      expect(protoDescriptors()).toEqual([undefined, undefined, undefined, undefined]);
+      expect(({} as Record<string, unknown>).allowFrom).toBeUndefined();
+      expect(writeConfigFileMock).not.toHaveBeenCalled();
+      expect(addChannelAllowFromStoreEntryMock).not.toHaveBeenCalled();
+    });
+
+    it("treats --account constructor as an ordinary account key", async () => {
+      const objectKeysBefore = Object.getOwnPropertyNames(Object).toSorted();
+      readConfigFileSnapshotMock.mockResolvedValueOnce({
+        valid: true,
+        parsed: {
+          channels: { telegram: { accounts: { main: { allowFrom: ["123"] } } } },
+        },
+      });
+      validateConfigObjectWithPluginsMock.mockImplementation((config: unknown) => ({
+        ok: true,
+        config,
+      }));
+
+      const cfg = {
+        commands: { text: true, config: true },
+        channels: { telegram: { accounts: { main: { allowFrom: ["123"] } } } },
+      } as unknown as OpenClawConfig;
+      const params = buildPolicyParams("/allowlist add dm 789 --account constructor", cfg);
+      const result = await handleCommands(params);
+
+      expect(result.shouldContinue).toBe(false);
+      expect(writeConfigFileMock).toHaveBeenCalledTimes(1);
+      const written = writeConfigFileMock.mock.calls[0]?.[0] as Record<string, unknown>;
+      const accounts = (
+        (written.channels as Record<string, Record<string, unknown>>).telegram as Record<
+          string,
+          unknown
+        >
+      ).accounts as Record<string, unknown>;
+      // An OWN key holding the operator's data — not a write through the
+      // inherited `constructor` slot, and not a silent no-op.
+      expect(Object.hasOwn(accounts, "constructor")).toBe(true);
+      const account = Object.getOwnPropertyDescriptor(accounts, "constructor")?.value as Record<
+        string,
+        unknown
+      >;
+      expect(account.allowFrom).toEqual(["789"]);
+      expect(result.reply?.text).toContain("channels.telegram.accounts.constructor.allowFrom");
+      // The real `Object` constructor is untouched.
+      expect(Object.getOwnPropertyNames(Object).toSorted()).toEqual(objectKeysBefore);
+      expect(protoDescriptors()).toEqual([undefined, undefined, undefined, undefined]);
+    });
+
+    it("still writes a normal account id", async () => {
+      readConfigFileSnapshotMock.mockResolvedValueOnce({
+        valid: true,
+        parsed: {
+          channels: { telegram: { accounts: { main: { allowFrom: ["123"] } } } },
+        },
+      });
+      validateConfigObjectWithPluginsMock.mockImplementation((config: unknown) => ({
+        ok: true,
+        config,
+      }));
+
+      const cfg = {
+        commands: { text: true, config: true },
+        channels: { telegram: { accounts: { main: { allowFrom: ["123"] } } } },
+      } as unknown as OpenClawConfig;
+      const params = buildPolicyParams("/allowlist add dm 789 --account ops", cfg);
+      const result = await handleCommands(params);
+
+      expect(result.shouldContinue).toBe(false);
+      const written = writeConfigFileMock.mock.calls[0]?.[0] as OpenClawConfig;
+      expect(written.channels?.telegram?.accounts?.ops?.allowFrom).toEqual(["789"]);
+      expect(result.reply?.text).toContain("channels.telegram.accounts.ops.allowFrom");
+    });
   });
 });
 

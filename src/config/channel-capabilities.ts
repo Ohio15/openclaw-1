@@ -1,5 +1,6 @@
 import { normalizeChannelId } from "../channels/plugins/index.js";
 import { normalizeAccountId } from "../routing/session-key.js";
+import { getOwnProperty } from "../safe-object.js";
 import type { OpenClawConfig } from "./config.js";
 import type { TelegramCapabilitiesConfig } from "./types.telegram.js";
 
@@ -32,14 +33,21 @@ function resolveAccountCapabilities(params: {
 
   const accounts = cfg.accounts;
   if (accounts && typeof accounts === "object") {
-    const direct = accounts[normalizedAccountId];
+    // Own-only: a bare `accounts[id]` answers "constructor" — a reachable,
+    // already-normalized account id — with the truthy global `Object`, so the
+    // case-insensitive scan below never runs for a configured "Constructor".
+    const record = accounts as Record<string, unknown>;
+    type AccountEntry = { capabilities?: CapabilitiesConfig };
+    const direct = getOwnProperty(record, normalizedAccountId) as AccountEntry | undefined;
     if (direct) {
       return normalizeCapabilities(direct.capabilities) ?? normalizeCapabilities(cfg.capabilities);
     }
     const matchKey = Object.keys(accounts).find(
       (key) => key.toLowerCase() === normalizedAccountId.toLowerCase(),
     );
-    const match = matchKey ? accounts[matchKey] : undefined;
+    const match = matchKey
+      ? (getOwnProperty(record, matchKey) as AccountEntry | undefined)
+      : undefined;
     if (match) {
       return normalizeCapabilities(match.capabilities) ?? normalizeCapabilities(cfg.capabilities);
     }

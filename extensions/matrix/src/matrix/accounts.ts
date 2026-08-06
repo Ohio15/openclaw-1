@@ -1,3 +1,4 @@
+import { getOwnProperty } from "openclaw/plugin-sdk";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "openclaw/plugin-sdk/account-id";
 import type { CoreConfig, MatrixConfig } from "../types.js";
 import { resolveMatrixConfigForAccount } from "./client.js";
@@ -66,15 +67,21 @@ function resolveAccountConfig(cfg: CoreConfig, accountId: string): MatrixConfig 
   if (!accounts || typeof accounts !== "object") {
     return undefined;
   }
-  // Direct lookup first (fast path for already-normalized keys)
-  if (accounts[accountId]) {
-    return accounts[accountId] as MatrixConfig;
+  // Direct lookup first (fast path for already-normalized keys). Own-only: a bare
+  // `accounts[accountId]` short-circuits on the prototype chain — "constructor"
+  // is a `normalizeAccountId` fixed point, so it is a reachable account id, yet it
+  // answers with the global `Object` (truthy) and the tolerant scan below never
+  // runs, leaving a configured "Constructor" account unreachable.
+  const record = accounts as Record<string, unknown>;
+  const direct = getOwnProperty(record, accountId);
+  if (direct) {
+    return direct as MatrixConfig;
   }
   // Fall back to case-insensitive match (user may have mixed-case keys in config)
   const normalized = normalizeAccountId(accountId);
   for (const key of Object.keys(accounts)) {
     if (normalizeAccountId(key) === normalized) {
-      return accounts[key] as MatrixConfig;
+      return getOwnProperty(record, key) as MatrixConfig;
     }
   }
   return undefined;

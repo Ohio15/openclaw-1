@@ -3,6 +3,7 @@ import type { TelegramAccountConfig, TelegramActionConfig } from "../config/type
 import { isTruthyEnvValue } from "../infra/env.js";
 import { listBoundAccountIds, resolveDefaultAgentBoundAccountId } from "../routing/bindings.js";
 import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
+import { getOwnProperty } from "../safe-object.js";
 import { resolveTelegramToken } from "./token.js";
 
 const debugAccounts = (...args: unknown[]) => {
@@ -66,13 +67,24 @@ function resolveAccountConfig(
   if (!accounts || typeof accounts !== "object") {
     return undefined;
   }
-  const direct = accounts[accountId] as TelegramAccountConfig | undefined;
+  // Own-only: a bare `accounts[accountId]` short-circuits on the prototype chain.
+  // For "constructor" — a `normalizeAccountId` fixed point, so a reachable id —
+  // it returns the global `Object` constructor, which is truthy, so the tolerant
+  // scan below never runs and a legitimately configured "Constructor" account is
+  // unreachable; for "__proto__" it returns `Object.prototype`.
+  const direct = getOwnProperty(accounts as Record<string, unknown>, accountId) as
+    | TelegramAccountConfig
+    | undefined;
   if (direct) {
     return direct;
   }
   const normalized = normalizeAccountId(accountId);
   const matchKey = Object.keys(accounts).find((key) => normalizeAccountId(key) === normalized);
-  return matchKey ? (accounts[matchKey] as TelegramAccountConfig | undefined) : undefined;
+  return matchKey
+    ? (getOwnProperty(accounts as Record<string, unknown>, matchKey) as
+        | TelegramAccountConfig
+        | undefined)
+    : undefined;
 }
 
 function mergeTelegramAccountConfig(cfg: OpenClawConfig, accountId: string): TelegramAccountConfig {

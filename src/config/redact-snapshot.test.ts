@@ -936,3 +936,88 @@ describe("realredactConfigSnapshot_real", () => {
     expect(restored.agents.list[0].memorySearch.remote.apiKey).toBe("6789");
   });
 });
+
+// A GCP service account is a credential in BOTH of its accepted shapes: the
+// inline JSON object (whose `private_key` is the signing key) and the string
+// form. Neither `serviceAccount` nor `private_key` matches the name-pattern
+// fallback (`/token$/`, `/password/`, `/secret/`, `/api.?key/`), so without an
+// explicit `sensitive` registration on the field AND on the record's value schema
+// the key is emitted verbatim in every redacted snapshot the gateway hands out.
+// Assert the full round trip — redact then restore — at the channel level and at
+// the per-account level, since `accounts` entries reuse the same schema.
+
+describe("googlechat serviceAccount redaction", () => {
+  const PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----\nMIIBVgIBADANBg\n-----END PRIVATE KEY-----\n";
+
+  const makeConfig = () => ({
+    channels: {
+      googlechat: {
+        serviceAccount: {
+          type: "service_account",
+          project_id: "channel-project",
+          private_key_id: "channel-key-id",
+          private_key: PRIVATE_KEY,
+          client_email: "channel@example.iam.gserviceaccount.com",
+        },
+        accounts: {
+          ops: {
+            serviceAccount: {
+              type: "service_account",
+              project_id: "ops-project",
+              private_key: `${PRIVATE_KEY}ops`,
+              client_email: "ops@example.iam.gserviceaccount.com",
+            },
+          },
+          eu: {
+            // The string form (inline JSON or a blob) must be redacted too.
+            serviceAccount: '{"private_key":"eu-inline-key"}',
+          },
+        },
+      },
+    },
+  });
+
+  it("replaces the private key with the sentinel and restores it exactly", () => {
+    const hints = mapSensitivePaths(OpenClawSchema, "", {});
+    expect(hints["channels.googlechat.serviceAccount"]?.sensitive).toBe(true);
+    expect(hints["channels.googlechat.accounts.*.serviceAccount"]?.sensitive).toBe(true);
+
+    const original = makeConfig();
+    const snapshot = makeSnapshot(original as unknown as Record<string, unknown>);
+    const result = redactConfigSnapshot(snapshot, hints);
+    const redacted = result.config as unknown as ReturnType<typeof makeConfig>;
+
+    const channelSa = redacted.channels.googlechat.serviceAccount;
+    expect(channelSa.private_key).toBe(REDACTED_SENTINEL);
+    expect(channelSa.private_key_id).toBe(REDACTED_SENTINEL);
+    expect(channelSa.client_email).toBe(REDACTED_SENTINEL);
+
+    const opsSa = redacted.channels.googlechat.accounts.ops.serviceAccount;
+    expect(opsSa.private_key).toBe(REDACTED_SENTINEL);
+    expect(redacted.channels.googlechat.accounts.eu.serviceAccount).toBe(REDACTED_SENTINEL);
+
+    // Neither the raw JSON5 source nor the parsed copy may still carry the key.
+    expect(result.raw).not.toContain("MIIBVgIBADANBg");
+    expect(result.raw).not.toContain("eu-inline-key");
+    expect(JSON.stringify(result.config)).not.toContain("MIIBVgIBADANBg");
+
+    // Round trip: a Web UI write-back of the redacted document restores the exact
+    // original credential rather than persisting the sentinel.
+    const restored = restoreRedactedValues(
+      result.config,
+      snapshot.config,
+      hints,
+    ) as unknown as ReturnType<typeof makeConfig>;
+    expect(restored.channels.googlechat.serviceAccount.private_key).toBe(PRIVATE_KEY);
+    expect(restored.channels.googlechat.serviceAccount.client_email).toBe(
+      "channel@example.iam.gserviceaccount.com",
+    );
+    expect(restored.channels.googlechat.accounts.ops.serviceAccount.private_key).toBe(
+      `${PRIVATE_KEY}ops`,
+    );
+    expect(restored.channels.googlechat.accounts.eu.serviceAccount).toBe(
+      '{"private_key":"eu-inline-key"}',
+    );
+    expect(restored).toEqual(original);
+  });
+});

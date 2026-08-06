@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { DEFAULT_ACCOUNT_ID, normalizeAccountId } from "../routing/session-key.js";
+import { DEFAULT_ACCOUNT_ID } from "../routing/session-key.js";
+import { accountsRecord, retrievableAccountsRecord } from "./account-keys.js";
 import {
   normalizeTelegramCommandDescription,
   normalizeTelegramCommandName,
@@ -168,7 +169,13 @@ export const TelegramAccountSchema = TelegramAccountSchemaBase.superRefine((valu
 });
 
 export const TelegramConfigSchema = TelegramAccountSchemaBase.extend({
-  accounts: z.record(z.string(), TelegramAccountSchema.optional()).optional(),
+  // `resolveTelegramAccount` is TOLERANT — it falls back to scanning the record
+  // for a key that normalizes to the requested id — so non-normalized keys stay
+  // reachable and stay accepted. An UNRETRIEVABLE key is a different failure: the
+  // record parse drops it outright, so there is nothing left for the tolerant
+  // scan to find, the account silently falls back to the channel-level bot token,
+  // and the next config write erases the block. Retrievability-only guard.
+  accounts: retrievableAccountsRecord(TelegramAccountSchema.optional(), "telegram").optional(),
 }).superRefine((value, ctx) => {
   requireOpenAllowFrom({
     policy: value.dmPolicy,
@@ -405,7 +412,11 @@ export const DiscordAccountSchema = z
   });
 
 export const DiscordConfigSchema = DiscordAccountSchema.extend({
-  accounts: z.record(z.string(), DiscordAccountSchema.optional()).optional(),
+  // `resolveDiscordAccount` normalizes the requested id then does an exact
+  // `accounts[normalized]` lookup, so a non-normalized or unretrievable key is
+  // unreachable and the account silently falls back to the channel-level bot
+  // token. Shared guard closes that class here.
+  accounts: accountsRecord(DiscordAccountSchema.optional(), "discord").optional(),
 });
 
 export const GoogleChatDmSchema = z
@@ -447,7 +458,17 @@ export const GoogleChatAccountSchema = z
     groupPolicy: GroupPolicySchema.optional().default("allowlist"),
     groupAllowFrom: z.array(z.union([z.string(), z.number()])).optional(),
     groups: z.record(z.string(), GoogleChatGroupSchema.optional()).optional(),
-    serviceAccount: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+    // The full GCP service-account JSON, `private_key` included — a credential in
+    // either shape. Neither `serviceAccount` nor `private_key` matches the
+    // name-pattern fallback in redact-snapshot, so without an explicit
+    // registration the key is emitted VERBATIM in the redacted config snapshot
+    // (channel level and `accounts.*` alike). The record's VALUE schema is
+    // registered too: that is what marks `…serviceAccount.*` sensitive so the
+    // inline-JSON form is redacted field by field, not just the string form.
+    serviceAccount: z
+      .union([z.string(), z.record(z.string(), z.unknown().register(sensitive))])
+      .optional()
+      .register(sensitive),
     serviceAccountFile: z.string().optional(),
     audienceType: z.enum(["app-url", "project-number"]).optional(),
     audience: z.string().optional(),
@@ -477,7 +498,11 @@ export const GoogleChatAccountSchema = z
   .strict();
 
 export const GoogleChatConfigSchema = GoogleChatAccountSchema.extend({
-  accounts: z.record(z.string(), GoogleChatAccountSchema.optional()).optional(),
+  // `resolveGoogleChatAccount` normalizes the requested id then does an exact
+  // `accounts[normalized]` lookup, so a non-normalized or unretrievable key is
+  // unreachable and the account silently inherits the channel-level service
+  // account. Shared guard closes that class here.
+  accounts: accountsRecord(GoogleChatAccountSchema.optional(), "googlechat").optional(),
   defaultAccount: z.string().optional(),
 });
 
@@ -605,7 +630,11 @@ export const SlackConfigSchema = SlackAccountSchema.safeExtend({
   mode: z.enum(["socket", "http"]).optional().default("socket"),
   signingSecret: z.string().optional().register(sensitive),
   webhookPath: z.string().optional().default("/slack/events"),
-  accounts: z.record(z.string(), SlackAccountSchema.optional()).optional(),
+  // `resolveSlackAccount` normalizes the requested id then does an exact
+  // `accounts[normalized]` lookup, so a non-normalized or unretrievable key is
+  // unreachable and the account silently falls back to the channel-level
+  // bot/app tokens. Shared guard closes that class here.
+  accounts: accountsRecord(SlackAccountSchema.optional(), "slack").optional(),
 }).superRefine((value, ctx) => {
   const baseMode = value.mode ?? "socket";
   if (baseMode === "http" && !value.signingSecret) {
@@ -780,82 +809,14 @@ const requireCompleteSignalTls = (params: {
 const definesSignalTlsKey = (value: SignalTlsKeys): boolean =>
   SIGNAL_TLS_KEYS.some((key) => Boolean(value[key]?.trim()));
 
-/**
- * Can `key` exist as a plain own data property — i.e. can
- * `accounts[normalizeAccountId(id)]` ever retrieve the entry the operator wrote?
- *
- * `__proto__` is the one string that answers no, and it is a `normalizeAccountId`
- * fixed point, so a key check alone waves it through. Assigning it on a plain
- * object invokes the `Object.prototype` setter instead of creating an own
- * property; zod's record parse knows this and skips the key outright
- * (`if (key === "__proto__") continue` in `_parseRecord`), so the entry is gone
- * from the parsed value before any refinement of that value can see it. The
- * config then loads green, every send for that id silently presents the
- * CHANNEL-level client certificate, and the next `writeConfigFile` persists the
- * config with the account block erased.
- *
- * Probing the assignment rather than hard-coding the known key keeps this tied to
- * the mechanism instead of to zod's current implementation detail. `constructor`
- * and `prototype` are ordinary own keys and stay accepted.
- */
-const isRetrievableAccountKey = (key: string): boolean => {
-  const probe: Record<string, unknown> = {};
-  const marker = Symbol("account-key-probe");
-  try {
-    probe[key] = marker;
-  } catch {
-    return false;
-  }
-  return Object.hasOwn(probe, key) && probe[key] === marker;
-};
-
-/**
- * The `accounts` keys have to be judged on the RAW object, before the record
- * parse: a key the parse drops (see `isRetrievableAccountKey`) is not present in
- * the value a `superRefine` receives, so a guard that runs later cannot fail a
- * config it can no longer see.
- */
-const checkSignalAccountKeys = (raw: unknown, ctx: z.RefinementCtx): void => {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    // Wrong shape entirely — the record schema reports that.
-    return;
-  }
-  for (const accountId of Object.getOwnPropertyNames(raw)) {
-    if (!isRetrievableAccountKey(accountId)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: [accountId],
-        message: `channels.signal.accounts cannot use "${accountId}" as an account key: it is not a plain object key, so the entry is dropped while the config is parsed and the runtime lookup can never match it. The account would silently present the channel-level client certificate, and saving the config would erase this block. Rename it to a normalized account id (lowercase, only a-z 0-9 _ -, at most 64 characters).`,
-      });
-      continue;
-    }
-    // `resolveSignalAccount` normalizes the requested id (`normalizeAccountId`)
-    // and then indexes `accounts` with the normalized string, so a config key
-    // that is not already in normalized form — "Alerts", "ops.eu", "DEFAULT",
-    // anything over 64 characters — is dead config: it is validated as a
-    // complete per-account identity, and at runtime the lookup misses and the
-    // account silently inherits the channel-level client certificate. Wrong
-    // identity at the mTLS boundary, green config. Reject the key at the
-    // boundary instead of loosening the resolver's lookup.
-    const normalized = normalizeAccountId(accountId);
-    if (accountId === normalized) {
-      continue;
-    }
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: [accountId],
-      message: `channels.signal.accounts keys must already be in normalized account-id form (lowercase, only a-z 0-9 _ -, at most 64 characters); this key is never matched at runtime and its settings — including any TLS material — would be silently ignored. Rename it to "${normalized}".`,
-    });
-  }
-};
-
-const SignalAccountsSchema = z.preprocess(
-  (raw, ctx) => {
-    checkSignalAccountKeys(raw, ctx);
-    return raw;
-  },
-  z.record(z.string(), SignalAccountSchema.optional()),
-);
+// `resolveSignalAccount` normalizes the requested id and then indexes `accounts`
+// with the normalized string, so a key that is not a `normalizeAccountId` fixed
+// point — or that a plain object cannot retrieve at all (`__proto__`) — is dead
+// config that validates green and then silently presents the CHANNEL-level
+// client certificate: the wrong mTLS identity. The guard runs on the RAW object,
+// before the record parse can drop an unretrievable key, and is the one shared
+// implementation used by every channel with this resolver shape.
+const SignalAccountsSchema = accountsRecord(SignalAccountSchema.optional(), "signal");
 
 export const SignalConfigSchema = SignalAccountSchemaBase.extend({
   accounts: SignalAccountsSchema.optional(),
@@ -1019,7 +980,10 @@ export const IrcAccountSchema = IrcAccountSchemaBase.superRefine((value, ctx) =>
 });
 
 export const IrcConfigSchema = IrcAccountSchemaBase.extend({
-  accounts: z.record(z.string(), IrcAccountSchema.optional()).optional(),
+  // Tolerant resolver (see the telegram note): non-normalized keys are reachable,
+  // unretrievable ones are dropped by the parse and would silently fall back to
+  // the channel-level server password. Retrievability-only guard.
+  accounts: retrievableAccountsRecord(IrcAccountSchema.optional(), "irc").optional(),
 }).superRefine((value, ctx) => {
   refineIrcAllowFromAndNickserv(value, ctx);
 });
@@ -1079,7 +1043,11 @@ export const IMessageAccountSchema = IMessageAccountSchemaBase.superRefine((valu
 });
 
 export const IMessageConfigSchema = IMessageAccountSchemaBase.extend({
-  accounts: z.record(z.string(), IMessageAccountSchema.optional()).optional(),
+  // `resolveIMessageAccount` normalizes the requested id then does an exact
+  // `accounts[normalized]` lookup, so a non-normalized or unretrievable key is
+  // unreachable and the account silently falls back to the channel-level
+  // identity/config. Shared guard closes that class here.
+  accounts: accountsRecord(IMessageAccountSchema.optional(), "imessage").optional(),
 }).superRefine((value, ctx) => {
   requireOpenAllowFrom({
     policy: value.dmPolicy,
@@ -1159,7 +1127,11 @@ export const BlueBubblesAccountSchema = BlueBubblesAccountSchemaBase.superRefine
 });
 
 export const BlueBubblesConfigSchema = BlueBubblesAccountSchemaBase.extend({
-  accounts: z.record(z.string(), BlueBubblesAccountSchema.optional()).optional(),
+  // `resolveBlueBubblesAccount` normalizes the requested id then does an exact
+  // `accounts[normalized]` lookup, so a non-normalized or unretrievable key is
+  // unreachable and the account silently inherits the channel-level
+  // serverUrl/password. Shared guard closes that class here.
+  accounts: accountsRecord(BlueBubblesAccountSchema.optional(), "bluebubbles").optional(),
   actions: BlueBubblesActionSchema,
 }).superRefine((value, ctx) => {
   requireOpenAllowFrom({
