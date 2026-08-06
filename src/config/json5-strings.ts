@@ -151,31 +151,213 @@ function readStringLiteral(source: string, start: number): Json5StringLiteral {
  * a match in key position is interesting.
  */
 export function scanJson5StringLiterals(source: string): Json5StringLiteral[] {
-  const literals: Json5StringLiteral[] = [];
+  return scanJson5Document(source).literals;
+}
+
+export type Json5LiteralRole = "key" | "value";
+
+export type Json5DocumentLiteral = Json5StringLiteral & {
+  /** Whether the literal sits in key position or value position. */
+  role: Json5LiteralRole;
+  /**
+   * Config path of the value this literal IS (role "value") or NAMES
+   * (role "key"): dot-joined keys with `[]` for array elements, "" for a root
+   * scalar — the same shape the parsed-config walkers use. `null` when the
+   * surrounding structure is too broken to assign one (a value with no
+   * preceding key, text past an unbalanced close).
+   */
+  path: string | null;
+};
+
+export type Json5CommentSpan = {
+  /** Span of the whole comment, delimiters included, `[start, end)`. */
+  start: number;
+  end: number;
+  /** Span of the comment TEXT between the delimiters, `[textStart, textEnd)`. */
+  textStart: number;
+  textEnd: number;
+};
+
+export type Json5BareToken = {
+  /** Span of the token in the source, `[start, end)`. */
+  start: number;
+  end: number;
+  /** The token text with `\uXXXX` identifier escapes resolved. */
+  decoded: string;
+};
+
+export type Json5DocumentScan = {
+  literals: Json5DocumentLiteral[];
+  comments: Json5CommentSpan[];
+  /**
+   * Every unquoted token (identifier keys, `true`, numbers), DECODED. An
+   * unquoted key can spell a secret through `\uXXXX` identifier escapes, so a
+   * leak check that only looks at string literals and verbatim text has a
+   * blind spot without these.
+   */
+  bareTokens: Json5BareToken[];
+};
+
+type ScanFrame =
+  | { kind: "object"; path: string | null; expectKey: boolean; key: string | null }
+  | { kind: "array"; path: string | null };
+
+/**
+ * The config path a value beginning at the current position would carry.
+ * `null` when it cannot be known (broken structure); "" for the root value.
+ */
+function currentValuePath(stack: ScanFrame[]): string | null {
+  const top = stack[stack.length - 1];
+  if (!top) {
+    return "";
+  }
+  if (top.path === null) {
+    return null;
+  }
+  if (top.kind === "array") {
+    return `${top.path}[]`;
+  }
+  if (top.expectKey || top.key === null) {
+    return null;
+  }
+  return top.path === "" ? top.key : `${top.path}.${top.key}`;
+}
+
+const STRUCTURAL_CHARS = new Set(["{", "}", "[", "]", ":", ",", '"', "'", "/"]);
+
+/**
+ * Read a bare (unquoted) token — an identifier key, `true`, a number.
+ * JSON5 identifiers may contain `\uXXXX` escapes, which are decoded so the
+ * token compares equal to the key the parser produces.
+ */
+function readBareToken(source: string, start: number): { end: number; decoded: string } {
+  let index = start;
+  let decoded = "";
+  while (index < source.length) {
+    const ch = source[index];
+    if (STRUCTURAL_CHARS.has(ch) || /\s/.test(ch)) {
+      break;
+    }
+    if (ch === "\\" && source[index + 1] === "u") {
+      const hex = source.slice(index + 2, index + 6);
+      if (hex.length === 4 && [...hex].every((digit) => isHexDigit(digit))) {
+        decoded += String.fromCharCode(Number.parseInt(hex, 16));
+        index += 6;
+        continue;
+      }
+    }
+    decoded += ch;
+    index += 1;
+  }
+  return { end: index, decoded };
+}
+
+/**
+ * Scan a JSON5 document once, producing every string literal WITH its
+ * structural position (key vs. value, config path) and every comment span.
+ *
+ * Path tracking exists so a caller can redact "the literal that IS the value
+ * at a sensitive path" instead of "any literal that happens to contain matching
+ * text" — matching by text alone redacts key names and unrelated values, and a
+ * round-trip through the raw editor then persists the damage.
+ *
+ * The tracker never throws: redaction only runs on documents the real parser
+ * already accepted, so unbalanced structure here means a scanner bug or hostile
+ * input, and either way the safe output is `path: null` (callers treat unknown
+ * position as not-redactable and fail closed downstream).
+ */
+export function scanJson5Document(source: string): Json5DocumentScan {
+  const literals: Json5DocumentLiteral[] = [];
+  const comments: Json5CommentSpan[] = [];
+  const bareTokens: Json5BareToken[] = [];
+  const stack: ScanFrame[] = [];
   let index = 0;
   while (index < source.length) {
     const ch = source[index];
     if (ch === "/" && source[index + 1] === "/") {
-      index += 2;
-      while (index < source.length && !isLineTerminator(source[index])) {
-        index += 1;
+      const textStart = index + 2;
+      let end = textStart;
+      while (end < source.length && !isLineTerminator(source[end])) {
+        end += 1;
       }
+      comments.push({ start: index, end, textStart, textEnd: end });
+      index = end;
       continue;
     }
     if (ch === "/" && source[index + 1] === "*") {
-      const close = source.indexOf("*/", index + 2);
-      index = close === -1 ? source.length : close + 2;
+      const textStart = index + 2;
+      const close = source.indexOf("*/", textStart);
+      const textEnd = close === -1 ? source.length : close;
+      const end = close === -1 ? source.length : close + 2;
+      comments.push({ start: index, end, textStart, textEnd });
+      index = end;
       continue;
     }
     if (ch === '"' || ch === "'") {
       const literal = readStringLiteral(source, index);
-      literals.push(literal);
+      const top = stack[stack.length - 1];
+      if (top?.kind === "object" && top.expectKey) {
+        top.key = literal.decoded;
+        const named =
+          top.path === null
+            ? null
+            : top.path === ""
+              ? literal.decoded
+              : `${top.path}.${literal.decoded}`;
+        literals.push({ ...literal, role: "key", path: named });
+      } else {
+        literals.push({ ...literal, role: "value", path: currentValuePath(stack) });
+      }
       index = literal.end;
       continue;
     }
-    index += 1;
+    if (ch === "{") {
+      stack.push({ kind: "object", path: currentValuePath(stack), expectKey: true, key: null });
+      index += 1;
+      continue;
+    }
+    if (ch === "[") {
+      stack.push({ kind: "array", path: currentValuePath(stack) });
+      index += 1;
+      continue;
+    }
+    if (ch === "}" || ch === "]") {
+      stack.pop();
+      index += 1;
+      continue;
+    }
+    if (ch === ":") {
+      const top = stack[stack.length - 1];
+      if (top?.kind === "object") {
+        top.expectKey = false;
+      }
+      index += 1;
+      continue;
+    }
+    if (ch === ",") {
+      const top = stack[stack.length - 1];
+      if (top?.kind === "object") {
+        top.expectKey = true;
+        top.key = null;
+      }
+      index += 1;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      index += 1;
+      continue;
+    }
+    const token = readBareToken(source, index);
+    const top = stack[stack.length - 1];
+    if (top?.kind === "object" && top.expectKey && token.decoded.length > 0) {
+      top.key = token.decoded;
+    }
+    if (token.decoded.length > 0) {
+      bareTokens.push({ start: index, end: token.end, decoded: token.decoded });
+    }
+    index = token.end > index ? token.end : index + 1;
   }
-  return literals;
+  return { literals, comments, bareTokens };
 }
 
 export type LiteralReplacement = {

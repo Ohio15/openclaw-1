@@ -1,9 +1,10 @@
+import JSON5 from "json5";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getOwnProperty, hasOwnKey, setOwnProperty } from "../safe-object.js";
 import {
   findDecodedMatches,
   type LiteralReplacement,
-  scanJson5StringLiterals,
+  scanJson5Document,
 } from "./json5-strings.js";
 import { isSensitiveConfigPath, type ConfigUiHints } from "./schema.hints.js";
 import type { ConfigFileSnapshot } from "./types.openclaw.js";
@@ -100,11 +101,18 @@ function redactObject(obj: unknown, hints?: ConfigUiHints): unknown {
 }
 
 /**
- * Collect all sensitive string values from a config object.
- * Used for text-based redaction of the raw JSON5 source.
+ * A sensitive string value together with the config path it lives at.
+ * Path shape is dot-joined keys with `[]` for array elements — the same shape
+ * `scanJson5Document` assigns to source literals, so the two can be joined.
  */
-function collectSensitiveValues(obj: unknown, hints?: ConfigUiHints): string[] {
-  const result: string[] = [];
+type SensitiveValue = { path: string; value: string };
+
+/**
+ * Collect all sensitive string values, with their paths, from a config object.
+ * Used for path-anchored redaction of the raw JSON5 source.
+ */
+function collectSensitiveValues(obj: unknown, hints?: ConfigUiHints): SensitiveValue[] {
+  const result: SensitiveValue[] = [];
   if (hints) {
     const lookup = buildRedactionLookup(hints);
     if (lookup.has("")) {
@@ -126,7 +134,7 @@ function redactObjectWithLookup(
   obj: unknown,
   lookup: Set<string>,
   prefix: string,
-  values: string[],
+  values: SensitiveValue[],
   hints: ConfigUiHints,
 ): unknown {
   if (obj === null || obj === undefined) {
@@ -143,7 +151,7 @@ function redactObjectWithLookup(
     }
     return obj.map((item) => {
       if (typeof item === "string" && !isEnvVarPlaceholder(item)) {
-        values.push(item);
+        values.push({ path, value: item });
         return REDACTED_SENTINEL;
       }
       return redactObjectWithLookup(item, lookup, path, values, hints);
@@ -163,7 +171,9 @@ function redactObjectWithLookup(
           // Hey, greptile, look here, this **IS** only applied to strings
           if (typeof value === "string" && !isEnvVarPlaceholder(value)) {
             setOwnProperty(result, key, REDACTED_SENTINEL);
-            values.push(value);
+            // `path`, not `candidate`: the raw source spells the concrete key,
+            // never the `*` wildcard the hint used.
+            values.push({ path, value });
           } else if (typeof value === "object" && value !== null) {
             setOwnProperty(
               result,
@@ -183,7 +193,7 @@ function redactObjectWithLookup(
           !isEnvVarPlaceholder(value)
         ) {
           setOwnProperty(result, key, REDACTED_SENTINEL);
-          values.push(value);
+          values.push({ path, value });
         } else if (typeof value === "object" && value !== null) {
           setOwnProperty(result, key, redactObjectGuessing(value, path, values, hints));
         }
@@ -202,7 +212,7 @@ function redactObjectWithLookup(
 function redactObjectGuessing(
   obj: unknown,
   prefix: string,
-  values: string[],
+  values: SensitiveValue[],
   hints?: ConfigUiHints,
 ): unknown {
   if (obj === null || obj === undefined) {
@@ -218,7 +228,7 @@ function redactObjectGuessing(
         typeof item === "string" &&
         !isEnvVarPlaceholder(item)
       ) {
-        values.push(item);
+        values.push({ path, value: item });
         return REDACTED_SENTINEL;
       }
       return redactObjectGuessing(item, path, values, hints);
@@ -237,7 +247,7 @@ function redactObjectGuessing(
         !isEnvVarPlaceholder(value)
       ) {
         setOwnProperty(result, key, REDACTED_SENTINEL);
-        values.push(value);
+        values.push({ path: dotPath, value });
       } else if (typeof value === "object" && value !== null) {
         setOwnProperty(result, key, redactObjectGuessing(value, dotPath, values, hints));
       } else {
@@ -251,17 +261,19 @@ function redactObjectGuessing(
 }
 
 /**
- * Verbatim spellings of a sensitive value, for the text OUTSIDE string literals.
+ * Verbatim spellings of a sensitive value, for COMMENT text only.
  *
- * This is the SECONDARY net only. A credential pasted into a `//` comment, or
- * left in some other non-literal position, is not something the literal scanner
- * looks at, and it was covered by the original `replaceAll` implementation — so
- * it stays covered. It is deliberately NOT the primary mechanism: enumerating
- * spellings is unbounded (see {@link redactRawLiterals}) and every spelling this
- * list forgets is a credential emitted verbatim.
+ * Comments are the one place a credential can sit outside any string literal
+ * (an operator pasting "// old value was ..."), and comment text is not
+ * decoded, so verbatim matching is correct there. This net is confined to
+ * comment spans by {@link redactRawLiterals}: applied to the whole document it
+ * matched key names, unrelated values, and text SPANNING structure, splicing
+ * the document apart — redaction must never edit anything but a known-inert
+ * span.
  *
  * `JSON.stringify(value).slice(1, -1)` is the escaped body as a JSON/JSON5
- * double-quoted string would spell it, which covers `\n`, `\t`, `\"` and `\\`.
+ * double-quoted string would spell it, which covers a copy-pasted literal body
+ * (`\n`, `\t`, `\"`, `\\`) left in a comment.
  */
 function rawSourceSpellings(value: string): string[] {
   const escaped = JSON.stringify(value).slice(1, -1);
@@ -269,7 +281,74 @@ function rawSourceSpellings(value: string): string[] {
 }
 
 /**
- * Redact sensitive values from the raw source by MEANING, not by spelling.
+ * Does a collected sensitive path match a concrete source path?
+ *
+ * Collected paths inherit the hint's shape, so a record traversed through a
+ * `*` hint yields `models.providers.*.apiKey` while the source literal sits at
+ * `models.providers.acme.apiKey`. `*` matches one-or-more segments — one for
+ * the ordinary record key, more so a key that itself contains a dot
+ * (`providers["my.host"]`) still matches instead of leaving its secret
+ * unredacted and the raw view permanently withheld by the leak check.
+ */
+function sensitivePathMatches(pattern: string, path: string): boolean {
+  if (pattern === path) {
+    return true;
+  }
+  if (!pattern.includes("*")) {
+    return false;
+  }
+  const patternSegments = pattern.split(".");
+  const pathSegments = path.split(".");
+  const matchFrom = (patternIndex: number, pathIndex: number): boolean => {
+    if (patternIndex === patternSegments.length) {
+      return pathIndex === pathSegments.length;
+    }
+    if (patternSegments[patternIndex] === "*") {
+      for (let taken = pathIndex + 1; taken <= pathSegments.length; taken += 1) {
+        if (matchFrom(patternIndex + 1, taken)) {
+          return true;
+        }
+      }
+      return false;
+    }
+    return (
+      patternSegments[patternIndex] === pathSegments[pathIndex] &&
+      matchFrom(patternIndex + 1, pathIndex + 1)
+    );
+  };
+  return matchFrom(0, 0);
+}
+
+/**
+ * Verbatim occurrences of any spelling inside `[from, to)`, longest spelling
+ * first, non-overlapping, in source order. `spellings` must arrive sorted
+ * longest-first.
+ */
+function findVerbatimMatches(
+  source: string,
+  from: number,
+  to: number,
+  spellings: readonly string[],
+): LiteralReplacement[] {
+  const matches: LiteralReplacement[] = [];
+  let cursor = from;
+  while (cursor < to) {
+    const hit = spellings.find(
+      (spelling) => cursor + spelling.length <= to && source.startsWith(spelling, cursor),
+    );
+    if (!hit) {
+      cursor += 1;
+      continue;
+    }
+    matches.push({ start: cursor, end: cursor + hit.length });
+    cursor += hit.length;
+  }
+  return matches;
+}
+
+/**
+ * Redact sensitive values from the raw source by MEANING, not by spelling —
+ * and anchored to the sensitive PATH, not matched anywhere in the text.
  *
  * `collectSensitiveValues` walks the PARSED config, so it yields decoded
  * strings, while the document spells them however the operator wrote them:
@@ -279,25 +358,53 @@ function rawSourceSpellings(value: string): string[] {
  * — misses every spelling not on the list, and each miss emits the credential
  * verbatim in `snapshot.raw`.
  *
- * So the match is done on the DECODED text of each string literal in the source
- * (see `scanJson5StringLiterals`) and the edit is applied to the source span
- * that produced it. That is spelling-independent by construction, and it edits
- * only the matched span, so the comments and formatting `raw` exists to preserve
- * survive untouched.
+ * So the match is done on the DECODED text of each VALUE-position literal at a
+ * path that carries a sensitive value (see `scanJson5Document`), against that
+ * path's OWN secrets, and the edit is applied to the source span that produced
+ * the match. Spelling-independent by construction; and because it is anchored
+ * to the path, a key named like the secret or an unrelated value containing
+ * the same text is never touched — text-anywhere matching redacted those too,
+ * and a round-trip through the raw editor persisted the damage silently.
+ *
+ * The secondary net covers comments — the one span kind where a pasted
+ * credential can live outside a literal — and ONLY comments, so it can never
+ * splice document structure.
  */
-function redactRawLiterals(raw: string, secrets: readonly string[]): string {
+function redactRawLiterals(
+  raw: string,
+  secretsByPath: ReadonlyMap<string, readonly string[]>,
+  spellings: readonly string[],
+): string {
+  const { literals, comments } = scanJson5Document(raw);
+  const pathEntries = [...secretsByPath];
   const edits: LiteralReplacement[] = [];
-  for (const literal of scanJson5StringLiterals(raw)) {
+  for (const literal of literals) {
+    if (literal.role !== "value" || literal.path === null) {
+      continue;
+    }
+    const literalPath = literal.path;
+    const secrets = pathEntries
+      .filter(([pattern]) => sensitivePathMatches(pattern, literalPath))
+      .flatMap(([, values]) => values);
+    if (secrets.length === 0) {
+      continue;
+    }
     edits.push(...findDecodedMatches(literal, secrets));
+  }
+  for (const comment of comments) {
+    edits.push(...findVerbatimMatches(raw, comment.textStart, comment.textEnd, spellings));
   }
   if (edits.length === 0) {
     return raw;
   }
+  // Literal spans and comment spans are disjoint, but the two passes emit them
+  // out of order relative to each other.
+  edits.sort((a, b) => a.start - b.start);
   let result = "";
   let cursor = 0;
   for (const edit of edits) {
     if (edit.start < cursor) {
-      // Overlapping edits cannot happen (matches are per-literal and ordered),
+      // Overlapping edits cannot happen (matches are per-span and ordered),
       // but splicing blindly on one would corrupt the document.
       continue;
     }
@@ -308,6 +415,101 @@ function redactRawLiterals(raw: string, secrets: readonly string[]): string {
 }
 
 /**
+ * Below this length, a secret is not searched for OUTSIDE its own path: a one-
+ * or two-character "secret" occurs in ordinary text deterministically, and
+ * acting on those occurrences either mangles unrelated config (when redacting)
+ * or withholds `raw` forever (when checking). Real credentials clear this bar.
+ */
+const MIN_GLOBAL_LEAK_CHECK_LENGTH = 8;
+
+/**
+ * Does `text` contain `secret` OUTSIDE any sentinel occurrence?
+ *
+ * The sentinel itself must never count as a leak — for secrets like `_` or
+ * `OPENCLAW` a plain `includes()` matches `__OPENCLAW_REDACTED__` and the
+ * check withholds `raw` forever, tripped by its own redactions. Splitting on
+ * the sentinel and searching each fragment separately also cannot invent a
+ * match across a redaction boundary the way rejoining the fragments would.
+ */
+function containsOutsideSentinel(text: string, secret: string): boolean {
+  return text.split(REDACTED_SENTINEL).some((fragment) => fragment.includes(secret));
+}
+
+/**
+ * Semantic fail-closed check on the redacted source. Returns a reason string
+ * when `raw` must be withheld, `null` when it is safe to hand out.
+ *
+ * "Semantic" means: re-parse with the real JSON5 parser and re-collect, so the
+ * check sees what a reader of `raw` would DECODE — a verbatim `includes()` on
+ * the source text has zero coverage of the escaped-spelling class this module
+ * exists to close. The parse requirement also turns any future structural
+ * redaction bug into a withheld view instead of a corrupted one.
+ *
+ * Layers, each fail-closed:
+ *  1. The redacted source must still parse.
+ *  2. Re-collecting sensitive values from the re-parse must surface no secret —
+ *     every sensitive path must now decode to the sentinel (any length).
+ *  3. No decoded string literal, and no verbatim text anywhere, may spell a
+ *     secret of credential length ({@link MIN_GLOBAL_LEAK_CHECK_LENGTH}) — a
+ *     pasted credential in a non-sensitive field or an unquoted key cannot be
+ *     redacted without corrupting config the operator will save back, so the
+ *     whole view is withheld instead.
+ *  4. Comment text may spell no secret of ANY length (comments were redacted
+ *     at every length, so a survivor there is a redaction failure).
+ */
+function findResidualLeak(
+  redacted: string,
+  secrets: readonly string[],
+  hints?: ConfigUiHints,
+): string | null {
+  let reparsed: unknown;
+  try {
+    reparsed = JSON5.parse(redacted);
+  } catch {
+    return "redacted source no longer parses";
+  }
+  for (const { value } of collectSensitiveValues(reparsed, hints)) {
+    for (const secret of secrets) {
+      if (containsOutsideSentinel(value, secret)) {
+        return "a sensitive path still decodes to its value";
+      }
+    }
+  }
+  const globalSecrets = secrets.filter((secret) => secret.length >= MIN_GLOBAL_LEAK_CHECK_LENGTH);
+  const { literals, comments, bareTokens } = scanJson5Document(redacted);
+  for (const literal of literals) {
+    for (const secret of globalSecrets) {
+      if (containsOutsideSentinel(literal.decoded, secret)) {
+        return "a string literal outside the sensitive path still spells a sensitive value";
+      }
+    }
+  }
+  // An unquoted key can spell a secret through \uXXXX identifier escapes,
+  // which neither the literal scan nor the verbatim text sweep below sees.
+  for (const token of bareTokens) {
+    for (const secret of globalSecrets) {
+      if (containsOutsideSentinel(token.decoded, secret)) {
+        return "an unquoted token still spells a sensitive value";
+      }
+    }
+  }
+  for (const secret of globalSecrets) {
+    if (containsOutsideSentinel(redacted, secret)) {
+      return "the source text still spells a sensitive value";
+    }
+  }
+  for (const comment of comments) {
+    const text = redacted.slice(comment.textStart, comment.textEnd);
+    for (const secret of secrets) {
+      if (containsOutsideSentinel(text, secret)) {
+        return "a comment still contains a sensitive value";
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Replace known sensitive values in a raw JSON5 string with the sentinel.
  *
  * Returns `null` when redaction cannot be guaranteed: handing out a partially
@@ -315,30 +517,34 @@ function redactRawLiterals(raw: string, secrets: readonly string[]): string {
  * dropped instead (the same call the invalid-snapshot branch makes).
  */
 function redactRawText(raw: string, config: unknown, hints?: ConfigUiHints): string | null {
-  const secrets = [...new Set(collectSensitiveValues(config, hints))].filter(
-    (value) => value.length > 0,
-  );
-  if (secrets.length === 0) {
+  const collected = collectSensitiveValues(config, hints).filter((entry) => entry.value.length > 0);
+  if (collected.length === 0) {
     return raw;
   }
+  const secretsByPath = new Map<string, string[]>();
+  for (const { path, value } of collected) {
+    const existing = secretsByPath.get(path);
+    if (existing === undefined) {
+      secretsByPath.set(path, [value]);
+    } else if (!existing.includes(value)) {
+      existing.push(value);
+    }
+  }
+  const secrets = [...new Set(collected.map((entry) => entry.value))];
+  const spellings = [...new Set(secrets.flatMap(rawSourceSpellings))].toSorted(
+    (a, b) => b.length - a.length,
+  );
   let result: string;
   try {
-    result = redactRawLiterals(raw, secrets);
+    result = redactRawLiterals(raw, secretsByPath, spellings);
   } catch (err) {
     log.error(`Failed to redact raw config source; withholding it: ${String(err)}`);
     return null;
   }
-  const spellings = [...new Set(secrets.flatMap(rawSourceSpellings))].toSorted(
-    (a, b) => b.length - a.length,
-  );
-  for (const value of spellings) {
-    result = result.replaceAll(value, REDACTED_SENTINEL);
-  }
-  for (const secret of secrets) {
-    if (result.includes(secret)) {
-      log.error("Raw config source still contains a sensitive value after redaction; withholding");
-      return null;
-    }
+  const leak = findResidualLeak(result, secrets, hints);
+  if (leak !== null) {
+    log.error(`Raw config source failed post-redaction verification (${leak}); withholding`);
+    return null;
   }
   return result;
 }
@@ -450,6 +656,12 @@ export function restoreRedactedValues(
     throw err; // some coding error, pass through
   }
 }
+
+export const __test__ = {
+  redactRawText,
+  findResidualLeak,
+  MIN_GLOBAL_LEAK_CHECK_LENGTH,
+};
 
 class RedactionError extends Error {
   public readonly key: string;
