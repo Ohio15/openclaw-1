@@ -1,59 +1,84 @@
-#!/bin/bash
-# Git commit-msg hook — enforces Git Workflow SOP
-# Install: cp commit-msg <repo>/.git/hooks/commit-msg && chmod +x <repo>/.git/hooks/commit-msg
-# Or globally: git config --global core.hooksPath /path/to/git-hooks
+#!/usr/bin/env bash
+# commit-msg hook — conventional-commit subject + attribution-trailer policy.
+#
+# Canonical source: https://github.com/Ohio15/dev-standards (hooks/commit-msg).
+# install.sh copies this file to <repo>/.githooks/commit-msg. Do not edit the
+# per-repo copy; change it here and re-run install.sh.
+#
+# Policy (dev-standards issue #5, decided 2026-09-11):
+#   1. Subject line is `<type>[(scope)][!]: <summary>`.
+#      types: feat fix refactor chore docs test perf security build ci
+#      (STANDARDS.md "Conventional commits"; scope and `!` per the
+#      Conventional Commits spec so Dependabot `chore(deps):` and breaking
+#      `feat!:` subjects are accepted).
+#   2. Merge and revert commits are exempt (git writes their subject).
+#   3. Attribution TRAILERS are allowed — `Co-Authored-By:` (a standard git
+#      trailer; also required by the Claude Code attribution standard) and
+#      `Claude-Session:`. PR-description boilerplate does not belong in a
+#      commit message: lines containing `Generated with` or starting with
+#      `Auditor:` are still rejected.
+#   4. Summary longer than 72 chars warns but does not block.
+#   5. Past-tense summaries are rejected; write the imperative.
+#
+# Bypass (emergency only): git commit --no-verify — but note that also skips
+# every other check in this file. An attributed commit never needs it.
 
 COMMIT_MSG_FILE="$1"
-COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
-FIRST_LINE=$(head -1 "$COMMIT_MSG_FILE")
+if [ -z "$COMMIT_MSG_FILE" ] || [ ! -f "$COMMIT_MSG_FILE" ]; then
+    echo "commit-msg: no message file given" >&2
+    exit 1
+fi
 
-# Skip merge commits
-if echo "$FIRST_LINE" | grep -qE "^Merge "; then
+# First non-comment line is the subject (git strips '#' lines after this hook
+# runs, so the file may still carry the commented template).
+FIRST_LINE=$(grep -v '^#' "$COMMIT_MSG_FILE" | head -1)
+
+# 2. Merge / revert commits: subject is written by git, not the author.
+if echo "$FIRST_LINE" | grep -qE '^(Merge |Revert ")'; then
     exit 0
 fi
 
-# 1. Enforce <type>: <summary> format
-VALID_TYPES="feat|fix|refactor|chore|docs|test|perf|security"
-if ! echo "$FIRST_LINE" | grep -qE "^($VALID_TYPES): .+"; then
+# 1. Enforce <type>[(scope)][!]: <summary>
+VALID_TYPES="feat|fix|refactor|chore|docs|test|perf|security|build|ci"
+if ! echo "$FIRST_LINE" | grep -qE "^($VALID_TYPES)(\([^)]+\))?!?: .+"; then
     echo ""
-    echo "COMMIT REJECTED: Message does not follow <type>: <summary> format."
+    echo "COMMIT REJECTED: Subject does not follow <type>[(scope)]: <summary>."
     echo ""
-    echo "  Your message:  $FIRST_LINE"
+    echo "  Your subject:  $FIRST_LINE"
     echo ""
-    echo "  Valid types: feat, fix, refactor, chore, docs, test, perf, security"
+    echo "  Valid types: feat, fix, refactor, chore, docs, test, perf, security, build, ci"
     echo "  Example:     feat: add player stats dashboard with filtering"
-    echo "  Example:     fix: resolve auth token expiry not refreshing"
+    echo "  Example:     chore(deps): bump fast-uri to 3.0.6"
+    echo "  Example:     feat!: drop the v1 manifest format"
     echo ""
     exit 1
 fi
 
-# 2. AI attribution lines are ALLOWED (relaxed 2026-04-27 per CLAUDE.md
-#    Co-Authored-By trailer requirement). Block kept for reference / easy
-#    re-enable if policy changes again.
-# if grep -qiE "Co-Authored-By:|Generated with|Auditor:" "$COMMIT_MSG_FILE"; then
-#     echo ""
-#     echo "COMMIT REJECTED: AI attribution lines are not allowed."
-#     echo ""
-#     echo "  Remove any Co-Authored-By, Generated with, or Auditor lines."
-#     echo ""
-#     exit 1
-# fi
+# 3. Attribution: trailers allowed; PR boilerplate rejected.
+if grep -v '^#' "$COMMIT_MSG_FILE" | grep -qiE 'Generated with|^Auditor:'; then
+    echo ""
+    echo "COMMIT REJECTED: PR-description boilerplate in the commit message."
+    echo ""
+    echo "  Remove 'Generated with' / 'Auditor:' lines. Attribution trailers"
+    echo "  (Co-Authored-By:, Claude-Session:) are allowed and should stay."
+    echo ""
+    exit 1
+fi
 
-# 3. Summary line length check (max 72 chars)
+# 4. Summary line length (warn only)
 SUMMARY_LEN=${#FIRST_LINE}
 if [ "$SUMMARY_LEN" -gt 72 ]; then
     echo ""
-    echo "COMMIT WARNING: Summary line is $SUMMARY_LEN chars (max 72)."
+    echo "COMMIT WARNING: Subject is $SUMMARY_LEN chars (max 72)."
     echo "  Consider shortening: $FIRST_LINE"
     echo ""
-    # Warning only, don't block
 fi
 
-# 4. Ensure imperative mood (catch common past-tense patterns)
-SUMMARY=$(echo "$FIRST_LINE" | sed 's/^[a-z]*: //')
-if echo "$SUMMARY" | grep -qE "^(Added|Fixed|Updated|Removed|Changed|Refactored|Implemented|Created) "; then
+# 5. Imperative mood (catch the common past-tense openers)
+SUMMARY=$(echo "$FIRST_LINE" | sed -E 's/^[a-z]+(\([^)]+\))?!?: //')
+if echo "$SUMMARY" | grep -qE '^(Added|Fixed|Updated|Removed|Changed|Refactored|Implemented|Created) '; then
     echo ""
-    echo "COMMIT REJECTED: Use imperative mood in summary."
+    echo "COMMIT REJECTED: Use imperative mood in the summary."
     echo ""
     echo "  Bad:  '$SUMMARY'"
     echo "  Good: '$(echo "$SUMMARY" | sed 's/^Added/add/;s/^Fixed/fix/;s/^Updated/update/;s/^Removed/remove/;s/^Changed/change/;s/^Refactored/refactor/;s/^Implemented/implement/;s/^Created/create/')'"
