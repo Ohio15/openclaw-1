@@ -40,6 +40,7 @@ import { ModelTierResolver } from "./src/pipeline/model-tier-resolver.js";
 import { assessQuality, assessQualityWithJudge } from "./src/pipeline/quality-gate.js";
 import type { LLMJudgeConfig } from "./src/pipeline/llm-judge.js";
 import { AnalysisCache, promptHash } from "./src/pipeline/analysis-cache.js";
+import { RunContextStore } from "./src/pipeline/run-context.js";
 import type { BeforeAgentAnalysis } from "./src/pipeline/control-plane.js";
 import {
   EnhancedLoopDetector,
@@ -88,6 +89,14 @@ const intelligencePlugin = {
 
     // Analysis cache — prevents triple-computation across hooks
     const analysisCache = new AnalysisCache<BeforeAgentAnalysis>(60_000);
+
+    // What was decided for each session's current run (prompt + tier), recorded
+    // once at before_model_resolve. Later hooks read it instead of re-deriving
+    // "the prompt" from text they hold: before_prompt_build only sees history
+    // (previous turns), and llm_output sees no messages at all.
+    const runContexts = new RunContextStore();
+    const runKey = (ctx?: { sessionKey?: string; sessionId?: string }) =>
+      ctx?.sessionKey ?? ctx?.sessionId;
 
     /**
      * Get or compute the before-agent analysis, using cache to avoid
@@ -147,12 +156,13 @@ const intelligencePlugin = {
     // Select model/provider override based on tier analysis (CACHED)
     // ========================================================================
 
-    api.on("before_model_resolve", async (event) => {
+    api.on("before_model_resolve", async (event, ctx) => {
       if (!enabled) return;
       try {
         if (!event.prompt || event.prompt.length < 5) return;
         const messages = [{ role: "user", content: event.prompt }] as unknown[];
         const analysis = await getCachedAnalysis(messages);
+        runContexts.record(runKey(ctx), event.prompt, analysis.tierSelection.tier);
         const override = tierResolver.resolve(analysis.tierSelection);
         if (override?.modelOverride || override?.providerOverride) {
           api.logger.info(
@@ -173,8 +183,13 @@ const intelligencePlugin = {
     api.on("before_prompt_build", async (event, ctx) => {
       if (!enabled) return;
 
-      const messages = event.messages as unknown[];
-      if (!messages || messages.length === 0) return;
+      // Analyse the CURRENT prompt. event.messages is the session history
+      // before this prompt is appended, so its last user message is the
+      // PREVIOUS turn - analysing it logged a stale tier and drove chaining /
+      // knowledge injection from the wrong request. Using event.prompt also
+      // makes this a cache hit on the analysis before_model_resolve computed.
+      if (!event.prompt || event.prompt.length < 5) return;
+      const messages = [{ role: "user", content: event.prompt }] as unknown[];
 
       try {
         const analysis = await getCachedAnalysis(messages);
@@ -231,7 +246,9 @@ const intelligencePlugin = {
         // Enhanced progressive compaction (Stage 1: masking, Stage 2: summarization)
         if (compactionEnabled) {
           compactionMgr.recordComplexity(sessionKey, analysis.complexity);
-          const summary = compactionMgr.checkAndSummarize(messages, sessionKey);
+          // Compaction summarises the session HISTORY, not the current prompt.
+          const history = (event.messages as unknown[] | undefined) ?? [];
+          const summary = compactionMgr.checkAndSummarize(history, sessionKey);
           if (summary) {
             prependParts.push(summary);
             api.logger.info(
@@ -398,33 +415,27 @@ const intelligencePlugin = {
         const combinedText = event.assistantTexts.join("\n");
         if (combinedText.trim()) {
           try {
-            // Extract user prompt for judge context (if available)
-            let userPromptForJudge = "";
-            if (llmJudgeConfig.enabled && event.messages) {
-              for (let i = (event.messages as unknown[]).length - 1; i >= 0; i--) {
-                const msg = (event.messages as unknown[])[i] as Record<string, unknown> | null;
-                if (msg?.role === "user") {
-                  userPromptForJudge = typeof msg.content === "string"
-                    ? msg.content
-                    : "";
-                  break;
-                }
-              }
-            }
+            // The run's prompt and tier as decided at before_model_resolve.
+            // llm_output events carry no messages, so the judge previously
+            // always got an empty prompt and silently fell back.
+            const run = runContexts.get(runKey(ctx));
+            const userPromptForJudge = llmJudgeConfig.enabled ? (run?.prompt ?? "") : "";
 
             // Two-stage assessment when judge is enabled and user prompt is available
             const qualityResult = llmJudgeConfig.enabled && userPromptForJudge
               ? await assessQualityWithJudge(combinedText, userPromptForJudge, llmJudgeConfig)
               : assessQuality(combinedText);
             if (qualityResult.verdict === "retry") {
-              // Determine the current tier from cached analysis or default to "medium"
-              let currentTier = "medium";
-              try {
-                const messages = [{ role: "user", content: combinedText }] as unknown[];
-                const analysis = await getCachedAnalysis(messages);
-                currentTier = analysis.tierSelection.tier;
-              } catch {
-                // Fall back to "medium" if analysis fails
+              // The tier this run actually used. Previously this analysed the
+              // ASSISTANT's output as if it were the user prompt. If the run
+              // context is gone (TTL/eviction/no session key), keep the prior
+              // "medium" assumption but say so rather than guessing silently.
+              let currentTier = run?.tier;
+              if (!currentTier) {
+                currentTier = "medium";
+                api.logger.warn(
+                  `intelligence: cascade has no recorded tier for this run; assuming "medium"`,
+                );
               }
 
               // Pre-resolve the next tier's model/provider so the cascade wrapper
