@@ -1,6 +1,6 @@
 module github.com/openclaw/openclaw/scripts/docs-i18n
 
-go 1.24.0
+go 1.24.13
 
 require (
 	github.com/joshp123/pi-golang v0.0.4
