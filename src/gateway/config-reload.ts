@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import chokidar from "chokidar";
 import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
 import type { OpenClawConfig, ConfigFileSnapshot, GatewayReloadMode } from "../config/config.js";
@@ -150,7 +151,10 @@ export function diffConfigPaths(prev: unknown, next: unknown, prefix = ""): stri
     return paths;
   }
   if (Array.isArray(prev) && Array.isArray(next)) {
-    if (prev.length === next.length && prev.every((val, idx) => val === next[idx])) {
+    // Structural, not reference, equality: every reload re-parses the file, so
+    // an array of objects (models, hook mappings) is never `===` its previous
+    // self and was reported as changed on every reload.
+    if (isDeepStrictEqual(prev, next)) {
       return [];
     }
   }

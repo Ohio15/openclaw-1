@@ -23,6 +23,28 @@ describe("diffConfigPaths", () => {
     const paths = diffConfigPaths(prev, next);
     expect(paths).toContain("messages.groupChat.mentionPatterns");
   });
+
+  it("reports nothing when the same file is parsed twice", () => {
+    const raw = JSON.stringify({
+      models: { providers: { ollama: { models: [{ id: "a", cost: { input: 0 } }] } } },
+      hooks: { mappings: [{ match: { path: "x" }, action: "wake" }] },
+      agents: { defaults: { compaction: { keep: [{ role: "system" }] } } },
+    });
+    expect(diffConfigPaths(JSON.parse(raw), JSON.parse(raw))).toEqual([]);
+  });
+
+  it("reports only the array whose object contents changed", () => {
+    const prev = { hooks: { mappings: [{ action: "wake" }] }, models: [{ id: "a" }] };
+    const next = { hooks: { mappings: [{ action: "agent" }] }, models: [{ id: "a" }] };
+    expect(diffConfigPaths(prev, next)).toEqual(["hooks.mappings"]);
+  });
+
+  it("treats reordering and length changes as changes", () => {
+    expect(diffConfigPaths({ a: [{ x: 1 }, { x: 2 }] }, { a: [{ x: 2 }, { x: 1 }] })).toEqual([
+      "a",
+    ]);
+    expect(diffConfigPaths({ a: [{ x: 1 }] }, { a: [{ x: 1 }, { x: 1 }] })).toEqual(["a"]);
+  });
 });
 
 describe("buildGatewayReloadPlan", () => {
