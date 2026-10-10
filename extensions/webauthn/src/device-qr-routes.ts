@@ -11,8 +11,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 
 type PluginLogger = OpenClawPluginApi["logger"];
-import type { PasskeyStore } from "./passkey-store.js";
 import type { WebAuthnConfig } from "../index.js";
+import type { PasskeyStore } from "./passkey-store.js";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -168,7 +168,9 @@ export function createDeviceQrHandler(deps: DeviceQrRoutesDeps) {
       const qrUrl = `${requestOrigin}/auth/qr/${code}/${sig}`;
       const qrAscii = await generateQrAscii(qrUrl);
 
-      logger.info(`webauthn: device auth requested — ${deviceName} -> code ${code}`);
+      // The code is not logged: until the device polls, it is the bearer that
+      // retrieves the approval token from /auth/poll.
+      logger.info(`webauthn: device auth requested — ${deviceName}`);
 
       sendJson(res, 200, {
         code,
@@ -237,20 +239,44 @@ export function createDeviceQrHandler(deps: DeviceQrRoutesDeps) {
       const expectedBuf = Buffer.from(expectedSig);
       if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) {
         const tpl = await import("./html-templates.js");
-        sendHtml(res, 403, tpl.simplePage(config.rpName, "Invalid", '<p style="color:#f85149;text-align:center">Invalid QR code.</p>'));
+        sendHtml(
+          res,
+          403,
+          tpl.simplePage(
+            config.rpName,
+            "Invalid",
+            '<p style="color:#f85149;text-align:center">Invalid QR code.</p>',
+          ),
+        );
         return true;
       }
 
       const device = pendingDevices.get(code);
       if (!device) {
         const tpl = await import("./html-templates.js");
-        sendHtml(res, 404, tpl.simplePage(config.rpName, "Expired", '<p style="color:#f85149;text-align:center">Code expired.</p>'));
+        sendHtml(
+          res,
+          404,
+          tpl.simplePage(
+            config.rpName,
+            "Expired",
+            '<p style="color:#f85149;text-align:center">Code expired.</p>',
+          ),
+        );
         return true;
       }
 
       if (device.status !== "pending") {
         const tpl = await import("./html-templates.js");
-        sendHtml(res, 200, tpl.simplePage(config.rpName, "Done", `<p style="text-align:center">Already ${device.status}.</p>`));
+        sendHtml(
+          res,
+          200,
+          tpl.simplePage(
+            config.rpName,
+            "Done",
+            `<p style="text-align:center">Already ${device.status}.</p>`,
+          ),
+        );
         return true;
       }
 
@@ -300,11 +326,13 @@ export function createDeviceQrHandler(deps: DeviceQrRoutesDeps) {
 
       const approvalToken = config.deviceApprovalToken ?? "";
       if (!approvalToken) {
-        logger.warn("webauthn: deviceApprovalToken not configured — HMAC approval will have an empty token");
+        logger.warn(
+          "webauthn: deviceApprovalToken not configured — HMAC approval will have an empty token",
+        );
       }
       device.status = "approved";
       device.token = approvalToken;
-      logger.info(`webauthn: device approved via HMAC — ${device.deviceName} (${code})`);
+      logger.info(`webauthn: device approved via HMAC — ${device.deviceName}`);
       sendJson(res, 200, { success: true, device: device.deviceName });
       return true;
     }

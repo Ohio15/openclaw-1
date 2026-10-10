@@ -3,14 +3,14 @@
  *
  * Stores registered credentials as JSON on disk so they survive restarts.
  * Single-user system — one owner with multiple passkeys.
- * Uses atomic writes (temp file + rename) to prevent corruption.
+ * Uses atomic owner-only writes (0600 temp file + rename) to prevent corruption
+ * and to keep other local principals from adding their own credential.
  */
 
-import { readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync } from "node:fs";
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { randomBytes } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname } from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { ensurePrivateDir, writePrivateFileAtomic } from "./storage.js";
 
 type PluginLogger = OpenClawPluginApi["logger"];
 
@@ -90,34 +90,31 @@ export class PasskeyStore {
     }
   }
 
-  /** Atomic write: write to a temp file then rename over the target. */
+  /**
+   * Persist all credentials atomically with mode 0600, creating the parent
+   * directory (0700) if needed. Throws on failure: a credential that never
+   * reached disk must not be reported as registered, or it silently vanishes
+   * on the next restart.
+   */
   save(): void {
     try {
-      const dir = dirname(this.storePath);
-      mkdirSync(dir, { recursive: true });
-
-      const tmpPath = join(dir, `.passkeys-${randomBytes(6).toString("hex")}.tmp`);
-      writeFileSync(tmpPath, JSON.stringify(this.credentials, null, 2), "utf-8");
-
-      try {
-        renameSync(tmpPath, this.storePath);
-      } catch {
-        // On Windows, rename can fail if target exists; fall back to write directly
-        try {
-          unlinkSync(tmpPath);
-        } catch {
-          // Best effort cleanup
-        }
-        writeFileSync(this.storePath, JSON.stringify(this.credentials, null, 2), "utf-8");
-      }
+      ensurePrivateDir(dirname(this.storePath), { tighten: false });
+      writePrivateFileAtomic(this.storePath, JSON.stringify(this.credentials, null, 2));
     } catch (err) {
-      this.logger.error(`webauthn: failed to save passkeys — ${String(err)}`);
+      this.logger.error(`webauthn: failed to save passkeys to ${this.storePath} — ${String(err)}`);
+      throw err;
     }
   }
 
+  /** Add and persist a credential. On a failed write the in-memory list is rolled back. */
   add(credential: PasskeyCredential): void {
     this.credentials.push(credential);
-    this.save();
+    try {
+      this.save();
+    } catch (err) {
+      this.credentials = this.credentials.filter((c) => c !== credential);
+      throw err;
+    }
     this.logger.info(`webauthn: passkey registered — name=${credential.name}`);
   }
 
