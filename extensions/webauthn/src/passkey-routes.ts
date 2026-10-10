@@ -16,11 +16,11 @@ import {
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 
 type PluginLogger = OpenClawPluginApi["logger"];
-import type { PasskeyStore } from "./passkey-store.js";
-import type { ChallengeStore } from "./challenge-store.js";
-import type { SessionTokenStore } from "./session-tokens.js";
-import type { PendingDevicesMap } from "./device-qr-routes.js";
 import type { WebAuthnConfig } from "../index.js";
+import type { ChallengeStore } from "./challenge-store.js";
+import type { PendingDevicesMap } from "./device-qr-routes.js";
+import type { PasskeyStore } from "./passkey-store.js";
+import type { SessionTokenStore } from "./session-tokens.js";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -110,6 +110,26 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
     return templates;
   }
 
+  /**
+   * Record the authenticator's new signature counter. Returns false (after
+   * restoring the old value) when it cannot be persisted, so the caller fails
+   * the ceremony instead of approving on state that will not survive restart.
+   */
+  function persistSignCount(
+    cred: import("./passkey-store.js").PasskeyCredential,
+    newCounter: number,
+  ): boolean {
+    const previous = cred.sign_count;
+    cred.sign_count = newCounter;
+    try {
+      store.save();
+      return true;
+    } catch {
+      cred.sign_count = previous;
+      return false;
+    }
+  }
+
   return async function handlePasskeyRequest(
     req: IncomingMessage,
     res: ServerResponse,
@@ -119,22 +139,16 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
     const method = req.method?.toUpperCase() ?? "GET";
 
     // ── GET /auth/register ──────────────────────────────────
+    // The setup token is carried in the URL fragment (#setup_token=...), which
+    // browsers never send, so it cannot land in reverse-proxy or tunnel access
+    // logs. The page holds no secret; the token is checked by the POST routes.
     if (path === "/auth/register" && method === "GET") {
       const tpl = await getTemplates();
-      const setupToken = deps.getSetupToken();
-      const queryToken = url.searchParams.get("setup_token") ?? "";
-
-      if (!setupToken) {
+      if (!deps.getSetupToken()) {
         sendHtml(res, 403, tpl.registrationClosedPage(rpName));
         return true;
       }
-
-      if (!queryToken || queryToken !== setupToken) {
-        sendHtml(res, 403, tpl.invalidTokenPage(rpName));
-        return true;
-      }
-
-      sendHtml(res, 200, tpl.registrationPage(setupToken, rpName, store.listAll().length));
+      sendHtml(res, 200, tpl.registrationPage(rpName));
       return true;
     }
 
@@ -240,18 +254,26 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
           return true;
         }
 
-        const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+        const { credential, credentialDeviceType, credentialBackedUp } =
+          verification.registrationInfo;
 
         // credential.id is already a Base64URLString in v13;
         // Store as standard base64 for consistency with the Python version
         const credIdBytes = Buffer.from(credential.id, "base64url");
-        store.add({
-          id: credIdBytes.toString("base64"),
-          public_key: Buffer.from(credential.publicKey).toString("base64"),
-          sign_count: credential.counter,
-          name,
-          registered_at: Date.now() / 1000,
-        });
+        try {
+          store.add({
+            id: credIdBytes.toString("base64"),
+            public_key: Buffer.from(credential.publicKey).toString("base64"),
+            sign_count: credential.counter,
+            name,
+            registered_at: Date.now() / 1000,
+          });
+        } catch {
+          // store.add already logged the cause and rolled back. Keep the setup
+          // token active so the owner can retry once storage is fixed.
+          sendJson(res, 500, { success: false, error: "Failed to persist passkey" });
+          return true;
+        }
 
         // Invalidate setup token after first successful registration
         deps.clearSetupToken();
@@ -344,8 +366,10 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
           return true;
         }
 
-        storedCred.sign_count = verification.authenticationInfo.newCounter;
-        store.save();
+        if (!persistSignCount(storedCred, verification.authenticationInfo.newCounter)) {
+          sendJson(res, 500, { success: false, error: "Failed to persist authenticator state" });
+          return true;
+        }
 
         const sessionToken = sessionTokens.createSessionToken();
         logger.info(`webauthn: browser login successful (credential: ${storedCred.name})`);
@@ -440,8 +464,10 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
           return true;
         }
 
-        storedCred.sign_count = verification.authenticationInfo.newCounter;
-        store.save();
+        if (!persistSignCount(storedCred, verification.authenticationInfo.newCounter)) {
+          sendJson(res, 500, { success: false, error: "Failed to persist authenticator state" });
+          return true;
+        }
 
         // Approve the pending device
         const device = pendingDevices.get(code);
@@ -452,11 +478,13 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
 
         const approvalToken = config.deviceApprovalToken ?? "";
         if (!approvalToken) {
-          logger.warn("webauthn: deviceApprovalToken not configured — device approval will have an empty token");
+          logger.warn(
+            "webauthn: deviceApprovalToken not configured — device approval will have an empty token",
+          );
         }
         device.status = "approved";
         device.token = approvalToken;
-        logger.info(`webauthn: device approved via passkey — ${device.deviceName} (${code})`);
+        logger.info(`webauthn: device approved via passkey — ${device.deviceName}`);
         sendJson(res, 200, { success: true, device: device.deviceName });
       } catch (err) {
         logger.error(`webauthn: auth verification failed — ${String(err)}`);

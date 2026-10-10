@@ -20,13 +20,23 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { join } from "node:path";
+import { dirname } from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { PasskeyStore } from "./src/passkey-store.js";
 import { ChallengeStore } from "./src/challenge-store.js";
-import { SessionTokenStore } from "./src/session-tokens.js";
-import { createPasskeyHandler } from "./src/passkey-routes.js";
 import { createDeviceQrHandler, type PendingDevicesMap } from "./src/device-qr-routes.js";
+import { createPasskeyHandler } from "./src/passkey-routes.js";
+import { PasskeyStore } from "./src/passkey-store.js";
+import { SessionTokenStore } from "./src/session-tokens.js";
+import {
+  assertWritableDir,
+  ensurePrivateDir,
+  isWithinDir,
+  removeSetupTokenFile,
+  resolvePasskeysPath,
+  tightenFileMode,
+  webauthnStateDir,
+  writeSetupTokenFile,
+} from "./src/storage.js";
 
 // ── Config Type ──────────────────────────────────────────────
 
@@ -56,9 +66,7 @@ const webauthnPlugin = {
     const rpId = String(rawCfg.rpId ?? "");
     const origin = String(rawCfg.origin ?? "");
     if (!rpId || !origin) {
-      api.logger.error(
-        "webauthn: plugin disabled — rpId and origin are required in plugin config",
-      );
+      api.logger.error("webauthn: plugin disabled — rpId and origin are required in plugin config");
       return;
     }
 
@@ -68,9 +76,7 @@ const webauthnPlugin = {
 
     // Resolve HMAC secret: explicit config > gateway token > generated
     const gatewayToken =
-      process.env.OPENCLAW_GATEWAY_TOKEN?.trim() ||
-      api.config.gateway?.auth?.token?.trim() ||
-      "";
+      process.env.OPENCLAW_GATEWAY_TOKEN?.trim() || api.config.gateway?.auth?.token?.trim() || "";
     const hmacSecret = String(rawCfg.hmacSecret ?? "") || gatewayToken;
 
     if (!hmacSecret) {
@@ -96,8 +102,20 @@ const webauthnPlugin = {
     const sessionTokens = new SessionTokenStore();
     const pendingDevices: PendingDevicesMap = new Map();
 
-    // Setup token state
+    // Setup token state. The value is a bearer secret for first-passkey
+    // registration: it is never logged — it reaches the owner through an
+    // owner-only file in the state dir (or the bearer-authenticated admin
+    // endpoint response).
     let setupToken: string | null = null;
+    // Set at service start; used to remove the token file once it is stale.
+    let stateDirForToken: string | null = null;
+
+    function clearSetupToken(): void {
+      setupToken = null;
+      if (stateDirForToken) {
+        removeSetupTokenFile(stateDirForToken, api.logger);
+      }
+    }
 
     // PasskeyStore is initialized in the service start handler
     // because we need the stateDir which is only available at service start.
@@ -117,7 +135,7 @@ const webauthnPlugin = {
           pendingDevices,
           logger: api.logger,
           getSetupToken: () => setupToken,
-          clearSetupToken: () => { setupToken = null; },
+          clearSetupToken,
           getHmacSecret: () => hmacSecret,
           validateBearerAuth,
         });
@@ -142,9 +160,7 @@ const webauthnPlugin = {
 
     function validateBearerAuth(authHeader: string | undefined): boolean {
       if (!authHeader) return false;
-      const token = authHeader.startsWith("Bearer ")
-        ? authHeader.slice(7).trim()
-        : "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
       if (!token) return false;
 
       // Accept gateway token or valid session token
@@ -178,10 +194,15 @@ const webauthnPlugin = {
           res.end(JSON.stringify({ error: "Valid bearer token required" }));
           return true;
         }
-        setupToken = randomBytes(32).toString("base64url");
-        api.logger.info(`webauthn: new setup token generated via admin endpoint — ${setupToken}`);
-        res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ setup_token: setupToken }));
+        // Rotating invalidates any token still sitting in the startup file.
+        clearSetupToken();
+        const issued = randomBytes(32).toString("base64url");
+        setupToken = issued;
+        api.logger.info(
+          "webauthn: new setup token issued via admin endpoint (returned in the response only)",
+        );
+        res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+        res.end(JSON.stringify({ setup_token: issued }));
         return true;
       }
 
@@ -207,31 +228,57 @@ const webauthnPlugin = {
     api.registerService({
       id: "webauthn",
       start: (ctx) => {
-        // Resolve passkeys path
-        const passkeysPath = config.passkeysPath
-          ? api.resolvePath(config.passkeysPath)
-          : join(ctx.stateDir, "webauthn", "passkeys.json");
+        const passkeysPath = resolvePasskeysPath(
+          config.passkeysPath,
+          ctx.stateDir,
+          api.resolvePath,
+        );
+        if (!isWithinDir(passkeysPath, ctx.stateDir)) {
+          api.logger.warn(
+            `webauthn: passkeysPath ${passkeysPath} is outside the state dir ${ctx.stateDir} — ` +
+              "it must be on persistent storage, or every registered passkey is lost when the " +
+              "container is recreated and registration re-opens. Remove passkeysPath to use the default.",
+          );
+        }
 
-        store = new PasskeyStore(passkeysPath, api.logger);
+        // Fail closed and loudly: if passkeys cannot be persisted, refuse to
+        // start (the /auth handler then answers 503) instead of accepting a
+        // registration that only lives in memory.
+        const passkeysDir = dirname(passkeysPath);
+        try {
+          ensurePrivateDir(webauthnStateDir(ctx.stateDir), { tighten: true });
+          ensurePrivateDir(passkeysDir, { tighten: false });
+          assertWritableDir(passkeysDir);
+          tightenFileMode(passkeysPath, api.logger);
+        } catch (err) {
+          throw new Error(
+            `webauthn: passkey storage ${passkeysDir} is not writable — WebAuthn disabled (${String(err)})`,
+            { cause: err },
+          );
+        }
 
-        // Initialize setup token if no passkeys are registered
-        if (!store.hasCredentials) {
-          setupToken = randomBytes(32).toString("base64url");
-          api.logger.info(`webauthn: SETUP TOKEN: ${setupToken}`);
-          // Print to stdout for visibility
-          const line = "=".repeat(60);
-          console.log(`\n${line}`);
-          console.log(`WEBAUTHN SETUP TOKEN: ${setupToken}`);
-          console.log(`Use this token to register your first passkey.`);
-          console.log(`Visit: ${origin}/auth/register?setup_token=${setupToken}`);
-          console.log(`${line}\n`);
+        const nextStore = new PasskeyStore(passkeysPath, api.logger);
+        stateDirForToken = ctx.stateDir;
+
+        if (!nextStore.hasCredentials) {
+          const issued = randomBytes(32).toString("base64url");
+          const tokenFile = writeSetupTokenFile(ctx.stateDir, issued);
+          setupToken = issued;
+          api.logger.warn(
+            `webauthn: no passkeys registered — registration is open. The setup token is in ${tokenFile} ` +
+              `(mode 0600). Open ${origin}/auth/register#setup_token=<token> to register the first passkey.`,
+          );
         } else {
-          setupToken = null;
+          clearSetupToken();
           api.logger.info(
             "webauthn: passkeys already registered — registration is closed. Use admin endpoint for new setup tokens.",
           );
         }
 
+        // Route handlers capture the store; rebuild them for the new one.
+        cachedPasskeyHandler = null;
+        cachedDeviceHandler = null;
+        store = nextStore;
         api.logger.info(`webauthn: service started (passkeys: ${passkeysPath})`);
       },
       stop: () => {
