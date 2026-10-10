@@ -5,9 +5,10 @@
  * and QR-code device pairing via WebAuthn/passkeys.
  *
  * HTTP routes (registered via prefix handler on /auth):
- *   GET  /auth/register                     — Registration page (requires setup_token)
- *   POST /auth/passkey/register/options      — Generate registration options
- *   POST /auth/passkey/register/verify       — Verify registration and store credential
+ *   GET  /auth/register                     — Registration page (public, holds no secret; the
+ *                                             setup token arrives in the URL #fragment or is pasted)
+ *   POST /auth/passkey/register/options      — Generate registration options (requires setup_token)
+ *   POST /auth/passkey/register/verify       — Verify registration and store credential (requires setup_token)
  *   POST /auth/passkey/login/options         — Generate browser login options
  *   POST /auth/passkey/login/verify          — Verify login, return session token
  *   POST /auth/passkey/auth/options          — Generate device approval auth options
