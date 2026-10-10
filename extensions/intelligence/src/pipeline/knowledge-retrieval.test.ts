@@ -20,9 +20,8 @@ const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
 // Dynamic imports after mocks are registered
-const { complexityBasedMaxResults, getSemanticKnowledge } = await import(
-  "./knowledge-retrieval.js"
-);
+const { complexityBasedMaxResults, getSemanticKnowledge, parseMcpResponseBody } =
+  await import("./knowledge-retrieval.js");
 const { buildKnowledgeContext } = await import("./domain-knowledge.js");
 
 // ---------------------------------------------------------------------------
@@ -51,25 +50,59 @@ function makeRecallResult(
   };
 }
 
-/** Build an SSE body for a brain_recall response with the given results. */
-function makeBrainRecallSSE(
-  results: ReturnType<typeof makeRecallResult>[],
-): string {
-  return [
-    `data: ${JSON.stringify({
+/**
+ * SSE body in the exact framing shared-brain (MCP SDK StreamableHTTPServerTransport,
+ * server 7.72.0) returns, captured 2026-10-10 with content redacted:
+ *   event: message
+
+ *   data: {"jsonrpc":"2.0","id":<request id>,"result":{...}}
+
+ *   
+
+ */
+function sseEvent(message: unknown): string {
+  return `event: message
+data: ${JSON.stringify(message)}
+
+`;
+}
+
+/** Build the SSE body for a brain_recall response to request `id`. */
+function makeBrainRecallSSE(results: ReturnType<typeof makeRecallResult>[], id: number): string {
+  return sseEvent({
+    jsonrpc: "2.0",
+    id,
+    result: {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({ pri_n: results.length, pri: results }),
+        },
+      ],
+    },
+  });
+}
+
+const SSE_HEADERS = { "content-type": "text/event-stream" };
+
+function initResponse(id: number, sessionId: string): Response {
+  return new Response(
+    sseEvent({
+      jsonrpc: "2.0",
+      id,
       result: {
-        content: [
-          {
-            type: "text",
-            text: JSON.stringify({ pri_n: results.length, pri: results }),
-          },
-        ],
+        protocolVersion: "2024-11-05",
+        capabilities: { tools: { listChanged: true } },
+        serverInfo: { name: "shared-brain", version: "7.72.0" },
       },
-    })}`,
-    "",
-    "data: [DONE]",
-    "",
-  ].join("\n");
+    }),
+    { status: 200, headers: { ...SSE_HEADERS, "mcp-session-id": sessionId } },
+  );
+}
+
+/** notifications/initialized is acknowledged with 202 and no body. */
+function acceptedResponse(): Response {
+  return new Response(null, { status: 202 });
 }
 
 /**
@@ -99,22 +132,20 @@ function setupSmartFetch(
       if (initStatus !== 200) {
         return new Response("Error", { status: initStatus });
       }
-      return new Response(
-        JSON.stringify({ jsonrpc: "2.0", result: {}, id: 1 }),
-        {
-          status: 200,
-          headers: { "mcp-session-id": sessionId },
-        },
-      );
+      return initResponse(body.id, sessionId);
+    }
+
+    if (body.method === "notifications/initialized") {
+      return acceptedResponse();
     }
 
     if (body.method === "tools/call" && body.params?.name === "brain_recall") {
       if (recallStatus !== 200) {
         return new Response("Error", { status: recallStatus });
       }
-      return new Response(makeBrainRecallSSE(recallResults), {
+      return new Response(makeBrainRecallSSE(recallResults, body.id), {
         status: 200,
-        headers: { "mcp-session-id": sessionId },
+        headers: { ...SSE_HEADERS, "mcp-session-id": sessionId },
       });
     }
 
@@ -198,11 +229,7 @@ describe("getSemanticKnowledge — static source", () => {
     const staticContent = "Static knowledge about authentication patterns.";
     vi.mocked(buildKnowledgeContext).mockReturnValue(staticContent);
 
-    const result = await getSemanticKnowledge(
-      "how does auth work",
-      defaultOptions,
-      "static",
-    );
+    const result = await getSemanticKnowledge("how does auth work", defaultOptions, "static");
 
     expect(buildKnowledgeContext).toHaveBeenCalledWith("how does auth work");
     expect(result).toBe(staticContent);
@@ -211,11 +238,7 @@ describe("getSemanticKnowledge — static source", () => {
   it("returns null when buildKnowledgeContext returns null", async () => {
     vi.mocked(buildKnowledgeContext).mockReturnValue(null);
 
-    const result = await getSemanticKnowledge(
-      "unknown topic",
-      defaultOptions,
-      "static",
-    );
+    const result = await getSemanticKnowledge("unknown topic", defaultOptions, "static");
 
     expect(result).toBeNull();
   });
@@ -226,11 +249,7 @@ describe("getSemanticKnowledge — static source", () => {
     const longContent = "A".repeat(100);
     vi.mocked(buildKnowledgeContext).mockReturnValue(longContent);
 
-    const result = await getSemanticKnowledge(
-      "some query",
-      tinyOptions,
-      "static",
-    );
+    const result = await getSemanticKnowledge("some query", tinyOptions, "static");
 
     expect(result).not.toBeNull();
     // Truncated to maxChars: 40 chars total (37 A's + "...")
@@ -247,11 +266,7 @@ describe("getSemanticKnowledge — semantic source", () => {
   it("returns formatted context when fetch succeeds with results", async () => {
     setupSmartFetch([makeRecallResult()]);
 
-    const result = await getSemanticKnowledge(
-      "JWT signing algorithm",
-      defaultOptions,
-      "semantic",
-    );
+    const result = await getSemanticKnowledge("JWT signing algorithm", defaultOptions, "semantic");
 
     expect(result).not.toBeNull();
     expect(result).toContain("<context-knowledge>");
@@ -263,11 +278,7 @@ describe("getSemanticKnowledge — semantic source", () => {
   it("returns null when MCP session init fails with HTTP 500", async () => {
     setupSmartFetch([], { initStatus: 500 });
 
-    const result = await getSemanticKnowledge(
-      "some query",
-      defaultOptions,
-      "semantic",
-    );
+    const result = await getSemanticKnowledge("some query", defaultOptions, "semantic");
 
     expect(result).toBeNull();
   });
@@ -322,11 +333,7 @@ describe("getSemanticKnowledge — semantic source", () => {
       return Promise.reject(err);
     });
 
-    const result = await getSemanticKnowledge(
-      "slow query",
-      defaultOptions,
-      "semantic",
-    );
+    const result = await getSemanticKnowledge("slow query", defaultOptions, "semantic");
 
     expect(result).toBeNull();
   });
@@ -340,11 +347,7 @@ describe("getSemanticKnowledge — hybrid source", () => {
   it("returns semantic results when available", async () => {
     setupSmartFetch([makeRecallResult({ c: "Semantic hybrid result" })]);
 
-    const result = await getSemanticKnowledge(
-      "hybrid query",
-      defaultOptions,
-      "hybrid",
-    );
+    const result = await getSemanticKnowledge("hybrid query", defaultOptions, "hybrid");
 
     expect(result).not.toBeNull();
     expect(result).toContain("Semantic hybrid result");
@@ -353,15 +356,9 @@ describe("getSemanticKnowledge — hybrid source", () => {
 
   it("falls back to static when semantic fails", async () => {
     setupSmartFetch([], { initStatus: 503 });
-    vi.mocked(buildKnowledgeContext).mockReturnValue(
-      "Fallback static knowledge about auth.",
-    );
+    vi.mocked(buildKnowledgeContext).mockReturnValue("Fallback static knowledge about auth.");
 
-    const result = await getSemanticKnowledge(
-      "auth patterns",
-      defaultOptions,
-      "hybrid",
-    );
+    const result = await getSemanticKnowledge("auth patterns", defaultOptions, "hybrid");
 
     expect(result).toBe("Fallback static knowledge about auth.");
     expect(buildKnowledgeContext).toHaveBeenCalledWith("auth patterns");
@@ -385,8 +382,8 @@ describe("getSemanticKnowledge — hybrid source", () => {
 
     expect(result).not.toBeNull();
     expect(result).toContain("Simple retrieval result");
-    // Single-shot: init + recall = exactly 2 fetch calls
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Single-shot: init + initialized notification + recall = 3 fetch calls
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -395,19 +392,25 @@ describe("getSemanticKnowledge — hybrid source", () => {
 // ===========================================================================
 
 describe("session management", () => {
-  it("first call initializes session then recalls (2 fetch calls)", async () => {
+  it("first call initializes, confirms, then recalls (3 fetch calls)", async () => {
     setupSmartFetch([makeRecallResult()]);
 
     await getSemanticKnowledge("test query", defaultOptions, "semantic");
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
 
     // Verify the first call is the initialize request
     const initBody = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(initBody.method).toBe("initialize");
 
-    // Verify the second call is the brain_recall request
-    const recallBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+    // Lifecycle: the initialized notification carries the new session and no id
+    const ackBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+    expect(ackBody.method).toBe("notifications/initialized");
+    expect(ackBody.id).toBeUndefined();
+    expect(mockFetch.mock.calls[1][1].headers["Mcp-Session-Id"]).toBe("test-session-123");
+
+    // Verify the third call is the brain_recall request
+    const recallBody = JSON.parse(mockFetch.mock.calls[2][1].body);
     expect(recallBody.method).toBe("tools/call");
     expect(recallBody.params.name).toBe("brain_recall");
   });
@@ -419,13 +422,11 @@ describe("session management", () => {
       const body = JSON.parse(init.body as string);
 
       if (body.method === "initialize") {
-        return new Response(
-          JSON.stringify({ jsonrpc: "2.0", result: {}, id: 1 }),
-          {
-            status: 200,
-            headers: { "mcp-session-id": `session-${++recallCallCount}` },
-          },
-        );
+        return initResponse(body.id, `session-${++recallCallCount}`);
+      }
+
+      if (body.method === "notifications/initialized") {
+        return acceptedResponse();
       }
 
       if (body.method === "tools/call" && body.params?.name === "brain_recall") {
@@ -436,10 +437,10 @@ describe("session management", () => {
         }
         // Retry recall: return valid results
         return new Response(
-          makeBrainRecallSSE([makeRecallResult({ c: "Retried result" })]),
+          makeBrainRecallSSE([makeRecallResult({ c: "Retried result" })], body.id),
           {
             status: 200,
-            headers: { "mcp-session-id": "session-fresh" },
+            headers: { ...SSE_HEADERS, "mcp-session-id": "session-fresh" },
           },
         );
       }
@@ -447,15 +448,257 @@ describe("session management", () => {
       return new Response("Not Found", { status: 404 });
     });
 
-    const result = await getSemanticKnowledge(
-      "retry query",
-      defaultOptions,
-      "semantic",
-    );
+    const result = await getSemanticKnowledge("retry query", defaultOptions, "semantic");
 
     expect(result).not.toBeNull();
     expect(result).toContain("Retried result");
-    // 4 calls: init + failed recall + re-init + successful recall
-    expect(mockFetch).toHaveBeenCalledTimes(4);
+    // 6 calls: (init + ack) + failed recall + (re-init + ack) + successful recall
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+  });
+});
+
+// ===========================================================================
+// Streamable HTTP transport: regressions for the 2026-10-09 production
+// failure ("Failed to parse SSE response" on every agent turn)
+// ===========================================================================
+
+describe("MCP transport", () => {
+  it("sends the Streamable HTTP Accept header on every request", async () => {
+    setupSmartFetch([makeRecallResult()]);
+
+    await getSemanticKnowledge("accept header", defaultOptions, "semantic");
+
+    for (const call of mockFetch.mock.calls) {
+      expect(call[1].headers.Accept).toBe("application/json, text/event-stream");
+    }
+  });
+
+  it("gives concurrent recalls on one session distinct JSON-RPC ids", async () => {
+    // Emulates the MCP SDK server: responses are routed by JSON-RPC id, so a
+    // later in-flight request with the same id steals the stream mapping and
+    // the earlier streams never receive a response. When the server reaps the
+    // idle session it closes them with only keepalive comments, the body
+    // shape captured in production, which the old parser rejected.
+    const inFlight = new Map<number, Array<(res: Response) => void>>();
+    let pending = 0;
+    const CONCURRENT = 3;
+    const release = () => {
+      for (const [id, waiters] of inFlight) {
+        const winner = waiters[waiters.length - 1];
+        for (const waiter of waiters) {
+          waiter(
+            new Response(
+              waiter === winner
+                ? makeBrainRecallSSE([makeRecallResult({ c: `answer for ${id}` })], id)
+                : ": keepalive\n\n: keepalive\n\n",
+              { status: 200, headers: SSE_HEADERS },
+            ),
+          );
+        }
+      }
+    };
+
+    mockFetch.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      if (body.method === "initialize") return initResponse(body.id, "shared-session");
+      if (body.method === "notifications/initialized") return acceptedResponse();
+      return new Promise<Response>((resolve) => {
+        const waiters = inFlight.get(body.id) ?? [];
+        waiters.push(resolve);
+        inFlight.set(body.id, waiters);
+        if (++pending === CONCURRENT) release();
+      });
+    });
+
+    const results = await Promise.all(
+      ["first", "second", "third"].map((q) => getSemanticKnowledge(q, defaultOptions, "semantic")),
+    );
+
+    // One session, three recalls, three distinct ids, three answers.
+    const bodies = mockFetch.mock.calls.map((call) => JSON.parse(call[1].body));
+    expect(bodies.filter((body) => body.method === "initialize")).toHaveLength(1);
+    const recallIds = bodies.filter((body) => body.method === "tools/call").map((body) => body.id);
+    expect(recallIds).toHaveLength(3);
+    expect(new Set(recallIds).size).toBe(3);
+    for (const result of results) {
+      expect(result).toContain("answer for");
+    }
+  });
+
+  it("returns null without throwing for an orphaned stream (keepalives only)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockFetch.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      if (body.method === "initialize") return initResponse(body.id, "s-orphan");
+      if (body.method === "notifications/initialized") return acceptedResponse();
+      return new Response(": keepalive\n\n", { status: 200, headers: SSE_HEADERS });
+    });
+
+    const result = await getSemanticKnowledge("orphan", defaultOptions, "semantic");
+
+    expect(result).toBeNull();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("brain_recall returned no JSON-RPC response"),
+    );
+    warn.mockRestore();
+  });
+
+  it("rejects a response addressed to a different request id", async () => {
+    mockFetch.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      if (body.method === "initialize") return initResponse(body.id, "s-crossed");
+      if (body.method === "notifications/initialized") return acceptedResponse();
+      // Another request's answer delivered on this stream (cross-wired routing)
+      return new Response(makeBrainRecallSSE([makeRecallResult()], body.id + 1000), {
+        status: 200,
+        headers: SSE_HEADERS,
+      });
+    });
+
+    const result = await getSemanticKnowledge("crossed", defaultOptions, "semantic");
+
+    expect(result).toBeNull();
+  });
+
+  it("bounds the body read by the request deadline", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockFetch.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      if (body.method === "initialize") return initResponse(body.id, "s-hung");
+      if (body.method === "notifications/initialized") return acceptedResponse();
+      // Headers arrive at once; the body never completes (as an orphaned
+      // stream behaves for up to the server's 4h session TTL). Like undici,
+      // aborting the request signal errors the body stream.
+      const signal = init.signal!;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          signal.addEventListener("abort", () => controller.error(signal.reason));
+        },
+      });
+      return new Response(stream, { status: 200, headers: SSE_HEADERS });
+    });
+
+    const pendingResult = getSemanticKnowledge("hung", defaultOptions, "semantic");
+    await vi.advanceTimersByTimeAsync(8_001);
+    const result = await pendingResult;
+
+    expect(result).toBeNull();
+    expect(warn).toHaveBeenCalledWith("[knowledge-retrieval] brain_recall timed out");
+    warn.mockRestore();
+  });
+
+  it("parses a plain JSON response when the server chooses JSON mode", async () => {
+    mockFetch.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      if (body.method === "initialize") {
+        return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id, result: {} }), {
+          status: 200,
+          headers: { "content-type": "application/json", "mcp-session-id": "s-json" },
+        });
+      }
+      if (body.method === "notifications/initialized") return acceptedResponse();
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: body.id,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ pri_n: 1, pri: [makeRecallResult({ c: "json mode" })] }),
+              },
+            ],
+          },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    });
+
+    const result = await getSemanticKnowledge("json", defaultOptions, "semantic");
+
+    expect(result).toContain("json mode");
+  });
+
+  it("does not cache a session whose initialized notification is rejected", async () => {
+    mockFetch.mockImplementation(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      if (body.method === "initialize") return initResponse(body.id, "s-unacked");
+      if (body.method === "notifications/initialized") {
+        return new Response("Bad Request", { status: 400 });
+      }
+      return new Response(makeBrainRecallSSE([makeRecallResult()], body.id), {
+        status: 200,
+        headers: SSE_HEADERS,
+      });
+    });
+
+    const result = await getSemanticKnowledge("unacked", defaultOptions, "semantic");
+
+    expect(result).toBeNull();
+    const methods = mockFetch.mock.calls.map((call) => JSON.parse(call[1].body).method);
+    expect(methods).not.toContain("tools/call");
+  });
+});
+
+describe("parseMcpResponseBody", () => {
+  const response = { jsonrpc: "2.0", id: 7, result: { ok: true } };
+
+  it("extracts the response from the captured SSE framing", () => {
+    expect(parseMcpResponseBody("text/event-stream", sseEvent(response), 7)).toEqual(response);
+  });
+
+  it("skips notifications and comments that precede the response", () => {
+    const body =
+      ": keepalive\n\n" +
+      sseEvent({ jsonrpc: "2.0", method: "notifications/progress", params: { progress: 1 } }) +
+      sseEvent(response);
+    expect(parseMcpResponseBody("text/event-stream", body, 7)).toEqual(response);
+  });
+
+  it("joins multi-line data fields and accepts CRLF line endings", () => {
+    const json = JSON.stringify(response, null, 2);
+    const body =
+      "event: message\r\n" +
+      json
+        .split("\n")
+        .map((line) => `data: ${line}`)
+        .join("\r\n") +
+      "\r\n\r\n";
+    expect(parseMcpResponseBody("text/event-stream; charset=utf-8", body, 7)).toEqual(response);
+  });
+
+  it("accepts a final event without a trailing blank line", () => {
+    const body = `event: message\ndata: ${JSON.stringify(response)}`;
+    expect(parseMcpResponseBody("text/event-stream", body, 7)).toEqual(response);
+  });
+
+  it("returns null for a stream carrying only keepalive comments", () => {
+    expect(
+      parseMcpResponseBody("text/event-stream", ": keepalive\n\n: keepalive\n\n", 7),
+    ).toBeNull();
+  });
+
+  it("returns null when the only response is for another request id", () => {
+    expect(
+      parseMcpResponseBody("text/event-stream", sseEvent({ ...response, id: 8 }), 7),
+    ).toBeNull();
+  });
+
+  it("accepts an unattributed (id null) error as the answer", () => {
+    const error = {
+      jsonrpc: "2.0",
+      id: null,
+      error: { code: -32000, message: "Bad Request: Server not initialized" },
+    };
+    expect(parseMcpResponseBody("application/json", JSON.stringify(error), 7)).toEqual(error);
+  });
+
+  it("finds the matching entry in a JSON batch response", () => {
+    const batch = [{ ...response, id: 6 }, response];
+    expect(parseMcpResponseBody("application/json", JSON.stringify(batch), 7)).toEqual(response);
+  });
+
+  it("falls back to SSE framing when the content-type is missing", () => {
+    expect(parseMcpResponseBody("", sseEvent(response), 7)).toEqual(response);
   });
 });
