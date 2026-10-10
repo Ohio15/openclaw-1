@@ -12,7 +12,9 @@ import {
   computeBackoffMs,
   enqueueDelivery,
   failDelivery,
+  isEntryEligibleForRetry,
   loadPendingDeliveries,
+  MAX_ENTRY_AGE_MS,
   MAX_RETRIES,
   moveToFailed,
   recoverPendingDeliveries,
@@ -104,7 +106,7 @@ describe("delivery-queue", () => {
   });
 
   describe("failDelivery", () => {
-    it("increments retryCount and sets lastError", async () => {
+    it("increments retryCount and sets lastError and lastAttemptAt", async () => {
       const id = await enqueueDelivery(
         {
           channel: "telegram",
@@ -120,6 +122,8 @@ describe("delivery-queue", () => {
       const entry = JSON.parse(fs.readFileSync(path.join(queueDir, `${id}.json`), "utf-8"));
       expect(entry.retryCount).toBe(1);
       expect(entry.lastError).toBe("connection refused");
+      expect(typeof entry.lastAttemptAt).toBe("number");
+      expect(Math.abs(Date.now() - entry.lastAttemptAt)).toBeLessThan(5_000);
     });
   });
 
@@ -175,8 +179,15 @@ describe("delivery-queue", () => {
   });
 
   describe("recoverPendingDeliveries", () => {
-    const noopDelay = async () => {};
     const baseCfg = {};
+
+    /** Overwrite fields of a queued entry on disk to simulate prior history. */
+    const setEntryState = (id: string, state: Record<string, unknown>) => {
+      const filePath = path.join(tmpDir, "delivery-queue", `${id}.json`);
+      const entry = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      fs.writeFileSync(filePath, JSON.stringify({ ...entry, ...state }), "utf-8");
+    };
+    const failedPath = (id: string) => path.join(tmpDir, "delivery-queue", "failed", `${id}.json`);
 
     it("recovers entries from a simulated crash", async () => {
       // Manually create two queue entries as if gateway crashed before delivery.
@@ -191,7 +202,6 @@ describe("delivery-queue", () => {
         log,
         cfg: baseCfg,
         stateDir: tmpDir,
-        delay: noopDelay,
       });
 
       expect(deliver).toHaveBeenCalledTimes(2);
@@ -223,7 +233,6 @@ describe("delivery-queue", () => {
         log,
         cfg: baseCfg,
         stateDir: tmpDir,
-        delay: noopDelay,
       });
 
       expect(deliver).not.toHaveBeenCalled();
@@ -245,7 +254,6 @@ describe("delivery-queue", () => {
         log,
         cfg: baseCfg,
         stateDir: tmpDir,
-        delay: noopDelay,
       });
 
       expect(result.failed).toBe(1);
@@ -269,7 +277,6 @@ describe("delivery-queue", () => {
         log,
         cfg: baseCfg,
         stateDir: tmpDir,
-        delay: noopDelay,
       });
 
       expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ skipQueue: true }));
@@ -301,7 +308,6 @@ describe("delivery-queue", () => {
         log,
         cfg: baseCfg,
         stateDir: tmpDir,
-        delay: noopDelay,
       });
 
       expect(deliver).toHaveBeenCalledWith(
@@ -331,7 +337,6 @@ describe("delivery-queue", () => {
         log,
         cfg: baseCfg,
         stateDir: tmpDir,
-        delay: noopDelay,
         maxRecoveryMs: 0, // Immediate timeout -- no entries should be processed.
       });
 
@@ -348,18 +353,14 @@ describe("delivery-queue", () => {
       expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("deferred to next restart"));
     });
 
-    it("defers entries when backoff exceeds the recovery budget", async () => {
+    it("leaves an entry whose backoff has not elapsed in the queue untouched", async () => {
       const id = await enqueueDelivery(
         { channel: "whatsapp", to: "+1", payloads: [{ text: "a" }] },
         tmpDir,
       );
-      const filePath = path.join(tmpDir, "delivery-queue", `${id}.json`);
-      const entry = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      entry.retryCount = 3;
-      fs.writeFileSync(filePath, JSON.stringify(entry), "utf-8");
+      setEntryState(id, { retryCount: 3, lastAttemptAt: Date.now() });
 
       const deliver = vi.fn().mockResolvedValue([]);
-      const delay = vi.fn(async () => {});
       const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 
       const result = await recoverPendingDeliveries({
@@ -367,18 +368,258 @@ describe("delivery-queue", () => {
         log,
         cfg: baseCfg,
         stateDir: tmpDir,
-        delay,
-        maxRecoveryMs: 1000,
       });
 
       expect(deliver).not.toHaveBeenCalled();
-      expect(delay).not.toHaveBeenCalled();
-      expect(result).toEqual({ recovered: 0, failed: 0, skipped: 0 });
+      expect(result).toEqual({ recovered: 0, failed: 0, skipped: 0, deferred: 1, expired: 0 });
 
       const remaining = await loadPendingDeliveries(tmpDir);
       expect(remaining).toHaveLength(1);
+      expect(remaining[0].retryCount).toBe(3);
+      expect(log.info).toHaveBeenCalledWith(expect.stringContaining("not ready for retry yet"));
+    });
 
-      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("deferred to next restart"));
+    it("does not let a head-of-line entry in backoff block younger entries", async () => {
+      // The oldest entry is mid-backoff (2m after its 3rd failure). Under the old
+      // semantics a backoff longer than the 60s budget halted the whole loop.
+      const blockedId = await enqueueDelivery(
+        { channel: "signal", to: "+1", payloads: [{ text: "old" }] },
+        tmpDir,
+      );
+      setEntryState(blockedId, {
+        enqueuedAt: Date.now() - 60_000,
+        retryCount: 3,
+        lastAttemptAt: Date.now() - 1_000,
+      });
+      await enqueueDelivery(
+        { channel: "telegram", to: "2", payloads: [{ text: "young" }] },
+        tmpDir,
+      );
+
+      const deliver = vi.fn().mockResolvedValue([]);
+      const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      const result = await recoverPendingDeliveries({
+        deliver,
+        log,
+        cfg: baseCfg,
+        stateDir: tmpDir,
+      });
+
+      expect(deliver).toHaveBeenCalledTimes(1);
+      expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ channel: "telegram" }));
+      expect(result).toEqual({ recovered: 1, failed: 0, skipped: 0, deferred: 1, expired: 0 });
+
+      const remaining = await loadPendingDeliveries(tmpDir);
+      expect(remaining.map((entry) => entry.id)).toEqual([blockedId]);
+      expect(log.warn).not.toHaveBeenCalledWith(expect.stringContaining("budget exceeded"));
+    });
+
+    it.each([
+      { retryCount: 1, backoffMs: 5_000 },
+      { retryCount: 2, backoffMs: 25_000 },
+      { retryCount: 3, backoffMs: 120_000 },
+      { retryCount: 4, backoffMs: 600_000 },
+    ])(
+      "retries an entry with $retryCount failures only once $backoffMs ms have elapsed since its last attempt",
+      async ({ retryCount, backoffMs }) => {
+        const dueId = await enqueueDelivery(
+          { channel: "whatsapp", to: "+1", payloads: [{ text: "due" }] },
+          tmpDir,
+        );
+        setEntryState(dueId, {
+          enqueuedAt: Date.now() - backoffMs - 120_000,
+          retryCount,
+          lastAttemptAt: Date.now() - backoffMs - 1_000,
+        });
+        const notDueId = await enqueueDelivery(
+          { channel: "whatsapp", to: "+2", payloads: [{ text: "not due" }] },
+          tmpDir,
+        );
+        setEntryState(notDueId, {
+          enqueuedAt: Date.now() - backoffMs - 60_000,
+          retryCount,
+          lastAttemptAt: Date.now() - backoffMs + 2_000,
+        });
+
+        const deliver = vi.fn().mockResolvedValue([]);
+        const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+        const result = await recoverPendingDeliveries({
+          deliver,
+          log,
+          cfg: baseCfg,
+          stateDir: tmpDir,
+        });
+
+        expect(deliver).toHaveBeenCalledTimes(1);
+        expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ to: "+1" }));
+        expect(result).toEqual({ recovered: 1, failed: 0, skipped: 0, deferred: 1, expired: 0 });
+        const remaining = await loadPendingDeliveries(tmpDir);
+        expect(remaining.map((entry) => entry.id)).toEqual([notDueId]);
+      },
+    );
+
+    it("measures backoff from enqueuedAt for entries written before lastAttemptAt existed", async () => {
+      const id = await enqueueDelivery(
+        { channel: "whatsapp", to: "+1", payloads: [{ text: "legacy" }] },
+        tmpDir,
+      );
+      // retryCount 2 => 25s backoff; enqueued 30s ago with no lastAttemptAt.
+      setEntryState(id, { enqueuedAt: Date.now() - 30_000, retryCount: 2 });
+
+      const deliver = vi.fn().mockResolvedValue([]);
+      const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      const result = await recoverPendingDeliveries({
+        deliver,
+        log,
+        cfg: baseCfg,
+        stateDir: tmpDir,
+      });
+
+      expect(deliver).toHaveBeenCalledTimes(1);
+      expect(result.recovered).toBe(1);
+    });
+
+    it("records lastAttemptAt on a failed recovery so the next pass backs off", async () => {
+      const id = await enqueueDelivery(
+        { channel: "slack", to: "#ch", payloads: [{ text: "x" }] },
+        tmpDir,
+      );
+      const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      const first = await recoverPendingDeliveries({
+        deliver: vi.fn().mockRejectedValue(new Error("network down")),
+        log,
+        cfg: baseCfg,
+        stateDir: tmpDir,
+      });
+      expect(first.failed).toBe(1);
+
+      const [afterFailure] = await loadPendingDeliveries(tmpDir);
+      expect(afterFailure.id).toBe(id);
+      expect(afterFailure.retryCount).toBe(1);
+      expect(typeof afterFailure.lastAttemptAt).toBe("number");
+
+      // Immediate second pass: the 5s backoff from the recorded attempt has not elapsed.
+      const deliver = vi.fn().mockResolvedValue([]);
+      const second = await recoverPendingDeliveries({
+        deliver,
+        log,
+        cfg: baseCfg,
+        stateDir: tmpDir,
+      });
+      expect(deliver).not.toHaveBeenCalled();
+      expect(second).toEqual({ recovered: 0, failed: 0, skipped: 0, deferred: 1, expired: 0 });
+    });
+
+    it("moves entries older than the max entry age to failed/ without sending", async () => {
+      const dayMs = 24 * 60 * 60 * 1000;
+      // Shape of the stranded production entries: legacy (no lastAttemptAt),
+      // retryCount 1-2, enqueued weeks ago — mixed with one fresh entry.
+      const staleShapes: ReadonlyArray<readonly [number, number]> = [
+        [86, 2],
+        [86, 2],
+        [54, 1],
+        [54, 1],
+        [44, 1],
+      ];
+      const staleIds: string[] = [];
+      for (const [ageDays, retryCount] of staleShapes) {
+        const id = await enqueueDelivery(
+          { channel: "signal", to: "+1", payloads: [{ text: "stale" }] },
+          tmpDir,
+        );
+        setEntryState(id, {
+          enqueuedAt: Date.now() - ageDays * dayMs,
+          retryCount,
+          lastError: "Signal REST send failed: HTTP 400",
+        });
+        staleIds.push(id);
+      }
+      const freshId = await enqueueDelivery(
+        { channel: "telegram", to: "2", payloads: [{ text: "fresh" }] },
+        tmpDir,
+      );
+
+      const deliver = vi.fn().mockResolvedValue([]);
+      const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      const result = await recoverPendingDeliveries({
+        deliver,
+        log,
+        cfg: baseCfg,
+        stateDir: tmpDir,
+      });
+
+      expect(deliver).toHaveBeenCalledTimes(1);
+      expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ channel: "telegram" }));
+      expect(result).toEqual({ recovered: 1, failed: 0, skipped: 0, deferred: 0, expired: 5 });
+      for (const id of staleIds) {
+        expect(fs.existsSync(failedPath(id))).toBe(true);
+      }
+      expect(fs.existsSync(failedPath(freshId))).toBe(false);
+      expect(await loadPendingDeliveries(tmpDir)).toHaveLength(0);
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining("too old to replay"));
+    });
+
+    it("keeps an entry just inside the max entry age and expires one just outside it", async () => {
+      const insideId = await enqueueDelivery(
+        { channel: "whatsapp", to: "+1", payloads: [{ text: "inside" }] },
+        tmpDir,
+      );
+      setEntryState(insideId, { enqueuedAt: Date.now() - MAX_ENTRY_AGE_MS + 60_000 });
+      const outsideId = await enqueueDelivery(
+        { channel: "whatsapp", to: "+2", payloads: [{ text: "outside" }] },
+        tmpDir,
+      );
+      setEntryState(outsideId, { enqueuedAt: Date.now() - MAX_ENTRY_AGE_MS - 60_000 });
+
+      const deliver = vi.fn().mockResolvedValue([]);
+      const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      const result = await recoverPendingDeliveries({
+        deliver,
+        log,
+        cfg: baseCfg,
+        stateDir: tmpDir,
+      });
+
+      expect(deliver).toHaveBeenCalledTimes(1);
+      expect(deliver).toHaveBeenCalledWith(expect.objectContaining({ to: "+1" }));
+      expect(result.expired).toBe(1);
+      expect(fs.existsSync(failedPath(outsideId))).toBe(true);
+      expect(fs.existsSync(failedPath(insideId))).toBe(false);
+    });
+
+    it("honours a maxEntryAgeMs override and expires entries without a valid enqueuedAt", async () => {
+      const oldId = await enqueueDelivery(
+        { channel: "whatsapp", to: "+1", payloads: [{ text: "a" }] },
+        tmpDir,
+      );
+      setEntryState(oldId, { enqueuedAt: Date.now() - 10 * 60_000 });
+      const corruptId = await enqueueDelivery(
+        { channel: "whatsapp", to: "+2", payloads: [{ text: "b" }] },
+        tmpDir,
+      );
+      setEntryState(corruptId, { enqueuedAt: "not-a-timestamp" });
+
+      const deliver = vi.fn().mockResolvedValue([]);
+      const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+      const result = await recoverPendingDeliveries({
+        deliver,
+        log,
+        cfg: baseCfg,
+        stateDir: tmpDir,
+        maxEntryAgeMs: 5 * 60_000,
+      });
+
+      expect(deliver).not.toHaveBeenCalled();
+      expect(result).toEqual({ recovered: 0, failed: 0, skipped: 0, deferred: 0, expired: 2 });
+      expect(fs.existsSync(failedPath(oldId))).toBe(true);
+      expect(fs.existsSync(failedPath(corruptId))).toBe(true);
     });
 
     it("returns zeros when queue is empty", async () => {
@@ -390,11 +631,36 @@ describe("delivery-queue", () => {
         log,
         cfg: baseCfg,
         stateDir: tmpDir,
-        delay: noopDelay,
       });
 
-      expect(result).toEqual({ recovered: 0, failed: 0, skipped: 0 });
+      expect(result).toEqual({ recovered: 0, failed: 0, skipped: 0, deferred: 0, expired: 0 });
       expect(deliver).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("isEntryEligibleForRetry", () => {
+    const base = { id: "x", channel: "whatsapp" as const, to: "+1", payloads: [] };
+
+    it("treats a never-attempted entry as a crash replay that is eligible immediately", () => {
+      const now = Date.now();
+      expect(isEntryEligibleForRetry({ ...base, enqueuedAt: now, retryCount: 0 }, now)).toEqual({
+        eligible: true,
+      });
+    });
+
+    it("measures backoff from lastAttemptAt", () => {
+      const now = Date.now();
+      const entry = {
+        ...base,
+        enqueuedAt: now - 3_600_000,
+        retryCount: 2,
+        lastAttemptAt: now - 10_000,
+      };
+      expect(isEntryEligibleForRetry(entry, now)).toEqual({
+        eligible: false,
+        remainingBackoffMs: 15_000,
+      });
+      expect(isEntryEligibleForRetry(entry, now + 15_000)).toEqual({ eligible: true });
     });
   });
 });

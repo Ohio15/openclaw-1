@@ -10,6 +10,18 @@ const QUEUE_DIRNAME = "delivery-queue";
 const FAILED_DIRNAME = "failed";
 const MAX_RETRIES = 5;
 
+/**
+ * Entries older than this are never replayed on recovery; they are moved to
+ * failed/ instead. Queued payloads are conversational replies, and a reply
+ * that lands a day after the turn it answers is wrong rather than late:
+ * the conversation has moved on and the user may already have re-asked. 24h
+ * matches the window chat platforms themselves treat as "still in
+ * conversation" (WhatsApp Business free-form reply window). Crash recovery
+ * normally replays within minutes of the crash, so this only removes entries
+ * that were stranded across a long outage or a recovery bug.
+ */
+const MAX_ENTRY_AGE_MS = 24 * 60 * 60 * 1000;
+
 /** Backoff delays in milliseconds indexed by retry count (1-based). */
 const BACKOFF_MS: readonly number[] = [
   5_000, // retry 1: 5s
@@ -44,6 +56,8 @@ export interface QueuedDelivery {
   silent?: boolean;
   mirror?: DeliveryMirrorPayload;
   retryCount: number;
+  /** Wall-clock time of the most recent failed attempt; backoff is measured from here. */
+  lastAttemptAt?: number;
   lastError?: string;
 }
 
@@ -130,6 +144,7 @@ export async function failDelivery(id: string, error: string, stateDir?: string)
   const raw = await fs.promises.readFile(filePath, "utf-8");
   const entry: QueuedDelivery = JSON.parse(raw);
   entry.retryCount += 1;
+  entry.lastAttemptAt = Date.now();
   entry.lastError = error;
   const tmp = `${filePath}.${process.pid}.tmp`;
   await fs.promises.writeFile(tmp, JSON.stringify(entry, null, 2), {
@@ -207,23 +222,64 @@ export interface RecoveryLogger {
   error(msg: string): void;
 }
 
+export type RetryEligibility = { eligible: true } | { eligible: false; remainingBackoffMs: number };
+
+/**
+ * Decide whether an entry's backoff has elapsed. After N failed attempts the
+ * entry waits computeBackoffMs(N), measured from its last attempt (entries
+ * written before lastAttemptAt existed fall back to enqueuedAt). An entry that
+ * has never been attempted is a crash replay and is eligible immediately.
+ */
+export function isEntryEligibleForRetry(entry: QueuedDelivery, now: number): RetryEligibility {
+  const backoff = computeBackoffMs(entry.retryCount);
+  if (backoff <= 0) {
+    return { eligible: true };
+  }
+  const lastAttemptAt =
+    typeof entry.lastAttemptAt === "number" && Number.isFinite(entry.lastAttemptAt)
+      ? entry.lastAttemptAt
+      : entry.enqueuedAt;
+  const remainingBackoffMs = lastAttemptAt + backoff - now;
+  return remainingBackoffMs > 0 ? { eligible: false, remainingBackoffMs } : { eligible: true };
+}
+
+export type RecoverySummary = {
+  recovered: number;
+  failed: number;
+  /** Moved to failed/ after exhausting MAX_RETRIES. */
+  skipped: number;
+  /** Backoff not yet elapsed; left in the queue for a later recovery pass. */
+  deferred: number;
+  /** Older than the max entry age (or without a valid enqueue time); moved to failed/ unsent. */
+  expired: number;
+};
+
 /**
  * On gateway startup, scan the delivery queue and retry any pending entries.
- * Uses exponential backoff and moves entries that exceed MAX_RETRIES to failed/.
+ * Entries whose backoff has not elapsed are left in place (they never block
+ * the entries behind them); entries that exceed MAX_RETRIES or the max entry
+ * age are moved to failed/.
  */
 export async function recoverPendingDeliveries(opts: {
   deliver: DeliverFn;
   log: RecoveryLogger;
   cfg: OpenClawConfig;
   stateDir?: string;
-  /** Override for testing — resolves instead of using real setTimeout. */
-  delay?: (ms: number) => Promise<void>;
-  /** Maximum wall-clock time for recovery in ms. Remaining entries are deferred to next restart. Default: 60 000. */
+  /** Maximum wall-clock time spent sending, in ms. Remaining entries are deferred to next restart. Default: 60 000. */
   maxRecoveryMs?: number;
-}): Promise<{ recovered: number; failed: number; skipped: number }> {
+  /** Entries enqueued longer ago than this are moved to failed/ without a send. Default: 24h. */
+  maxEntryAgeMs?: number;
+}): Promise<RecoverySummary> {
+  const summary: RecoverySummary = {
+    recovered: 0,
+    failed: 0,
+    skipped: 0,
+    deferred: 0,
+    expired: 0,
+  };
   const pending = await loadPendingDeliveries(opts.stateDir);
   if (pending.length === 0) {
-    return { recovered: 0, failed: 0, skipped: 0 };
+    return summary;
   }
 
   // Process oldest first.
@@ -231,44 +287,51 @@ export async function recoverPendingDeliveries(opts: {
 
   opts.log.info(`Found ${pending.length} pending delivery entries — starting recovery`);
 
-  const delayFn = opts.delay ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const deadline = Date.now() + (opts.maxRecoveryMs ?? 60_000);
+  const maxEntryAgeMs = opts.maxEntryAgeMs ?? MAX_ENTRY_AGE_MS;
 
-  let recovered = 0;
-  let failed = 0;
-  let skipped = 0;
+  const moveEntryToFailed = async (entry: QueuedDelivery): Promise<void> => {
+    try {
+      await moveToFailed(entry.id, opts.stateDir);
+    } catch (err) {
+      opts.log.error(`Failed to move entry ${entry.id} to failed/: ${String(err)}`);
+    }
+  };
 
-  for (const entry of pending) {
+  for (const [index, entry] of pending.entries()) {
     const now = Date.now();
     if (now >= deadline) {
-      const deferred = pending.length - recovered - failed - skipped;
-      opts.log.warn(`Recovery time budget exceeded — ${deferred} entries deferred to next restart`);
+      opts.log.warn(
+        `Recovery time budget exceeded — ${pending.length - index} entries deferred to next restart`,
+      );
       break;
     }
     if (entry.retryCount >= MAX_RETRIES) {
       opts.log.warn(
         `Delivery ${entry.id} exceeded max retries (${entry.retryCount}/${MAX_RETRIES}) — moving to failed/`,
       );
-      try {
-        await moveToFailed(entry.id, opts.stateDir);
-      } catch (err) {
-        opts.log.error(`Failed to move entry ${entry.id} to failed/: ${String(err)}`);
-      }
-      skipped += 1;
+      await moveEntryToFailed(entry);
+      summary.skipped += 1;
       continue;
     }
 
-    const backoff = computeBackoffMs(entry.retryCount + 1);
-    if (backoff > 0) {
-      if (now + backoff >= deadline) {
-        const deferred = pending.length - recovered - failed - skipped;
-        opts.log.warn(
-          `Recovery time budget exceeded — ${deferred} entries deferred to next restart`,
-        );
-        break;
-      }
-      opts.log.info(`Waiting ${backoff}ms before retrying delivery ${entry.id}`);
-      await delayFn(backoff);
+    const ageMs = now - entry.enqueuedAt;
+    if (!Number.isFinite(ageMs) || ageMs > maxEntryAgeMs) {
+      opts.log.warn(
+        `Delivery ${entry.id} is too old to replay (age ${Number.isFinite(ageMs) ? `${Math.round(ageMs / 1000)}s` : "unknown"}, max ${Math.round(maxEntryAgeMs / 1000)}s, retries ${entry.retryCount}) — moving to failed/`,
+      );
+      await moveEntryToFailed(entry);
+      summary.expired += 1;
+      continue;
+    }
+
+    const eligibility = isEntryEligibleForRetry(entry, now);
+    if (!eligibility.eligible) {
+      opts.log.info(
+        `Delivery ${entry.id} not ready for retry yet — backoff ${eligibility.remainingBackoffMs}ms remaining`,
+      );
+      summary.deferred += 1;
+      continue;
     }
 
     try {
@@ -287,7 +350,7 @@ export async function recoverPendingDeliveries(opts: {
         skipQueue: true, // Prevent re-enqueueing during recovery
       });
       await ackDelivery(entry.id, opts.stateDir);
-      recovered += 1;
+      summary.recovered += 1;
       opts.log.info(`Recovered delivery ${entry.id} to ${entry.channel}:${entry.to}`);
     } catch (err) {
       try {
@@ -299,7 +362,7 @@ export async function recoverPendingDeliveries(opts: {
       } catch {
         // Best-effort update.
       }
-      failed += 1;
+      summary.failed += 1;
       opts.log.warn(
         `Retry failed for delivery ${entry.id}: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -307,9 +370,9 @@ export async function recoverPendingDeliveries(opts: {
   }
 
   opts.log.info(
-    `Delivery recovery complete: ${recovered} recovered, ${failed} failed, ${skipped} skipped (max retries)`,
+    `Delivery recovery complete: ${summary.recovered} recovered, ${summary.failed} failed, ${summary.skipped} skipped (max retries), ${summary.deferred} deferred (backoff), ${summary.expired} expired (too old)`,
   );
-  return { recovered, failed, skipped };
+  return summary;
 }
 
-export { MAX_RETRIES };
+export { MAX_ENTRY_AGE_MS, MAX_RETRIES };
