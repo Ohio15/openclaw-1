@@ -168,7 +168,9 @@ export function createDeviceQrHandler(deps: DeviceQrRoutesDeps) {
       const qrUrl = `${requestOrigin}/auth/qr/${code}/${sig}`;
       const qrAscii = await generateQrAscii(qrUrl);
 
-      logger.info(`webauthn: device auth requested — ${deviceName} -> code ${code}`);
+      // The code is not logged: until the device polls, it is the bearer that
+      // retrieves the approval token from /auth/poll.
+      logger.info(`webauthn: device auth requested — ${deviceName}`);
 
       sendJson(res, 200, {
         code,
@@ -330,7 +332,7 @@ export function createDeviceQrHandler(deps: DeviceQrRoutesDeps) {
       }
       device.status = "approved";
       device.token = approvalToken;
-      logger.info(`webauthn: device approved via HMAC — ${device.deviceName} (${code})`);
+      logger.info(`webauthn: device approved via HMAC — ${device.deviceName}`);
       sendJson(res, 200, { success: true, device: device.deviceName });
       return true;
     }

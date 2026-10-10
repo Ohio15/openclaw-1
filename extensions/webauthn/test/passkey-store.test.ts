@@ -120,4 +120,40 @@ describe("PasskeyStore", () => {
     const tmpFiles = files.filter((f) => f.endsWith(".tmp"));
     expect(tmpFiles).toHaveLength(0);
   });
+  it("creates a missing parent directory on save", () => {
+    const nestedPath = path.join(tmpDir, "a", "b", "passkeys.json");
+    const store = new PasskeyStore(nestedPath, silentLogger);
+    store.add(makeCred("nested-1", "Nested"));
+
+    expect(fs.existsSync(nestedPath)).toBe(true);
+    expect(new PasskeyStore(nestedPath, silentLogger).findById("nested-1")).toBeDefined();
+  });
+
+  it.skipIf(process.platform === "win32")("writes the store 0600 and a new parent dir 0700", () => {
+    const nestedPath = path.join(tmpDir, "private", "passkeys.json");
+    const store = new PasskeyStore(nestedPath, silentLogger);
+    store.add(makeCred("mode-1", "Mode"));
+
+    expect(fs.statSync(nestedPath).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(path.dirname(nestedPath)).mode & 0o777).toBe(0o700);
+  });
+
+  it.skipIf(process.platform === "win32")("narrows an existing 0644 store to 0600 on save", () => {
+    fs.writeFileSync(storePath, "[]", { mode: 0o644 });
+    fs.chmodSync(storePath, 0o644);
+    const store = new PasskeyStore(storePath, silentLogger);
+    store.add(makeCred("mode-2", "Mode"));
+
+    expect(fs.statSync(storePath).mode & 0o777).toBe(0o600);
+  });
+
+  it("throws on a failed write and rolls back the in-memory credential", () => {
+    const blocker = path.join(tmpDir, "blocker");
+    fs.writeFileSync(blocker, "not a directory");
+    const store = new PasskeyStore(path.join(blocker, "passkeys.json"), silentLogger);
+
+    expect(() => store.add(makeCred("lost-1", "Lost"))).toThrow();
+    expect(store.hasCredentials).toBe(false);
+    expect(store.findById("lost-1")).toBeUndefined();
+  });
 });

@@ -31,7 +31,7 @@
       },
       "passkeysPath": {
         "type": "string",
-        "description": "Path to passkeys.json persistence file. Defaults to {stateDir}/webauthn/passkeys.json"
+        "description": "Path to passkeys.json persistence file. Defaults to {stateDir}/webauthn/passkeys.json. Relative paths resolve against the state dir. Must be on persistent storage: passkeys stored anywhere else are lost when the container is recreated."
       },
       "deviceApprovalToken": {
         "type": "string",
