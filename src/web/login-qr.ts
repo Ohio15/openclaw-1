@@ -40,7 +40,10 @@ const activeLogins = new Map<string, ActiveLogin>();
 
 function closeSocket(sock: WaSocket) {
   try {
-    sock.ws?.close();
+    // Baileys >=7.0.0-rc12 close() is async; swallow rejection like the sync catch below.
+    sock.ws?.close().catch(() => {
+      // ignore
+    });
   } catch {
     // ignore
   }
