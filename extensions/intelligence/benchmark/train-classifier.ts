@@ -120,7 +120,12 @@ function train(): void {
 
   // Serialize model
   const model: ClassifierModel = classifier.serialize(samples.length);
-  model.trainingAccuracy = accuracy;
+  // ClassifierModel stores accuracy as { tier, pipeline }; evaluate() returns the
+  // *Accuracy-suffixed names, so map explicitly rather than widening the type.
+  model.trainingAccuracy = {
+    tier: accuracy.tierAccuracy,
+    pipeline: accuracy.pipelineAccuracy,
+  };
   writeFileSync(modelPath, JSON.stringify(model), "utf-8");
 
   const fileSizeKB = (Buffer.byteLength(JSON.stringify(model)) / 1024).toFixed(1);
