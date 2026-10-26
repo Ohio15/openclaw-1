@@ -34,7 +34,9 @@ export async function loginWeb(
         ),
       );
       try {
-        sock.ws?.close();
+        sock.ws?.close().catch(() => {
+          // ignore
+        });
       } catch {
         // ignore
       }
@@ -69,7 +71,9 @@ export async function loginWeb(
     // Let Baileys flush any final events before closing the socket.
     setTimeout(() => {
       try {
-        sock.ws?.close();
+        sock.ws?.close().catch(() => {
+          // ignore
+        });
       } catch {
         // ignore
       }
