@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/webauthn",
-  "version": "1.0.0",
+  "version": "2026.2.47",
   "private": true,
   "description": "WebAuthn/passkey authentication: biometric login, device approval via QR codes",
   "type": "module",
