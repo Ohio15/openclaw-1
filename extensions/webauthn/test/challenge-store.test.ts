@@ -35,15 +35,16 @@ describe("ChallengeStore", () => {
   });
 
   it("expired challenges return null", () => {
+    // Freeze the clock BEFORE creating the entry so expiry is independent of wall-clock drift.
+    const frozenNow = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(frozenNow);
     const store = createStore();
     const challenge = Buffer.from("will-expire");
 
-    // Set the challenge
     store.set("auth:expire-test", challenge);
 
     // Fast-forward time past the 5 minute TTL (300_000ms)
-    const originalNow = Date.now;
-    vi.spyOn(Date, "now").mockReturnValue(originalNow() + 300_001);
+    nowSpy.mockReturnValue(frozenNow + 300_001);
 
     const result = store.get("auth:expire-test");
     expect(result).toBeNull();
@@ -62,8 +63,10 @@ describe("ChallengeStore", () => {
   });
 
   it("cleanup removes expired entries", () => {
+    // Freeze the clock BEFORE creating entries so expiry is independent of wall-clock drift.
+    const realNow = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNow);
     const store = createStore();
-    const realNow = Date.now();
 
     // Add entries at different times using direct manipulation
     store.set("fresh", Buffer.from("fresh-challenge"));
@@ -73,7 +76,7 @@ describe("ChallengeStore", () => {
     store.set("old", Buffer.from("old-challenge"));
 
     // Advance time past TTL for the "old" entry
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNow + 300_001);
+    nowSpy.mockReturnValue(realNow + 300_001);
 
     // Run cleanup — this should remove both entries since both are now expired
     // relative to the advanced clock
