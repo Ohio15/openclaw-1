@@ -71,8 +71,10 @@ describe("runSignalWsLoop", () => {
       policy: FAST_POLICY,
     });
 
-    // At least two connections proves the reconnect machinery fired.
-    await waitFor(() => connections >= 2);
+    // At least two connections proves the reconnect machinery fired. Also wait for the
+    // second message to be delivered: the server counts a connection before the client has
+    // received its payload, so aborting on the connection count alone races the delivery.
+    await waitFor(() => connections >= 2 && events.length >= 2);
     abort.abort();
     await expect(loop).resolves.toBeUndefined();
 
