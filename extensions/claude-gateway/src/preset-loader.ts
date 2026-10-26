@@ -46,7 +46,14 @@ export type PresetStore = {
   reload: () => void;
 };
 
-export function createPresetLoader(presetsDir: string, logger?: { info: (message: string) => void; warn: (message: string) => void; error: (message: string) => void }): PresetStore {
+export function createPresetLoader(
+  presetsDir: string,
+  logger?: {
+    info: (message: string) => void;
+    warn: (message: string) => void;
+    error: (message: string) => void;
+  },
+): PresetStore {
   const presets = new Map<string, PresetConfig>();
   const log = logger ?? console;
 
@@ -59,7 +66,8 @@ export function createPresetLoader(presetsDir: string, logger?: { info: (message
       return;
     }
 
-    const files = fs.readdirSync(resolvedDir)
+    const files = fs
+      .readdirSync(resolvedDir)
       .filter((f) => f.endsWith(".yml") || f.endsWith(".yaml"))
       .sort();
 

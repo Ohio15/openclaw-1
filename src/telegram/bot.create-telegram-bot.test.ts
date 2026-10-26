@@ -1962,7 +1962,9 @@ describe("createTelegramBot", () => {
       });
 
       createTelegramBot({ token: "tok", testTimings: TELEGRAM_TEST_TIMINGS });
-      const handler = getOnHandler("channel_post") as (ctx: Record<string, unknown>) => Promise<void>;
+      const handler = getOnHandler("channel_post") as (
+        ctx: Record<string, unknown>,
+      ) => Promise<void>;
 
       const part1 = "A".repeat(4050);
       const part2 = "B".repeat(50);

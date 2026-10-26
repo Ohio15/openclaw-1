@@ -124,7 +124,8 @@ export const memoryConfigSchema = {
         provider: "openai",
         model,
         apiKey: resolveEnvVars(embedding.apiKey),
-        baseUrl: typeof embedding.baseUrl === "string" ? resolveEnvVars(embedding.baseUrl) : undefined,
+        baseUrl:
+          typeof embedding.baseUrl === "string" ? resolveEnvVars(embedding.baseUrl) : undefined,
       },
       dbPath: typeof cfg.dbPath === "string" ? cfg.dbPath : DEFAULT_DB_PATH,
       autoCapture: cfg.autoCapture === true,

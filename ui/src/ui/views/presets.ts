@@ -57,29 +57,35 @@ function renderPresetCard(preset: PresetSummary, props: PresetsProps): TemplateR
         <div class="list-main" style="flex: 1; min-width: 0;">
           <div class="list-title">${preset.display_name || preset.name}</div>
           <div class="list-sub">${preset.description}</div>
-          ${preset.schedule
-            ? html`<div class="muted" style="margin-top: 4px; font-family: var(--mono); font-size: 12px;">
+          ${
+            preset.schedule
+              ? html`<div class="muted" style="margin-top: 4px; font-family: var(--mono); font-size: 12px;">
                 Schedule: ${preset.schedule}
               </div>`
-            : nothing}
-          ${preset.tags.length > 0
-            ? html`
+              : nothing
+          }
+          ${
+            preset.tags.length > 0
+              ? html`
                 <div class="chip-row" style="margin-top: 6px;">
-                  ${preset.tags.map(
-                    (tag) => html`<span class="chip">${tag}</span>`,
-                  )}
-                  ${preset.has_mcp
-                    ? html`<span class="chip chip-ok">MCP</span>`
-                    : nothing}
+                  ${preset.tags.map((tag) => html`<span class="chip">${tag}</span>`)}
+                  ${
+                    preset.has_mcp
+                      ? html`
+                          <span class="chip chip-ok">MCP</span>
+                        `
+                      : nothing
+                  }
                 </div>
               `
-            : preset.has_mcp
-              ? html`
-                  <div class="chip-row" style="margin-top: 6px;">
-                    <span class="chip chip-ok">MCP</span>
-                  </div>
-                `
-              : nothing}
+              : preset.has_mcp
+                ? html`
+                    <div class="chip-row" style="margin-top: 6px">
+                      <span class="chip chip-ok">MCP</span>
+                    </div>
+                  `
+                : nothing
+          }
         </div>
         <div class="list-meta" style="display: flex; gap: 6px; flex-shrink: 0;">
           <button
@@ -104,17 +110,25 @@ function renderPresetCard(preset: PresetSummary, props: PresetsProps): TemplateR
           </button>
         </div>
       </div>
-      ${isExpanded
-        ? html`
+      ${
+        isExpanded
+          ? html`
             <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-              ${isDetailLoading
-                ? html`<div class="muted">Loading details...</div>`
-                : detail
-                  ? renderPresetDetail(detail)
-                  : html`<div class="muted">Loading...</div>`}
+              ${
+                isDetailLoading
+                  ? html`
+                      <div class="muted">Loading details...</div>
+                    `
+                  : detail
+                    ? renderPresetDetail(detail)
+                    : html`
+                        <div class="muted">Loading...</div>
+                      `
+              }
             </div>
           `
-        : nothing}
+          : nothing
+      }
     </div>
   `;
 }
@@ -122,8 +136,9 @@ function renderPresetCard(preset: PresetSummary, props: PresetsProps): TemplateR
 function renderPresetDetail(detail: PresetDetail): TemplateResult {
   return html`
     <div style="display: flex; flex-direction: column; gap: 10px;">
-      ${detail.system_prompt
-        ? html`
+      ${
+        detail.system_prompt
+          ? html`
             <div>
               <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px;">
                 System Prompt
@@ -133,23 +148,25 @@ function renderPresetDetail(detail: PresetDetail): TemplateResult {
               </div>
             </div>
           `
-        : nothing}
-      ${detail.allowed_tools.length > 0
-        ? html`
+          : nothing
+      }
+      ${
+        detail.allowed_tools.length > 0
+          ? html`
             <div>
               <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px;">
                 Tools (${detail.allowed_tools.length})
               </div>
               <div class="chip-row">
-                ${detail.allowed_tools.map(
-                  (tool) => html`<span class="chip">${tool}</span>`,
-                )}
+                ${detail.allowed_tools.map((tool) => html`<span class="chip">${tool}</span>`)}
               </div>
             </div>
           `
-        : nothing}
-      ${detail.mcp_config
-        ? html`
+          : nothing
+      }
+      ${
+        detail.mcp_config
+          ? html`
             <div>
               <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px;">
                 MCP Config
@@ -159,9 +176,11 @@ function renderPresetDetail(detail: PresetDetail): TemplateResult {
               </div>
             </div>
           `
-        : nothing}
-      ${detail.working_directory
-        ? html`
+          : nothing
+      }
+      ${
+        detail.working_directory
+          ? html`
             <div>
               <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px;">
                 Working Directory
@@ -171,9 +190,11 @@ function renderPresetDetail(detail: PresetDetail): TemplateResult {
               </div>
             </div>
           `
-        : nothing}
-      ${detail.max_turns != null
-        ? html`
+          : nothing
+      }
+      ${
+        detail.max_turns != null
+          ? html`
             <div>
               <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 4px;">
                 Max Turns
@@ -183,7 +204,8 @@ function renderPresetDetail(detail: PresetDetail): TemplateResult {
               </div>
             </div>
           `
-        : nothing}
+          : nothing
+      }
     </div>
   `;
 }
@@ -211,9 +233,11 @@ export function renderPresets(props: PresetsProps): TemplateResult {
           </button>
         </div>
       </div>
-      ${props.error
-        ? html`<div class="muted" style="margin-top: 8px; color: var(--danger);">${props.error}</div>`
-        : nothing}
+      ${
+        props.error
+          ? html`<div class="muted" style="margin-top: 8px; color: var(--danger);">${props.error}</div>`
+          : nothing
+      }
     </section>
 
     <section class="card" style="margin-top: 18px;">
@@ -228,21 +252,27 @@ export function renderPresets(props: PresetsProps): TemplateResult {
     </section>
 
     <section class="card" style="margin-top: 18px;">
-      ${props.loading
-        ? html`<div class="muted">Loading presets...</div>`
-        : filtered.length === 0
+      ${
+        props.loading
           ? html`
+              <div class="muted">Loading presets...</div>
+            `
+          : filtered.length === 0
+            ? html`
               <div class="muted">
-                ${props.presets.length === 0
-                  ? "No presets loaded. Place YAML files in the presets directory and click Reload from Disk."
-                  : "No presets match the current filter."}
+                ${
+                  props.presets.length === 0
+                    ? "No presets loaded. Place YAML files in the presets directory and click Reload from Disk."
+                    : "No presets match the current filter."
+                }
               </div>
             `
-          : html`
+            : html`
               <div class="list">
                 ${filtered.map((preset) => renderPresetCard(preset, props))}
               </div>
-            `}
+            `
+      }
     </section>
   `;
 }

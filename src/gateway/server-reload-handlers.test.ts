@@ -17,9 +17,7 @@ function createSilentLogger() {
 // parameter type erase the real signature without leaking into the
 // `state` variable's inferred shape (which would block re-assignment
 // in `setState`).
-type LooseState = Parameters<
-  Parameters<typeof createGatewayReloadHandlers>[0]["setState"]
->[0];
+type LooseState = Parameters<Parameters<typeof createGatewayReloadHandlers>[0]["setState"]>[0];
 
 function createState(): LooseState {
   return {

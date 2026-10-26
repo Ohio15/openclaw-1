@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import {
   buildJudgePrompt,
   parseJudgeResponse,
   evaluateWithLLMJudge,
   type LLMJudgeParams,
 } from "./llm-judge.js";
+import type { LLMJudgeConfig } from "./llm-judge.js";
 import { assessQuality, assessQualityWithJudge } from "./quality-gate.js";
 import type { QualityGateResult } from "./quality-gate.js";
-import type { LLMJudgeConfig } from "./llm-judge.js";
 
 // ============================================================================
 // In-process Ollama mock server
@@ -34,7 +34,9 @@ function resetServer(): void {
 beforeAll(async () => {
   server = createServer((req: IncomingMessage, res: ServerResponse) => {
     let body = "";
-    req.on("data", (chunk) => { body += chunk; });
+    req.on("data", (chunk) => {
+      body += chunk;
+    });
     req.on("end", () => {
       const status = nextResponse.status ?? 200;
       const responseBody = nextResponse.body ?? { response: "" };
@@ -74,9 +76,7 @@ afterAll(async () => {
 // Helpers
 // ============================================================================
 
-function makeHeuristicResult(
-  overrides: Partial<QualityGateResult> = {},
-): QualityGateResult {
+function makeHeuristicResult(overrides: Partial<QualityGateResult> = {}): QualityGateResult {
   return {
     verdict: overrides.verdict ?? "flag",
     issues: overrides.issues ?? [],
@@ -84,9 +84,7 @@ function makeHeuristicResult(
   };
 }
 
-function makeJudgeParams(
-  overrides: Partial<LLMJudgeParams> = {},
-): LLMJudgeParams {
+function makeJudgeParams(overrides: Partial<LLMJudgeParams> = {}): LLMJudgeParams {
   return {
     userPrompt: overrides.userPrompt ?? "Write a function to sort an array",
     assistantResponse: overrides.assistantResponse ?? "Here is a sort function...",
@@ -97,9 +95,7 @@ function makeJudgeParams(
   };
 }
 
-function makeJudgeConfig(
-  overrides: Partial<LLMJudgeConfig> = {},
-): LLMJudgeConfig {
+function makeJudgeConfig(overrides: Partial<LLMJudgeConfig> = {}): LLMJudgeConfig {
   return {
     enabled: overrides.enabled ?? true,
     ollamaBaseUrl: overrides.ollamaBaseUrl ?? baseUrl,
@@ -175,9 +171,7 @@ describe("parseJudgeResponse", () => {
     expect(result).not.toBeNull();
     expect(result!.verdict).toBe("pass");
     expect(result!.confidence).toBe(0.92);
-    expect(result!.reasoning).toBe(
-      "The response fully addresses the request with correct code.",
-    );
+    expect(result!.reasoning).toBe("The response fully addresses the request with correct code.");
   });
 
   it("parses a retry verdict", () => {
@@ -195,37 +189,27 @@ describe("parseJudgeResponse", () => {
   });
 
   it("handles case-insensitive verdicts", () => {
-    const result = parseJudgeResponse(
-      "VERDICT: Pass\nCONFIDENCE: 0.9\nREASONING: Good.",
-    );
+    const result = parseJudgeResponse("VERDICT: Pass\nCONFIDENCE: 0.9\nREASONING: Good.");
     expect(result!.verdict).toBe("pass");
   });
 
   it("returns null for missing VERDICT", () => {
-    const result = parseJudgeResponse(
-      "CONFIDENCE: 0.9\nREASONING: No verdict here.",
-    );
+    const result = parseJudgeResponse("CONFIDENCE: 0.9\nREASONING: No verdict here.");
     expect(result).toBeNull();
   });
 
   it("returns null for invalid verdict value", () => {
-    const result = parseJudgeResponse(
-      "VERDICT: excellent\nCONFIDENCE: 0.9\nREASONING: Great.",
-    );
+    const result = parseJudgeResponse("VERDICT: excellent\nCONFIDENCE: 0.9\nREASONING: Great.");
     expect(result).toBeNull();
   });
 
   it("defaults confidence to 0.5 when missing", () => {
-    const result = parseJudgeResponse(
-      "VERDICT: pass\nREASONING: Looks good.",
-    );
+    const result = parseJudgeResponse("VERDICT: pass\nREASONING: Looks good.");
     expect(result!.confidence).toBe(0.5);
   });
 
   it("defaults confidence to 0.5 for out-of-range values", () => {
-    const result = parseJudgeResponse(
-      "VERDICT: pass\nCONFIDENCE: 1.5\nREASONING: Good.",
-    );
+    const result = parseJudgeResponse("VERDICT: pass\nCONFIDENCE: 1.5\nREASONING: Good.");
     expect(result!.confidence).toBe(0.5);
   });
 
@@ -260,7 +244,8 @@ describe("evaluateWithLLMJudge", () => {
     resetServer();
     nextResponse = {
       body: {
-        response: "VERDICT: pass\nCONFIDENCE: 0.95\nREASONING: Complete and correct implementation.",
+        response:
+          "VERDICT: pass\nCONFIDENCE: 0.95\nREASONING: Complete and correct implementation.",
       },
     };
 
@@ -276,9 +261,7 @@ describe("evaluateWithLLMJudge", () => {
     nextResponse = { status: 500, body: { error: "internal error" } };
 
     const heuristic = makeHeuristicResult({ verdict: "flag", score: 0.6 });
-    const result = await evaluateWithLLMJudge(
-      makeJudgeParams({ heuristicResult: heuristic }),
-    );
+    const result = await evaluateWithLLMJudge(makeJudgeParams({ heuristicResult: heuristic }));
     expect(result.verdict).toBe("flag");
     expect(result.reasoning).toContain("Fallback to heuristic");
   });
@@ -290,9 +273,7 @@ describe("evaluateWithLLMJudge", () => {
     };
 
     const heuristic = makeHeuristicResult({ verdict: "flag", score: 0.5 });
-    const result = await evaluateWithLLMJudge(
-      makeJudgeParams({ heuristicResult: heuristic }),
-    );
+    const result = await evaluateWithLLMJudge(makeJudgeParams({ heuristicResult: heuristic }));
     expect(result.verdict).toBe("flag");
     expect(result.reasoning).toContain("Fallback to heuristic");
     expect(result.reasoning).toContain("parse failure");
@@ -336,9 +317,7 @@ describe("evaluateWithLLMJudge", () => {
     };
 
     const heuristic = makeHeuristicResult({ verdict: "retry", score: 0.3 });
-    const result = await evaluateWithLLMJudge(
-      makeJudgeParams({ heuristicResult: heuristic }),
-    );
+    const result = await evaluateWithLLMJudge(makeJudgeParams({ heuristicResult: heuristic }));
     expect(result.verdict).toBe("retry");
     expect(result.reasoning).toContain("Fallback to heuristic");
   });
@@ -380,7 +359,8 @@ describe("assessQualityWithJudge", () => {
     resetServer();
     nextResponse = {
       body: {
-        response: "VERDICT: retry\nCONFIDENCE: 0.82\nREASONING: Response contains placeholder code that needs real implementation.",
+        response:
+          "VERDICT: retry\nCONFIDENCE: 0.82\nREASONING: Response contains placeholder code that needs real implementation.",
       },
     };
 
@@ -406,11 +386,7 @@ describe("assessQualityWithJudge", () => {
     const config = makeJudgeConfig();
     // Response with incomplete code (score < 0.8, verdict "flag")
     const response = "Here:\n\n```typescript\n// TODO: implement\nfunction sort() {}\n```";
-    const result = await assessQualityWithJudge(
-      response,
-      "Write a sort function",
-      config,
-    );
+    const result = await assessQualityWithJudge(response, "Write a sort function", config);
     // Should fall back to heuristic verdict
     const heuristic = assessQuality(response);
     expect(result.verdict).toBe(heuristic.verdict);

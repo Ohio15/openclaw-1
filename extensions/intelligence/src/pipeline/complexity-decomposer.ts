@@ -31,14 +31,20 @@ interface ComplexityIndicatorConfig {
  */
 const COMPLEXITY_INDICATORS: Record<string, ComplexityIndicatorConfig> = {
   // Technical scope
-  multipleEndpoints: { pattern: /\b(multiple|several|various)\s*(endpoints?|routes?|apis?)/i, weight: 0.15 },
+  multipleEndpoints: {
+    pattern: /\b(multiple|several|various)\s*(endpoints?|routes?|apis?)/i,
+    weight: 0.15,
+  },
   realtime: { pattern: /\b(real-?time|websocket|socket\.?io|live\s*update)/i, weight: 0.2 },
   authentication: { pattern: /\b(auth|jwt|oauth|session|login|permission)/i, weight: 0.15 },
   database: { pattern: /\b(database|postgres|mongodb|prisma|sql|orm)/i, weight: 0.1 },
   testing: { pattern: /\b(unit\s*test|test\s*case|jest|vitest|spec)/i, weight: 0.1 },
 
   // Algorithm complexity
-  algorithms: { pattern: /\b(algorithm|crdt|ot|operational\s*transform|conflict\s*resolution)/i, weight: 0.25 },
+  algorithms: {
+    pattern: /\b(algorithm|crdt|ot|operational\s*transform|conflict\s*resolution)/i,
+    weight: 0.25,
+  },
   optimization: { pattern: /\b(optimi[sz]|performance|caching|rate\s*limit)/i, weight: 0.1 },
 
   // Scale indicators
@@ -61,11 +67,11 @@ export function analyzeComplexity(request: string): ComplexityAnalysis {
     const matches = request.match(pattern);
     if (matches) {
       // For counting patterns, weight by count
-      const count = name === 'multipleFeatures' ? Math.min(matches.length, 10) : 1;
+      const count = name === "multipleFeatures" ? Math.min(matches.length, 10) : 1;
       const effectiveWeight = weight * count;
 
       totalWeight += effectiveWeight;
-      maxWeight += weight * (name === 'multipleFeatures' ? 10 : 1);
+      maxWeight += weight * (name === "multipleFeatures" ? 10 : 1);
 
       detectedIndicators.push({
         indicator: name,

@@ -22,13 +22,13 @@ import {
 import { DEFAULT_CRON_FORM, DEFAULT_LOG_LEVEL_FILTERS } from "./app-defaults.ts";
 import type { EventLogEntry } from "./app-events.ts";
 import { connectGateway as connectGatewayInternal } from "./app-gateway.ts";
+import { setupChatGestures, teardownChatGestures } from "./app-gestures.ts";
 import {
   handleConnected,
   handleDisconnected,
   handleFirstUpdated,
   handleUpdated,
 } from "./app-lifecycle.ts";
-import { setupChatGestures, teardownChatGestures } from "./app-gestures.ts";
 import { renderApp } from "./app-render.ts";
 import {
   exportLogs as exportLogsInternal,
@@ -57,12 +57,10 @@ import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
-import type { SecurityAuditReport, SecurityActivityEntry } from "./views/security.types.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import type { ResolvedTheme, ThemeMode } from "./theme.ts";
-import type { ConfigHistoryEntry } from "./views/config-history.ts";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
@@ -84,6 +82,8 @@ import type {
 } from "./types.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import type { ConfigHistoryEntry } from "./views/config-history.ts";
+import type { SecurityAuditReport, SecurityActivityEntry } from "./views/security.types.ts";
 import { createSessionTranscriptState } from "./views/session-transcript.ts";
 
 declare global {

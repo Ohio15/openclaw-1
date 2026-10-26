@@ -66,7 +66,6 @@ export function parseExecApprovalToActivity(
       eventType === "requested"
         ? `Exec approval requested: ${command}`
         : `Exec approval ${decision ?? "resolved"}: ${command}`,
-    detail:
-      typeof payload.agentId === "string" ? `Agent: ${payload.agentId}` : undefined,
+    detail: typeof payload.agentId === "string" ? `Agent: ${payload.agentId}` : undefined,
   };
 }

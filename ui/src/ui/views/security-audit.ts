@@ -1,6 +1,10 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { SecurityAuditFinding, SecurityAuditReport, SecurityAuditSeverity } from "./security.types.ts";
 import { severityBadge } from "./security-shared.ts";
+import type {
+  SecurityAuditFinding,
+  SecurityAuditReport,
+  SecurityAuditSeverity,
+} from "./security.types.ts";
 
 export type SecurityAuditProps = {
   report: SecurityAuditReport | null;
@@ -27,13 +31,15 @@ function renderFinding(finding: SecurityAuditFinding): TemplateResult {
       </div>
       <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">${finding.title}</div>
       <div style="font-size:0.8rem;opacity:0.8;line-height:1.4;">${finding.detail}</div>
-      ${finding.remediation
-        ? html`<div
+      ${
+        finding.remediation
+          ? html`<div
             style="margin-top:8px;padding:8px 12px;background:var(--surface-2, rgba(255,255,255,0.04));border-radius:6px;font-size:0.8rem;border-left:3px solid var(--primary, #6366f1);"
           >
             <strong>Remediation:</strong> ${finding.remediation}
           </div>`
-        : nothing}
+          : nothing
+      }
     </div>
   `;
 }
@@ -54,18 +60,27 @@ export function renderSecurityAudit(props: SecurityAuditProps): TemplateResult {
     <section class="card" style="margin-bottom:24px;">
       <h3 style="margin:0 0 12px;font-size:1rem;font-weight:600;">Audit Findings</h3>
 
-      ${!props.report && !props.loading
-        ? html`<div style="padding:24px;text-align:center;opacity:0.4;font-size:0.85rem;">
-            No audit results yet. Run an audit from the posture panel above.
-          </div>`
-        : nothing}
-      ${props.loading
-        ? html`<div style="padding:24px;text-align:center;opacity:0.6;font-size:0.85rem;">
-            Running security audit…
-          </div>`
-        : nothing}
-      ${props.report && !props.loading
-        ? html`
+      ${
+        !props.report && !props.loading
+          ? html`
+              <div style="padding: 24px; text-align: center; opacity: 0.4; font-size: 0.85rem">
+                No audit results yet. Run an audit from the posture panel above.
+              </div>
+            `
+          : nothing
+      }
+      ${
+        props.loading
+          ? html`
+              <div style="padding: 24px; text-align: center; opacity: 0.6; font-size: 0.85rem">
+                Running security audit…
+              </div>
+            `
+          : nothing
+      }
+      ${
+        props.report && !props.loading
+          ? html`
             <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;">
               <button
                 class="chip ${props.filterSeverity === "all" ? "chip--active" : ""}"
@@ -97,14 +112,19 @@ export function renderSecurityAudit(props: SecurityAuditProps): TemplateResult {
               </button>
             </div>
             <div style="max-height:500px;overflow-y:auto;scrollbar-width:thin;">
-              ${filtered.length === 0
-                ? html`<div style="padding:16px;text-align:center;opacity:0.4;font-size:0.85rem;">
-                    No findings match the selected filter.
-                  </div>`
-                : filtered.map(renderFinding)}
+              ${
+                filtered.length === 0
+                  ? html`
+                      <div style="padding: 16px; text-align: center; opacity: 0.4; font-size: 0.85rem">
+                        No findings match the selected filter.
+                      </div>
+                    `
+                  : filtered.map(renderFinding)
+              }
             </div>
           `
-        : nothing}
+          : nothing
+      }
     </section>
   `;
 }

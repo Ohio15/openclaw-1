@@ -1,17 +1,17 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  cascadeSignals,
+  setCascadeSignal,
+  consumeCascadeSignal,
+  clearCascadeSignals,
+} from "../../../../src/intelligence/cascade-state.js";
+import {
   runWithQualityCascade,
   getNextTier,
   TIER_ORDER,
   CEILING_TIER,
   type CascadeConfig,
 } from "./cascade-fallback.js";
-import {
-  cascadeSignals,
-  setCascadeSignal,
-  consumeCascadeSignal,
-  clearCascadeSignals,
-} from "../../../../src/intelligence/cascade-state.js";
 import { ModelTierResolver } from "./model-tier-resolver.js";
 
 // ============================================================================

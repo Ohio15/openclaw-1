@@ -310,8 +310,10 @@ export class EnhancedCompactionManager {
     const triggers = this.config.triggers;
     const window = contextWindow ?? DEFAULT_CONTEXT_WINDOW;
 
-    const tokenTriggered = triggers.tokenCountThreshold != null && tokens > triggers.tokenCountThreshold;
-    const messageTriggered = triggers.messageCountThreshold != null && msgCount > triggers.messageCountThreshold;
+    const tokenTriggered =
+      triggers.tokenCountThreshold != null && tokens > triggers.tokenCountThreshold;
+    const messageTriggered =
+      triggers.messageCountThreshold != null && msgCount > triggers.messageCountThreshold;
     const capacityTriggered =
       triggers.capacityFraction != null && tokens / window > triggers.capacityFraction;
 
@@ -320,7 +322,10 @@ export class EnhancedCompactionManager {
     }
 
     // Exception: skip if short + complex conversation
-    if (this.config.skipComplexShortConversations && msgCount < this.config.shortConversationLimit) {
+    if (
+      this.config.skipComplexShortConversations &&
+      msgCount < this.config.shortConversationLimit
+    ) {
       const avgComplexity =
         metrics.complexityCount > 0 ? metrics.complexitySum / metrics.complexityCount : 0;
       if (avgComplexity >= this.config.complexityThresholdForSkip) {
@@ -343,7 +348,8 @@ export class EnhancedCompactionManager {
     // Check if masking alone brought us below ALL triggered thresholds.
     // Message count threshold still requires summarization since masking
     // doesn't reduce message count.
-    const stillTokenTriggered = triggers.tokenCountThreshold != null && tokensAfterMasking > triggers.tokenCountThreshold;
+    const stillTokenTriggered =
+      triggers.tokenCountThreshold != null && tokensAfterMasking > triggers.tokenCountThreshold;
     const stillCapacityTriggered =
       triggers.capacityFraction != null && tokensAfterMasking / window > triggers.capacityFraction;
 

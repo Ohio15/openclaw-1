@@ -29,35 +29,39 @@
  */
 
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { setCascadeSignal, clearCascadeSignals } from "../../src/intelligence/cascade-state.js";
+import { FeedbackLoop, type FeedbackEntry } from "./src/feedback/feedback-loop.js";
+import { AnalysisCache, promptHash } from "./src/pipeline/analysis-cache.js";
+import {
+  runWithQualityCascade,
+  TIER_ORDER,
+  type CascadeConfig,
+} from "./src/pipeline/cascade-fallback.js";
 import {
   IntelligenceControlPlane,
   type IntelligenceConfig,
   extractUserPrompt,
 } from "./src/pipeline/control-plane.js";
-import { FeedbackLoop, type FeedbackEntry } from "./src/feedback/feedback-loop.js";
-import { SubAgentOrchestrator } from "./src/pipeline/sub-agent-orchestrator.js";
-import { ModelTierResolver } from "./src/pipeline/model-tier-resolver.js";
-import { assessQuality, assessQualityWithJudge } from "./src/pipeline/quality-gate.js";
-import type { LLMJudgeConfig } from "./src/pipeline/llm-judge.js";
-import { AnalysisCache, promptHash } from "./src/pipeline/analysis-cache.js";
-import { RunContextStore } from "./src/pipeline/run-context.js";
 import type { BeforeAgentAnalysis } from "./src/pipeline/control-plane.js";
-import {
-  EnhancedLoopDetector,
-  type EnhancedLoopConfig,
-} from "./src/pipeline/enhanced-loop-detection.js";
 import {
   EnhancedCompactionManager,
   type EnhancedCompactionConfig,
 } from "./src/pipeline/enhanced-compaction.js";
+import {
+  EnhancedLoopDetector,
+  type EnhancedLoopConfig,
+} from "./src/pipeline/enhanced-loop-detection.js";
+import type { LLMJudgeConfig } from "./src/pipeline/llm-judge.js";
+import { ModelTierResolver } from "./src/pipeline/model-tier-resolver.js";
+import { assessQuality, assessQualityWithJudge } from "./src/pipeline/quality-gate.js";
+import { RunContextStore } from "./src/pipeline/run-context.js";
+import { SubAgentOrchestrator } from "./src/pipeline/sub-agent-orchestrator.js";
 import {
   CodingAgentDelegator,
   type CodingAgentConfig,
   CONFIG_DEFAULTS as DELEGATION_DEFAULTS,
 } from "./src/tools/coding-agent-delegator.js";
 import { createDelegateCodingAgentTool } from "./src/tools/delegate-coding-agent-tool.js";
-import { setCascadeSignal, clearCascadeSignals } from "../../src/intelligence/cascade-state.js";
-import { runWithQualityCascade, TIER_ORDER, type CascadeConfig } from "./src/pipeline/cascade-fallback.js";
 
 // ============================================================================
 // Plugin Definition
@@ -83,9 +87,7 @@ const intelligencePlugin = {
     );
 
     const orchestrator = new SubAgentOrchestrator();
-    const tierResolver = new ModelTierResolver(
-      (cfg as any).tierModelMap ?? {},
-    );
+    const tierResolver = new ModelTierResolver((cfg as any).tierModelMap ?? {});
 
     // Analysis cache — prevents triple-computation across hooks
     const analysisCache = new AnalysisCache<BeforeAgentAnalysis>(60_000);
@@ -102,9 +104,7 @@ const intelligencePlugin = {
      * Get or compute the before-agent analysis, using cache to avoid
      * redundant shared-brain HTTP calls across hooks in the same request.
      */
-    async function getCachedAnalysis(
-      messages: unknown[],
-    ): Promise<BeforeAgentAnalysis> {
+    async function getCachedAnalysis(messages: unknown[]): Promise<BeforeAgentAnalysis> {
       const userPrompt = extractUserPrompt(messages);
       const key = promptHash(userPrompt);
       const cached = analysisCache.get(key);
@@ -121,7 +121,8 @@ const intelligencePlugin = {
     const loopEnabled = loopCfg.enabled ?? false;
 
     // Enhanced conversation summarization (DeerFlow-inspired)
-    const compactionCfg = ((cfg as any).enhancedCompaction ?? {}) as Partial<EnhancedCompactionConfig>;
+    const compactionCfg = ((cfg as any).enhancedCompaction ??
+      {}) as Partial<EnhancedCompactionConfig>;
     const compactionMgr = new EnhancedCompactionManager(compactionCfg);
     const compactionEnabled = compactionCfg.enabled ?? false;
 
@@ -196,10 +197,10 @@ const intelligencePlugin = {
 
         api.logger.info(
           `intelligence: complexity=${analysis.complexity.toFixed(2)}, ` +
-          `tier=${analysis.tierSelection.tier}, ` +
-          `pipeline=${analysis.pipelineSelection.pipeline}, ` +
-          `domain=${analysis.domain ?? "none"}, ` +
-          `knowledge=${analysis.domainContext ? "injected" : "none"}`,
+            `tier=${analysis.tierSelection.tier}, ` +
+            `pipeline=${analysis.pipelineSelection.pipeline}, ` +
+            `domain=${analysis.domain ?? "none"}, ` +
+            `knowledge=${analysis.domainContext ? "injected" : "none"}`,
         );
 
         // Chained execution for complex requests
@@ -251,16 +252,14 @@ const intelligencePlugin = {
           const summary = compactionMgr.checkAndSummarize(history, sessionKey);
           if (summary) {
             prependParts.push(summary);
-            api.logger.info(
-              `intelligence: progressive summary injected (${summary.length} chars)`,
-            );
+            api.logger.info(`intelligence: progressive summary injected (${summary.length} chars)`);
           }
           // Log masking metrics if observation masking was applied
           const sessionMetrics = compactionMgr.getSessionMetrics(sessionKey);
           if (sessionMetrics?.maskingApplied) {
             api.logger.info(
               `intelligence: observation masking recovered ~${sessionMetrics.maskingTokensRecovered} tokens` +
-              (sessionMetrics.summarizationSkippedAfterMasking ? " (summarization skipped)" : ""),
+                (sessionMetrics.summarizationSkippedAfterMasking ? " (summarization skipped)" : ""),
             );
           }
         }
@@ -289,12 +288,18 @@ const intelligencePlugin = {
       for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i] as Record<string, unknown> | null;
         if (!msg || msg.role !== "assistant") continue;
-        if (typeof msg.content === "string") { response = msg.content; break; }
+        if (typeof msg.content === "string") {
+          response = msg.content;
+          break;
+        }
         if (Array.isArray(msg.content)) {
           const texts = (msg.content as Array<Record<string, unknown>>)
             .filter((b) => b.type === "text" && typeof b.text === "string")
             .map((b) => b.text as string);
-          if (texts.length > 0) { response = texts.join("\n"); break; }
+          if (texts.length > 0) {
+            response = texts.join("\n");
+            break;
+          }
         }
       }
 
@@ -305,9 +310,7 @@ const intelligencePlugin = {
         const qualityResult = assessQuality(response);
 
         // Get cached analysis for metadata (no recomputation)
-        const analysis = messages.length > 0
-          ? await getCachedAnalysis(messages)
-          : null;
+        const analysis = messages.length > 0 ? await getCachedAnalysis(messages) : null;
 
         // Check for chained execution output
         const chainOutputs = orchestrator.extractSubTaskOutputs(response);
@@ -335,9 +338,10 @@ const intelligencePlugin = {
           tier: analysis?.tierSelection.tier,
           pipeline: analysis?.pipelineSelection.pipeline,
           refusalDetected: qualityResult.issues.some((i) => i.type === "explicit_refusal"),
-          issues: qualityResult.issues.length > 0
-            ? qualityResult.issues.map((i) => i.description)
-            : undefined,
+          issues:
+            qualityResult.issues.length > 0
+              ? qualityResult.issues.map((i) => i.description)
+              : undefined,
           complexity: analysis?.complexity,
           domain: analysis?.domain ?? undefined,
           chainedExecution: chainedExecution || undefined,
@@ -349,9 +353,9 @@ const intelligencePlugin = {
 
         api.logger.info(
           `intelligence: verdict=${qualityResult.verdict}, ` +
-          `score=${qualityResult.score.toFixed(2)}, ` +
-          `issues=${qualityResult.issues.length}, ` +
-          `refusal=${entry.refusalDetected}`,
+            `score=${qualityResult.score.toFixed(2)}, ` +
+            `issues=${qualityResult.issues.length}, ` +
+            `refusal=${entry.refusalDetected}`,
         );
       } catch (err) {
         api.logger.warn(`intelligence: agent_end evaluation failed: ${String(err)}`);
@@ -372,7 +376,7 @@ const intelligencePlugin = {
         if (result.detected) {
           api.logger.warn(
             `intelligence: enhanced loop detected — category=${result.category}, ` +
-            `tool=${event.toolName}, count=${result.count}`,
+              `tool=${event.toolName}, count=${result.count}`,
           );
           return { block: true, blockReason: result.guidance };
         }
@@ -422,9 +426,10 @@ const intelligencePlugin = {
             const userPromptForJudge = llmJudgeConfig.enabled ? (run?.prompt ?? "") : "";
 
             // Two-stage assessment when judge is enabled and user prompt is available
-            const qualityResult = llmJudgeConfig.enabled && userPromptForJudge
-              ? await assessQualityWithJudge(combinedText, userPromptForJudge, llmJudgeConfig)
-              : assessQuality(combinedText);
+            const qualityResult =
+              llmJudgeConfig.enabled && userPromptForJudge
+                ? await assessQualityWithJudge(combinedText, userPromptForJudge, llmJudgeConfig)
+                : assessQuality(combinedText);
             if (qualityResult.verdict === "retry") {
               // The tier this run actually used. Previously this analysed the
               // ASSISTANT's output as if it were the user prompt. If the run
@@ -441,12 +446,16 @@ const intelligencePlugin = {
               // Pre-resolve the next tier's model/provider so the cascade wrapper
               // in agent-runner-execution doesn't need to import the tier resolver
               const nextTierIdx = TIER_ORDER.indexOf(currentTier);
-              const nextTierName = nextTierIdx >= 0 && nextTierIdx < TIER_ORDER.length - 1
-                ? TIER_ORDER[nextTierIdx + 1]
-                : undefined;
+              const nextTierName =
+                nextTierIdx >= 0 && nextTierIdx < TIER_ORDER.length - 1
+                  ? TIER_ORDER[nextTierIdx + 1]
+                  : undefined;
               let escalation: { provider?: string; model?: string; tier?: string } | undefined;
               if (nextTierName) {
-                const override = tierResolver.resolve({ tier: nextTierName, reason: "cascade-fallback" });
+                const override = tierResolver.resolve({
+                  tier: nextTierName,
+                  reason: "cascade-fallback",
+                });
                 if (override?.modelOverride) {
                   escalation = {
                     provider: override.providerOverride,
@@ -459,8 +468,8 @@ const intelligencePlugin = {
               setCascadeSignal(sessionKey, qualityResult.verdict, currentTier, escalation);
               api.logger.info(
                 `intelligence: cascade signal set — verdict=${qualityResult.verdict}, ` +
-                `tier=${currentTier}→${escalation?.tier ?? "ceiling"}, ` +
-                `model=${escalation?.model ?? "none"}, session=${sessionKey}`,
+                  `tier=${currentTier}→${escalation?.tier ?? "ceiling"}, ` +
+                  `model=${escalation?.model ?? "none"}, session=${sessionKey}`,
               );
             }
           } catch (err) {
@@ -480,7 +489,7 @@ const intelligencePlugin = {
       const snapshot = compactionMgr.logCompactionEvent(sessionKey, event as any);
       api.logger.info(
         `intelligence: core compaction triggered — msgs=${snapshot.metricsSnapshot.messageCount}, ` +
-        `tokens=${snapshot.metricsSnapshot.estimatedTokens}`,
+          `tokens=${snapshot.metricsSnapshot.estimatedTokens}`,
       );
     });
 
@@ -512,9 +521,7 @@ const intelligencePlugin = {
 
     api.registerCli(
       ({ program }) => {
-        const intel = program
-          .command("intel")
-          .description("Intelligence pipeline commands");
+        const intel = program.command("intel").description("Intelligence pipeline commands");
 
         intel
           .command("stats")
@@ -546,9 +553,9 @@ const intelligencePlugin = {
               for (const cat of insights.byCategory.slice(0, 5)) {
                 console.log(
                   `  ${cat.category.padEnd(15)} ` +
-                  `n=${String(cat.count).padStart(4)}  ` +
-                  `conf=${(cat.avgConfidence * 100).toFixed(0)}%  ` +
-                  `coh=${(cat.coherenceRate * 100).toFixed(0)}%`,
+                    `n=${String(cat.count).padStart(4)}  ` +
+                    `conf=${(cat.avgConfidence * 100).toFixed(0)}%  ` +
+                    `coh=${(cat.coherenceRate * 100).toFixed(0)}%`,
                 );
               }
             }
@@ -606,7 +613,10 @@ const intelligencePlugin = {
             budget: null,
           };
 
-          res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+          res.writeHead(200, {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          });
           res.end(JSON.stringify(data));
         } catch (err) {
           api.logger.warn(`intelligence: dashboard route failed: ${String(err)}`);
@@ -635,9 +645,7 @@ const intelligencePlugin = {
     // ========================================================================
 
     if (delegationEnabled) {
-      api.registerTool(
-        createDelegateCodingAgentTool(delegator, delegationCfg, api.logger),
-      );
+      api.registerTool(createDelegateCodingAgentTool(delegator, delegationCfg, api.logger));
       api.logger.info(
         `intelligence: coding agent delegation enabled (agents: ${Object.keys(delegationCfg.agents).join(", ")})`,
       );

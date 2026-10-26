@@ -29,28 +29,120 @@ export interface RAGResult {
   tags: string[];
 }
 
-export type Retriever = (
-  query: string,
-  limit: number,
-) => Promise<RAGResult[] | null>;
+export type Retriever = (query: string, limit: number) => Promise<RAGResult[] | null>;
 
 // ---------------------------------------------------------------------------
 // Stop words for keyword extraction
 // ---------------------------------------------------------------------------
 
 const STOP_WORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "been", "being", "but", "by",
-  "can", "could", "did", "do", "does", "doing", "done", "each", "else",
-  "every", "for", "from", "get", "got", "had", "has", "have", "having",
-  "he", "her", "here", "hers", "him", "his", "how", "i", "if", "in",
-  "into", "is", "it", "its", "just", "let", "like", "may", "me", "might",
-  "more", "most", "much", "my", "no", "nor", "not", "now", "of", "on",
-  "one", "only", "or", "other", "our", "out", "own", "per", "re", "said",
-  "same", "she", "so", "some", "such", "than", "that", "the", "their",
-  "them", "then", "there", "these", "they", "this", "those", "through",
-  "to", "too", "up", "us", "very", "was", "we", "were", "what", "when",
-  "where", "which", "while", "who", "whom", "why", "will", "with", "would",
-  "you", "your",
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "been",
+  "being",
+  "but",
+  "by",
+  "can",
+  "could",
+  "did",
+  "do",
+  "does",
+  "doing",
+  "done",
+  "each",
+  "else",
+  "every",
+  "for",
+  "from",
+  "get",
+  "got",
+  "had",
+  "has",
+  "have",
+  "having",
+  "he",
+  "her",
+  "here",
+  "hers",
+  "him",
+  "his",
+  "how",
+  "i",
+  "if",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "just",
+  "let",
+  "like",
+  "may",
+  "me",
+  "might",
+  "more",
+  "most",
+  "much",
+  "my",
+  "no",
+  "nor",
+  "not",
+  "now",
+  "of",
+  "on",
+  "one",
+  "only",
+  "or",
+  "other",
+  "our",
+  "out",
+  "own",
+  "per",
+  "re",
+  "said",
+  "same",
+  "she",
+  "so",
+  "some",
+  "such",
+  "than",
+  "that",
+  "the",
+  "their",
+  "them",
+  "then",
+  "there",
+  "these",
+  "they",
+  "this",
+  "those",
+  "through",
+  "to",
+  "too",
+  "up",
+  "us",
+  "very",
+  "was",
+  "we",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "while",
+  "who",
+  "whom",
+  "why",
+  "will",
+  "with",
+  "would",
+  "you",
+  "your",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -147,9 +239,7 @@ export class AgenticRAGPipeline {
       const raw = await this.retriever(query, options.maxResults * 2);
       if (!raw || raw.length === 0) return [];
 
-      return raw
-        .filter((r) => r.score >= options.minRelevance)
-        .slice(0, options.maxResults);
+      return raw.filter((r) => r.score >= options.minRelevance).slice(0, options.maxResults);
     } catch (err) {
       console.warn("[agentic-rag] retrieve error:", err);
       return [];
@@ -190,8 +280,7 @@ export class AgenticRAGPipeline {
 
     // --- Freshness (weight: 0.2) ---
     // Average normalized score from the brain results (higher score = more relevant/fresh)
-    const avgScore =
-      results.reduce((sum, r) => sum + r.score, 0) / results.length;
+    const avgScore = results.reduce((sum, r) => sum + r.score, 0) / results.length;
     // Brain scores are typically 0-1 already; clamp to be safe
     const freshnessScore = Math.min(1, Math.max(0, avgScore));
 
@@ -206,24 +295,16 @@ export class AgenticRAGPipeline {
    * Generate a refined search query based on what was missing from previous results.
    * Pure heuristic — no LLM calls.
    */
-  refineQuery(
-    originalQuery: string,
-    previousResults: RAGResult[],
-    gaps: string[],
-  ): string {
+  refineQuery(originalQuery: string, previousResults: RAGResult[], gaps: string[]): string {
     const originalKeywords = extractKeywords(originalQuery);
     const resultContent = previousResults.map((r) => r.content).join(" ");
     const resultLower = resultContent.toLowerCase();
 
     // Find keywords that had NO matches in result content
-    const unmatchedKeywords = originalKeywords.filter(
-      (kw) => !resultLower.includes(kw),
-    );
+    const unmatchedKeywords = originalKeywords.filter((kw) => !resultLower.includes(kw));
 
     // Find keywords that DID match (to deprioritize)
-    const matchedKeywords = originalKeywords.filter((kw) =>
-      resultLower.includes(kw),
-    );
+    const matchedKeywords = originalKeywords.filter((kw) => resultLower.includes(kw));
 
     // Expand gaps with domain synonyms
     const expansionTerms: string[] = [];
@@ -234,11 +315,7 @@ export class AgenticRAGPipeline {
         // Add up to 2 synonyms that aren't already in the query
         let added = 0;
         for (const syn of synonyms) {
-          if (
-            added >= 2 ||
-            originalKeywords.includes(syn) ||
-            expansionTerms.includes(syn)
-          ) {
+          if (added >= 2 || originalKeywords.includes(syn) || expansionTerms.includes(syn)) {
             continue;
           }
           expansionTerms.push(syn);
@@ -340,9 +417,7 @@ export class AgenticRAGPipeline {
     }
 
     // Sort by score descending, limit to maxResults
-    return allResults
-      .sort((a, b) => b.score - a.score)
-      .slice(0, options.maxResults);
+    return allResults.sort((a, b) => b.score - a.score).slice(0, options.maxResults);
   }
 
   // -----------------------------------------------------------------------
@@ -353,20 +428,14 @@ export class AgenticRAGPipeline {
    * Runs targeted retrieval for each sub-task description, deduplicates,
    * merges, and sorts by score.
    */
-  async decomposedRetrieve(
-    subTasks: string[],
-    options: RAGOptions,
-  ): Promise<RAGResult[]> {
+  async decomposedRetrieve(subTasks: string[], options: RAGOptions): Promise<RAGResult[]> {
     if (subTasks.length === 0) return [];
 
     const seenIds = new Set<string>();
     const allResults: RAGResult[] = [];
 
     // Distribute maxResults across sub-tasks (minimum 2 per sub-task)
-    const perTaskLimit = Math.max(
-      2,
-      Math.ceil(options.maxResults / subTasks.length),
-    );
+    const perTaskLimit = Math.max(2, Math.ceil(options.maxResults / subTasks.length));
 
     try {
       // Run all sub-task retrievals concurrently
@@ -375,10 +444,7 @@ export class AgenticRAGPipeline {
           ...options,
           maxResults: perTaskLimit,
         }).catch((err) => {
-          console.warn(
-            `[agentic-rag] decomposed retrieval failed for sub-task "${subTask}":`,
-            err,
-          );
+          console.warn(`[agentic-rag] decomposed retrieval failed for sub-task "${subTask}":`, err);
           return [] as RAGResult[];
         }),
       );
@@ -398,8 +464,6 @@ export class AgenticRAGPipeline {
     }
 
     // Sort by score descending, limit to maxResults
-    return allResults
-      .sort((a, b) => b.score - a.score)
-      .slice(0, options.maxResults);
+    return allResults.sort((a, b) => b.score - a.score).slice(0, options.maxResults);
   }
 }

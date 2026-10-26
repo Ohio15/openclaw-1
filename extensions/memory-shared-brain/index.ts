@@ -210,9 +210,7 @@ class SharedBrainClient {
             return this.rpc(method, params);
           }
         }
-        this.logger.warn(
-          `memory-shared-brain: HTTP ${response.status} for ${method}`,
-        );
+        this.logger.warn(`memory-shared-brain: HTTP ${response.status} for ${method}`);
         return null;
       }
 
@@ -281,10 +279,7 @@ class SharedBrainClient {
   /**
    * Call an MCP tool on the shared-brain server.
    */
-  private async callTool(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
+  private async callTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     const initialized = await this.ensureInitialized();
     if (!initialized) {
       return null;
@@ -326,10 +321,7 @@ class SharedBrainClient {
    * Call any MCP tool on the shared-brain server and return the raw result.
    * Used by extended tool registrations to expose the full shared-brain API.
    */
-  async callToolRaw(
-    toolName: string,
-    args: Record<string, unknown>,
-  ): Promise<unknown> {
+  async callToolRaw(toolName: string, args: Record<string, unknown>): Promise<unknown> {
     return this.callTool(toolName, args);
   }
 
@@ -337,10 +329,7 @@ class SharedBrainClient {
    * Recall memories matching a query.
    * Returns ranked results with content, score, type, and tags.
    */
-  async recall(
-    query: string,
-    limit?: number,
-  ): Promise<BrainRecallResult["pri"] | null> {
+  async recall(query: string, limit?: number): Promise<BrainRecallResult["pri"] | null> {
     const args: Record<string, unknown> = { query };
     if (limit !== undefined) {
       args.limit = limit;
@@ -499,7 +488,13 @@ function escapeForPrompt(text: string): string {
  * Format recalled memories as a context block for prompt injection.
  */
 function formatMemoriesContext(
-  memories: Array<{ content: string; type: string; score: number; tags: string[]; freshness_note?: string | null }>,
+  memories: Array<{
+    content: string;
+    type: string;
+    score: number;
+    tags: string[];
+    freshness_note?: string | null;
+  }>,
 ): string {
   const lines = memories.map(
     (m, i) =>
@@ -533,8 +528,7 @@ const memorySharedBrainPlugin = {
       maxResults: rawCfg.maxResults ?? 5,
     };
 
-    const brainUrl =
-      process.env.SHARED_BRAIN_URL || "http://shared-brain-mcp:3100";
+    const brainUrl = process.env.SHARED_BRAIN_URL || "http://shared-brain-mcp:3100";
     const brainApiKey = process.env.SHARED_BRAIN_API_KEY || undefined;
 
     const client = new SharedBrainClient(brainUrl, brainApiKey, api.logger);
@@ -643,9 +637,7 @@ const memorySharedBrainPlugin = {
           const content = await client.readFile(id);
           if (!content) {
             return {
-              content: [
-                { type: "text", text: `Brain file not found or unreadable: ${id}` },
-              ],
+              content: [{ type: "text", text: `Brain file not found or unreadable: ${id}` }],
               details: { found: false, path: id },
             };
           }
@@ -677,8 +669,7 @@ const memorySharedBrainPlugin = {
           ),
           tags: Type.Optional(
             Type.Array(Type.String(), {
-              description:
-                "Tags for categorization (e.g., ['sentinel', 'deployment', 'fix'])",
+              description: "Tags for categorization (e.g., ['sentinel', 'deployment', 'fix'])",
             }),
           ),
           project: Type.Optional(
@@ -709,8 +700,7 @@ const memorySharedBrainPlugin = {
             };
           }
 
-          const preview =
-            content.length > 100 ? `${content.slice(0, 100)}...` : content;
+          const preview = content.length > 100 ? `${content.slice(0, 100)}...` : content;
           return {
             content: [
               {
@@ -749,7 +739,15 @@ const memorySharedBrainPlugin = {
         async execute(_toolCallId, params) {
           const { file_path, heading } = params as { file_path: string; heading: string };
           const result = await client.callToolRaw("read_section", { file_path, heading });
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "brain_read_section" },
@@ -763,14 +761,24 @@ const memorySharedBrainPlugin = {
         description:
           "List available brain knowledge files and their sections. Use to discover what knowledge exists in the shared-brain before searching.",
         parameters: Type.Object({
-          file_path: Type.Optional(Type.String({ description: "Optional: list sections of a specific file" })),
+          file_path: Type.Optional(
+            Type.String({ description: "Optional: list sections of a specific file" }),
+          ),
         }),
         async execute(_toolCallId, params) {
           const { file_path } = params as { file_path?: string };
           const args: Record<string, unknown> = {};
           if (file_path) args.file_path = file_path;
           const result = await client.callToolRaw("list_contents", args);
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "brain_list_contents" },
@@ -785,14 +793,30 @@ const memorySharedBrainPlugin = {
           "Memory system operations: reflect (analyze patterns), set_priorities, get_priorities, reconcile (deduplicate), health (system status), get_scoring, set_scoring, get_alerts, ack_alert, preflight.",
         parameters: Type.Object({
           action: Type.String({
-            description: "Action: reflect, set_priorities, get_priorities, reconcile, health, get_scoring, set_scoring, get_alerts, ack_alert, preflight",
+            description:
+              "Action: reflect, set_priorities, get_priorities, reconcile, health, get_scoring, set_scoring, get_alerts, ack_alert, preflight",
           }),
-          params: Type.Optional(Type.Any({ description: "Action-specific parameters (call with wrong params to see schema)" })),
+          params: Type.Optional(
+            Type.Any({
+              description: "Action-specific parameters (call with wrong params to see schema)",
+            }),
+          ),
         }),
         async execute(_toolCallId, params) {
-          const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
+          const { action, params: actionParams } = params as {
+            action: string;
+            params?: Record<string, unknown>;
+          };
           const result = await client.callToolRaw("brain_manage", { action, params: actionParams });
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "brain_manage" },
@@ -810,9 +834,23 @@ const memorySharedBrainPlugin = {
           params: Type.Optional(Type.Any({ description: "Action-specific parameters" })),
         }),
         async execute(_toolCallId, params) {
-          const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
-          const result = await client.callToolRaw("brain_incidents", { action, params: actionParams });
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          const { action, params: actionParams } = params as {
+            action: string;
+            params?: Record<string, unknown>;
+          };
+          const result = await client.callToolRaw("brain_incidents", {
+            action,
+            params: actionParams,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "brain_incidents" },
@@ -830,9 +868,23 @@ const memorySharedBrainPlugin = {
           params: Type.Optional(Type.Any({ description: "Action-specific parameters" })),
         }),
         async execute(_toolCallId, params) {
-          const { action, params: actionParams } = params as { action: string; params?: Record<string, unknown> };
-          const result = await client.callToolRaw("brain_decisions", { action, params: actionParams });
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          const { action, params: actionParams } = params as {
+            action: string;
+            params?: Record<string, unknown>;
+          };
+          const result = await client.callToolRaw("brain_decisions", {
+            action,
+            params: actionParams,
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "brain_decisions" },
@@ -848,7 +900,15 @@ const memorySharedBrainPlugin = {
         parameters: Type.Object({}),
         async execute(_toolCallId) {
           const result = await client.callToolRaw("cortex_status", {});
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "cortex_status" },
@@ -862,15 +922,25 @@ const memorySharedBrainPlugin = {
         description:
           "Trigger a Cortex capability on-demand. Enqueues a task and returns the task ID. Use dry_run to preview. Use force to bypass deduplication.",
         parameters: Type.Object({
-          capability: Type.String({ description: "Capability name (e.g., 'self-maintenance', 'sentinel-monitor')" }),
+          capability: Type.String({
+            description: "Capability name (e.g., 'self-maintenance', 'sentinel-monitor')",
+          }),
           payload: Type.Optional(Type.Any({ description: "Optional payload for the capability" })),
-          dry_run: Type.Optional(Type.Boolean({ description: "Preview mode — don't actually execute" })),
-          priority: Type.Optional(Type.Number({ description: "Priority 1=highest, 10=lowest (default 3)" })),
+          dry_run: Type.Optional(
+            Type.Boolean({ description: "Preview mode — don't actually execute" }),
+          ),
+          priority: Type.Optional(
+            Type.Number({ description: "Priority 1=highest, 10=lowest (default 3)" }),
+          ),
           force: Type.Optional(Type.Boolean({ description: "Skip deduplication" })),
         }),
         async execute(_toolCallId, params) {
           const { capability, payload, dry_run, priority, force } = params as {
-            capability: string; payload?: unknown; dry_run?: boolean; priority?: number; force?: boolean;
+            capability: string;
+            payload?: unknown;
+            dry_run?: boolean;
+            priority?: number;
+            force?: boolean;
           };
           const args: Record<string, unknown> = { capability };
           if (payload !== undefined) args.payload = payload;
@@ -878,7 +948,15 @@ const memorySharedBrainPlugin = {
           if (priority !== undefined) args.priority = priority;
           if (force !== undefined) args.force = force;
           const result = await client.callToolRaw("cortex_run", args);
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "cortex_run" },
@@ -893,14 +971,20 @@ const memorySharedBrainPlugin = {
           "View or modify Cortex capability schedules. Use 'list' to see all schedules, 'update' to change cron expression, enable/disable, or default payload.",
         parameters: Type.Object({
           action: Type.String({ description: "Action: list or update" }),
-          capability: Type.Optional(Type.String({ description: "Capability name (required for update)" })),
+          capability: Type.Optional(
+            Type.String({ description: "Capability name (required for update)" }),
+          ),
           cron: Type.Optional(Type.String({ description: "New cron expression (5-field)" })),
           enabled: Type.Optional(Type.Boolean({ description: "Enable or disable schedule" })),
           payload: Type.Optional(Type.Any({ description: "New default payload" })),
         }),
         async execute(_toolCallId, params) {
           const { action, capability, cron, enabled, payload } = params as {
-            action: string; capability?: string; cron?: string; enabled?: boolean; payload?: unknown;
+            action: string;
+            capability?: string;
+            cron?: string;
+            enabled?: boolean;
+            payload?: unknown;
           };
           const args: Record<string, unknown> = { action };
           if (capability !== undefined) args.capability = capability;
@@ -908,7 +992,15 @@ const memorySharedBrainPlugin = {
           if (enabled !== undefined) args.enabled = enabled;
           if (payload !== undefined) args.payload = payload;
           const result = await client.callToolRaw("cortex_schedules", args);
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "cortex_schedules" },
@@ -922,8 +1014,14 @@ const memorySharedBrainPlugin = {
         description:
           "Get Cortex cost and usage summary by capability. Shows total runs, cost, tokens, success/failure counts, and average duration.",
         parameters: Type.Object({
-          period: Type.Optional(Type.String({ description: "Time window: '1 hour', '1 day', '7 days', '30 days' (default: '1 day')" })),
-          capability: Type.Optional(Type.String({ description: "Filter to a specific capability" })),
+          period: Type.Optional(
+            Type.String({
+              description: "Time window: '1 hour', '1 day', '7 days', '30 days' (default: '1 day')",
+            }),
+          ),
+          capability: Type.Optional(
+            Type.String({ description: "Filter to a specific capability" }),
+          ),
         }),
         async execute(_toolCallId, params) {
           const { period, capability } = params as { period?: string; capability?: string };
@@ -931,7 +1029,15 @@ const memorySharedBrainPlugin = {
           if (period !== undefined) args.period = period;
           if (capability !== undefined) args.capability = capability;
           const result = await client.callToolRaw("cortex_costs", args);
-          return { content: [{ type: "text", text: typeof result === "string" ? result : JSON.stringify(result, null, 2) }], details: {} };
+          return {
+            content: [
+              {
+                type: "text",
+                text: typeof result === "string" ? result : JSON.stringify(result, null, 2),
+              },
+            ],
+            details: {},
+          };
         },
       },
       { name: "cortex_costs" },
@@ -976,9 +1082,7 @@ const memorySharedBrainPlugin = {
 
           return { prependContext: contextBlock };
         } catch (err) {
-          api.logger.warn(
-            `memory-shared-brain: auto-recall failed: ${String(err)}`,
-          );
+          api.logger.warn(`memory-shared-brain: auto-recall failed: ${String(err)}`);
         }
       });
     }
@@ -1035,14 +1139,10 @@ const memorySharedBrainPlugin = {
           }
 
           if (stored > 0) {
-            api.logger.info(
-              `memory-shared-brain: auto-captured ${stored} memories`,
-            );
+            api.logger.info(`memory-shared-brain: auto-captured ${stored} memories`);
           }
         } catch (err) {
-          api.logger.warn(
-            `memory-shared-brain: auto-capture failed: ${String(err)}`,
-          );
+          api.logger.warn(`memory-shared-brain: auto-capture failed: ${String(err)}`);
         }
       });
     }
@@ -1053,9 +1153,7 @@ const memorySharedBrainPlugin = {
 
     api.registerCli(
       ({ program }) => {
-        const memory = program
-          .command("memory")
-          .description("Shared-brain memory commands");
+        const memory = program.command("memory").description("Shared-brain memory commands");
 
         memory
           .command("search")
@@ -1067,45 +1165,40 @@ const memorySharedBrainPlugin = {
             "Minimum relevance score (0-1)",
             String(cfg.minRelevance),
           )
-          .action(
-            async (
-              query: string,
-              opts: { limit: string; minRelevance: string },
-            ) => {
-              const limit = parseInt(opts.limit, 10);
-              const minRel = parseFloat(opts.minRelevance);
+          .action(async (query: string, opts: { limit: string; minRelevance: string }) => {
+            const limit = parseInt(opts.limit, 10);
+            const minRel = parseFloat(opts.minRelevance);
 
-              const results = await client.recall(query, limit);
-              if (!results || results.length === 0) {
-                console.log("No memories found.");
-                return;
-              }
+            const results = await client.recall(query, limit);
+            if (!results || results.length === 0) {
+              console.log("No memories found.");
+              return;
+            }
 
-              const filtered = results.filter((r) => r.score >= minRel);
-              if (filtered.length === 0) {
-                console.log(
-                  `Found ${results.length} results but none above relevance threshold ${minRel}.`,
-                );
-                return;
-              }
-
+            const filtered = results.filter((r) => r.score >= minRel);
+            if (filtered.length === 0) {
               console.log(
-                JSON.stringify(
-                  filtered.map((r) => ({
-                    content: r.c,
-                    score: r.score,
-                    similarity: r.sim,
-                    type: r.ty,
-                    tags: r.tg,
-                    ...(r.age_days !== undefined ? { age_days: r.age_days } : {}),
-                    ...(r.freshness_note ? { freshness_note: r.freshness_note } : {}),
-                  })),
-                  null,
-                  2,
-                ),
+                `Found ${results.length} results but none above relevance threshold ${minRel}.`,
               );
-            },
-          );
+              return;
+            }
+
+            console.log(
+              JSON.stringify(
+                filtered.map((r) => ({
+                  content: r.c,
+                  score: r.score,
+                  similarity: r.sim,
+                  type: r.ty,
+                  tags: r.tg,
+                  ...(r.age_days !== undefined ? { age_days: r.age_days } : {}),
+                  ...(r.freshness_note ? { freshness_note: r.freshness_note } : {}),
+                })),
+                null,
+                2,
+              ),
+            );
+          });
 
         memory
           .command("store")
@@ -1124,25 +1217,16 @@ const memorySharedBrainPlugin = {
               },
             ) => {
               const importance = parseFloat(opts.importance);
-              const tags = opts.tags
-                ? opts.tags.split(",").map((t) => t.trim())
-                : undefined;
+              const tags = opts.tags ? opts.tags.split(",").map((t) => t.trim()) : undefined;
 
-              const result = await client.store(
-                text,
-                importance,
-                opts.project,
-                tags,
-              );
+              const result = await client.store(text, importance, opts.project, tags);
               if (result) {
                 console.log(`Stored: "${text.slice(0, 80)}${text.length > 80 ? "..." : ""}"`);
                 if (result.id) {
                   console.log(`ID: ${result.id}`);
                 }
               } else {
-                console.error(
-                  "Failed to store memory. Is the shared-brain server running?",
-                );
+                console.error("Failed to store memory. Is the shared-brain server running?");
                 process.exitCode = 1;
               }
             },
@@ -1181,9 +1265,7 @@ const memorySharedBrainPlugin = {
     api.registerService({
       id: "memory-shared-brain",
       start: () => {
-        api.logger.info(
-          `memory-shared-brain: service started (url: ${brainUrl})`,
-        );
+        api.logger.info(`memory-shared-brain: service started (url: ${brainUrl})`);
       },
       stop: () => {
         api.logger.info("memory-shared-brain: service stopped");

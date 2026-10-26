@@ -155,10 +155,7 @@ function getCodeFenceRanges(text: string): Array<[number, number]> {
   return ranges;
 }
 
-function isInsideCodeFence(
-  position: number,
-  ranges: Array<[number, number]>,
-): boolean {
+function isInsideCodeFence(position: number, ranges: Array<[number, number]>): boolean {
   return ranges.some(([start, end]) => position >= start && position < end);
 }
 
@@ -173,10 +170,7 @@ function hasUnbalancedFences(text: string): boolean {
 /**
  * Check for trailing truncation (ends with "..." outside a code block).
  */
-function hasTrailingTruncation(
-  text: string,
-  codeRanges: Array<[number, number]>,
-): boolean {
+function hasTrailingTruncation(text: string, codeRanges: Array<[number, number]>): boolean {
   const trimmed = text.trimEnd();
   if (!trimmed.endsWith("...")) return false;
 
@@ -189,10 +183,7 @@ function hasTrailingTruncation(
  * Detect empty blocks inside code fences: `{ }` or `{\n}`
  * Only flag these when they appear inside code blocks (not prose).
  */
-function findEmptyBlocksInCode(
-  text: string,
-  codeRanges: Array<[number, number]>,
-): string[] {
+function findEmptyBlocksInCode(text: string, codeRanges: Array<[number, number]>): string[] {
   const found: string[] = [];
   const regex = /\{\s*\}/g;
   let match: RegExpExecArray | null;
@@ -263,9 +254,7 @@ export function assessQuality(response: string): QualityGateResult {
 
   // Compute verdict
   const hasRefusal = issues.some((i) => i.type === "explicit_refusal");
-  const nonRefusalCount = issues.filter(
-    (i) => i.type !== "explicit_refusal",
-  ).length;
+  const nonRefusalCount = issues.filter((i) => i.type !== "explicit_refusal").length;
 
   let verdict: QualityVerdict;
   if (hasRefusal) {
@@ -281,17 +270,15 @@ export function assessQuality(response: string): QualityGateResult {
   // Compute score (for feedback recording only)
   let score = 1.0;
   for (const issue of issues) {
-    const def = PATTERNS.find(
-      (p) => p.description === issue.description,
-    );
+    const def = PATTERNS.find((p) => p.description === issue.description);
     const penalty = def?.penalty ?? 0.15;
     score -= penalty;
   }
   // Truncation/empty block penalties
   score -= issues.filter((i) => i.type === "truncation").length * 0.2;
-  score -= issues.filter((i) =>
-    i.type === "incomplete_code" && i.description === "Empty block in code",
-  ).length * 0.1;
+  score -=
+    issues.filter((i) => i.type === "incomplete_code" && i.description === "Empty block in code")
+      .length * 0.1;
   score = Math.max(0, Math.min(1, score));
 
   return { verdict, issues, score };
@@ -301,10 +288,7 @@ export function assessQuality(response: string): QualityGateResult {
 // Two-stage gate: heuristic + LLM judge
 // ============================================================================
 
-import {
-  evaluateWithLLMJudge,
-  type LLMJudgeConfig,
-} from "./llm-judge.js";
+import { evaluateWithLLMJudge, type LLMJudgeConfig } from "./llm-judge.js";
 
 /**
  * Two-stage quality assessment:

@@ -18,18 +18,11 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { resolve as pathResolve, dirname as pathDirname } from "node:path";
-
+import { fileURLToPath } from "node:url";
+import { selectTier, selectPipeline } from "../src/config/routing-authority.js";
 import { analyzeComplexity } from "../src/pipeline/complexity-decomposer.js";
-import {
-  selectTier,
-  selectPipeline,
-} from "../src/config/routing-authority.js";
-import {
-  detectDomain,
-} from "../src/pipeline/control-plane.js";
+import { detectDomain } from "../src/pipeline/control-plane.js";
 import { LearnedClassifier } from "../src/pipeline/learned-classifier.js";
 
 // ============================================================================
@@ -114,7 +107,8 @@ interface BenchmarkResults {
 function detectTaskType(text: string): string {
   const lower = text.toLowerCase();
 
-  if (/```|function\s|class\s|def\s|import\s|const\s|let\s|var\s/.test(text)) return "code_generation";
+  if (/```|function\s|class\s|def\s|import\s|const\s|let\s|var\s/.test(text))
+    return "code_generation";
   if (/\b(error|exception|bug|fix|debug|traceback|stack)\b/.test(lower)) return "debugging";
   if (/\b(refactor|restructure|clean up|simplify)\b/.test(lower)) return "refactoring";
   if (/\b(explain|what is|how does|why does|describe)\b/.test(lower)) return "code_explanation";
@@ -186,9 +180,7 @@ function run(): void {
 
   // Parse CLI args
   const args = process.argv.slice(2);
-  const categoryFilter = args.includes("--category")
-    ? args[args.indexOf("--category") + 1]
-    : null;
+  const categoryFilter = args.includes("--category") ? args[args.indexOf("--category") + 1] : null;
   const verbose = args.includes("--verbose");
   const jsonOnly = args.includes("--json");
 
@@ -269,7 +261,8 @@ function run(): void {
       classifierTier,
       classifierPipeline,
       classifierTierCorrect: classifierTier !== null ? classifierTier === entry.expectedTier : null,
-      classifierPipelineCorrect: classifierPipeline !== null ? classifierPipeline === entry.expectedPipeline : null,
+      classifierPipelineCorrect:
+        classifierPipeline !== null ? classifierPipeline === entry.expectedPipeline : null,
       classifierTierConfidence,
       classifierPipelineConfidence,
     };
@@ -402,8 +395,12 @@ function run(): void {
   console.log("=".repeat(70));
   console.log(`  Timestamp:          ${results.timestamp}`);
   console.log(`  Total entries:      ${totalEntries}`);
-  console.log(`  Tier accuracy:      ${formatPercent(results.tierAccuracy)} (${tierCorrectCount}/${totalEntries})`);
-  console.log(`  Pipeline accuracy:  ${formatPercent(results.pipelineAccuracy)} (${pipelineCorrectCount}/${totalEntries})`);
+  console.log(
+    `  Tier accuracy:      ${formatPercent(results.tierAccuracy)} (${tierCorrectCount}/${totalEntries})`,
+  );
+  console.log(
+    `  Pipeline accuracy:  ${formatPercent(results.pipelineAccuracy)} (${pipelineCorrectCount}/${totalEntries})`,
+  );
   console.log("");
 
   // Category breakdown
@@ -411,24 +408,24 @@ function run(): void {
   console.log("  " + "-".repeat(66));
   console.log(
     "  " +
-    "Category".padEnd(14) +
-    "Count".padEnd(8) +
-    "Tier Acc".padEnd(12) +
-    "Pipe Acc".padEnd(12) +
-    "Tier OK".padEnd(10) +
-    "Pipe OK",
+      "Category".padEnd(14) +
+      "Count".padEnd(8) +
+      "Tier Acc".padEnd(12) +
+      "Pipe Acc".padEnd(12) +
+      "Tier OK".padEnd(10) +
+      "Pipe OK",
   );
   console.log("  " + "-".repeat(66));
 
   for (const [cat, metrics] of Object.entries(categoryBreakdown)) {
     console.log(
       "  " +
-      cat.padEnd(14) +
-      String(metrics.total).padEnd(8) +
-      formatPercent(metrics.tierAccuracy).padEnd(12) +
-      formatPercent(metrics.pipelineAccuracy).padEnd(12) +
-      `${metrics.tierCorrect}/${metrics.total}`.padEnd(10) +
-      `${metrics.pipelineCorrect}/${metrics.total}`,
+        cat.padEnd(14) +
+        String(metrics.total).padEnd(8) +
+        formatPercent(metrics.tierAccuracy).padEnd(12) +
+        formatPercent(metrics.pipelineAccuracy).padEnd(12) +
+        `${metrics.tierCorrect}/${metrics.total}`.padEnd(10) +
+        `${metrics.pipelineCorrect}/${metrics.total}`,
     );
   }
   console.log("");
@@ -439,10 +436,12 @@ function run(): void {
   console.log("  " + "-".repeat(66));
   console.log("  " + "".padEnd(12) + tierLabels.map((l) => l.padEnd(10)).join(""));
   for (const expected of tierLabels) {
-    const row = tierLabels.map((predicted) => {
-      const cell = tierConfusion[expected]?.[predicted];
-      return String(cell?.count ?? 0).padEnd(10);
-    }).join("");
+    const row = tierLabels
+      .map((predicted) => {
+        const cell = tierConfusion[expected]?.[predicted];
+        return String(cell?.count ?? 0).padEnd(10);
+      })
+      .join("");
     console.log("  " + expected.padEnd(12) + row);
   }
   console.log("");
@@ -453,49 +452,55 @@ function run(): void {
   console.log("  " + "-".repeat(66));
   console.log("  " + "".padEnd(12) + pipeLabels.map((l) => l.padEnd(10)).join(""));
   for (const expected of pipeLabels) {
-    const row = pipeLabels.map((predicted) => {
-      const cell = pipelineConfusion[expected]?.[predicted];
-      return String(cell?.count ?? 0).padEnd(10);
-    }).join("");
+    const row = pipeLabels
+      .map((predicted) => {
+        const cell = pipelineConfusion[expected]?.[predicted];
+        return String(cell?.count ?? 0).padEnd(10);
+      })
+      .join("");
     console.log("  " + expected.padEnd(12) + row);
   }
   console.log("");
 
   // Classifier results (side-by-side)
-  if (classifierAvailable && classifierTierAccuracy !== null && classifierPipelineAccuracy !== null) {
+  if (
+    classifierAvailable &&
+    classifierTierAccuracy !== null &&
+    classifierPipelineAccuracy !== null
+  ) {
     console.log("  " + "=".repeat(66));
     console.log("  LEARNED CLASSIFIER RESULTS");
     console.log("  " + "=".repeat(66));
-    console.log(`  Classifier tier accuracy:      ${formatPercent(classifierTierAccuracy)} (${entryResults.filter((e) => e.classifierTierCorrect).length}/${totalEntries})`);
-    console.log(`  Classifier pipeline accuracy:  ${formatPercent(classifierPipelineAccuracy)} (${entryResults.filter((e) => e.classifierPipelineCorrect).length}/${totalEntries})`);
+    console.log(
+      `  Classifier tier accuracy:      ${formatPercent(classifierTierAccuracy)} (${entryResults.filter((e) => e.classifierTierCorrect).length}/${totalEntries})`,
+    );
+    console.log(
+      `  Classifier pipeline accuracy:  ${formatPercent(classifierPipelineAccuracy)} (${entryResults.filter((e) => e.classifierPipelineCorrect).length}/${totalEntries})`,
+    );
     console.log("");
 
     // Side-by-side comparison
     console.log("  COMPARISON: Heuristic vs Classifier");
     console.log("  " + "-".repeat(66));
     console.log(
-      "  " +
-      "Metric".padEnd(25) +
-      "Heuristic".padEnd(15) +
-      "Classifier".padEnd(15) +
-      "Delta",
+      "  " + "Metric".padEnd(25) + "Heuristic".padEnd(15) + "Classifier".padEnd(15) + "Delta",
     );
     console.log("  " + "-".repeat(66));
     const tierDelta = classifierTierAccuracy - results.tierAccuracy;
     const pipeDelta = classifierPipelineAccuracy - results.pipelineAccuracy;
     console.log(
       "  " +
-      "Tier Accuracy".padEnd(25) +
-      formatPercent(results.tierAccuracy).padEnd(15) +
-      formatPercent(classifierTierAccuracy).padEnd(15) +
-      `${tierDelta >= 0 ? "+" : ""}${formatPercent(tierDelta)}`,
+        "Tier Accuracy".padEnd(25) +
+        formatPercent(results.tierAccuracy).padEnd(15) +
+        formatPercent(classifierTierAccuracy).padEnd(15) +
+        `${tierDelta >= 0 ? "+" : ""}${formatPercent(tierDelta)}`,
     );
     console.log(
       "  " +
-      "Pipeline Accuracy".padEnd(25) +
-      formatPercent(results.pipelineAccuracy).padEnd(15) +
-      formatPercent(classifierPipelineAccuracy).padEnd(15) +
-      `${pipeDelta >= 0 ? "+" : ""}${formatPercent(pipeDelta)}`,
+        "Pipeline Accuracy".padEnd(25) +
+        formatPercent(results.pipelineAccuracy).padEnd(15) +
+        formatPercent(classifierPipelineAccuracy).padEnd(15) +
+        `${pipeDelta >= 0 ? "+" : ""}${formatPercent(pipeDelta)}`,
     );
     console.log("");
 
@@ -505,23 +510,23 @@ function run(): void {
       console.log("  " + "-".repeat(66));
       console.log(
         "  " +
-        "Category".padEnd(14) +
-        "Count".padEnd(8) +
-        "Tier Acc".padEnd(12) +
-        "Pipe Acc".padEnd(12) +
-        "Tier OK".padEnd(10) +
-        "Pipe OK",
+          "Category".padEnd(14) +
+          "Count".padEnd(8) +
+          "Tier Acc".padEnd(12) +
+          "Pipe Acc".padEnd(12) +
+          "Tier OK".padEnd(10) +
+          "Pipe OK",
       );
       console.log("  " + "-".repeat(66));
       for (const [cat, metrics] of Object.entries(classifierCategoryBreakdown)) {
         console.log(
           "  " +
-          cat.padEnd(14) +
-          String(metrics.total).padEnd(8) +
-          formatPercent(metrics.tierAccuracy).padEnd(12) +
-          formatPercent(metrics.pipelineAccuracy).padEnd(12) +
-          `${metrics.tierCorrect}/${metrics.total}`.padEnd(10) +
-          `${metrics.pipelineCorrect}/${metrics.total}`,
+            cat.padEnd(14) +
+            String(metrics.total).padEnd(8) +
+            formatPercent(metrics.tierAccuracy).padEnd(12) +
+            formatPercent(metrics.pipelineAccuracy).padEnd(12) +
+            `${metrics.tierCorrect}/${metrics.total}`.padEnd(10) +
+            `${metrics.pipelineCorrect}/${metrics.total}`,
         );
       }
       console.log("");
@@ -534,10 +539,12 @@ function run(): void {
       console.log("  " + "-".repeat(66));
       console.log("  " + "".padEnd(12) + clfTierLabels.map((l) => l.padEnd(10)).join(""));
       for (const expected of clfTierLabels) {
-        const row = clfTierLabels.map((predicted) => {
-          const cell = classifierTierConfusion[expected]?.[predicted];
-          return String(cell?.count ?? 0).padEnd(10);
-        }).join("");
+        const row = clfTierLabels
+          .map((predicted) => {
+            const cell = classifierTierConfusion[expected]?.[predicted];
+            return String(cell?.count ?? 0).padEnd(10);
+          })
+          .join("");
         console.log("  " + expected.padEnd(12) + row);
       }
       console.log("");
@@ -559,7 +566,7 @@ function run(): void {
       }
       console.log(
         `  ${miss.id} [${miss.category}] ${issues.join(" | ")} ` +
-        `(complexity: ${miss.complexity.toFixed(3)}, domain: ${miss.detectedDomain ?? "none"}, reason: ${miss.tierReason})`,
+          `(complexity: ${miss.complexity.toFixed(3)}, domain: ${miss.detectedDomain ?? "none"}, reason: ${miss.tierReason})`,
       );
     }
   }

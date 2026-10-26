@@ -22,11 +22,11 @@
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { PasskeyStore } from "./src/passkey-store.js";
 import { ChallengeStore } from "./src/challenge-store.js";
-import { SessionTokenStore } from "./src/session-tokens.js";
-import { createPasskeyHandler } from "./src/passkey-routes.js";
 import { createDeviceQrHandler, type PendingDevicesMap } from "./src/device-qr-routes.js";
+import { createPasskeyHandler } from "./src/passkey-routes.js";
+import { PasskeyStore } from "./src/passkey-store.js";
+import { SessionTokenStore } from "./src/session-tokens.js";
 
 // ── Config Type ──────────────────────────────────────────────
 
@@ -56,9 +56,7 @@ const webauthnPlugin = {
     const rpId = String(rawCfg.rpId ?? "");
     const origin = String(rawCfg.origin ?? "");
     if (!rpId || !origin) {
-      api.logger.error(
-        "webauthn: plugin disabled — rpId and origin are required in plugin config",
-      );
+      api.logger.error("webauthn: plugin disabled — rpId and origin are required in plugin config");
       return;
     }
 
@@ -68,9 +66,7 @@ const webauthnPlugin = {
 
     // Resolve HMAC secret: explicit config > gateway token > generated
     const gatewayToken =
-      process.env.OPENCLAW_GATEWAY_TOKEN?.trim() ||
-      api.config.gateway?.auth?.token?.trim() ||
-      "";
+      process.env.OPENCLAW_GATEWAY_TOKEN?.trim() || api.config.gateway?.auth?.token?.trim() || "";
     const hmacSecret = String(rawCfg.hmacSecret ?? "") || gatewayToken;
 
     if (!hmacSecret) {
@@ -117,7 +113,9 @@ const webauthnPlugin = {
           pendingDevices,
           logger: api.logger,
           getSetupToken: () => setupToken,
-          clearSetupToken: () => { setupToken = null; },
+          clearSetupToken: () => {
+            setupToken = null;
+          },
           getHmacSecret: () => hmacSecret,
           validateBearerAuth,
         });
@@ -142,9 +140,7 @@ const webauthnPlugin = {
 
     function validateBearerAuth(authHeader: string | undefined): boolean {
       if (!authHeader) return false;
-      const token = authHeader.startsWith("Bearer ")
-        ? authHeader.slice(7).trim()
-        : "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
       if (!token) return false;
 
       // Accept gateway token or valid session token

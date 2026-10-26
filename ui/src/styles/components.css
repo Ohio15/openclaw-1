@@ -2322,42 +2322,159 @@
 
 /* ── Agent Graph View ─────────────────────────────────── */
 
-.agent-graph-root { display: grid; gap: 16px; }
-.agent-graph-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 16px; }
-.agent-graph-stat { text-align: center; }
-.agent-graph-stat-value { font-size: 28px; font-weight: 700; color: var(--text-strong); line-height: 1.2; }
-.agent-graph-stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-.agent-graph-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
-.agent-graph-card { display: grid; gap: 12px; }
-.agent-graph-card-header { display: flex; align-items: center; gap: 12px; }
-.agent-graph-card-title-group { flex: 1; min-width: 0; }
-.agent-graph-card-name { font-weight: 600; color: var(--text-strong); }
-.agent-graph-card-theme { font-size: 12px; line-height: 1.4; }
-.agent-graph-card-meta { display: grid; gap: 8px; }
-.agent-graph-card-kv { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.agent-graph-card-kv .label { flex-shrink: 0; min-width: 70px; }
-.agent-graph-badge { font-size: 11px; padding: 1px 6px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--secondary); }
-.agent-graph-table-wrap { overflow-x: auto; }
-.agent-graph-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.agent-graph-table th, .agent-graph-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.agent-graph-table th { font-weight: 600; color: var(--text-strong); background: var(--secondary); position: sticky; top: 0; }
-.agent-graph-table-label { min-width: 140px; color: var(--muted); }
-.agent-graph-delegation-list { display: grid; gap: 12px; }
-.agent-graph-delegation-edge { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--secondary); }
-.agent-graph-delegation-from, .agent-graph-delegation-to { display: flex; align-items: center; gap: 8px; }
-.agent-graph-delegation-arrow { color: var(--accent); flex-shrink: 0; }
-.agent-graph-delegation-emoji { font-size: 18px; }
+.agent-graph-root {
+  display: grid;
+  gap: 16px;
+}
+.agent-graph-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 16px;
+}
+.agent-graph-stat {
+  text-align: center;
+}
+.agent-graph-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-strong);
+  line-height: 1.2;
+}
+.agent-graph-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.agent-graph-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.agent-graph-card {
+  display: grid;
+  gap: 12px;
+}
+.agent-graph-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.agent-graph-card-title-group {
+  flex: 1;
+  min-width: 0;
+}
+.agent-graph-card-name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.agent-graph-card-theme {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.agent-graph-card-meta {
+  display: grid;
+  gap: 8px;
+}
+.agent-graph-card-kv {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.agent-graph-card-kv .label {
+  flex-shrink: 0;
+  min-width: 70px;
+}
+.agent-graph-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--secondary);
+}
+.agent-graph-table-wrap {
+  overflow-x: auto;
+}
+.agent-graph-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.agent-graph-table th,
+.agent-graph-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.agent-graph-table th {
+  font-weight: 600;
+  color: var(--text-strong);
+  background: var(--secondary);
+  position: sticky;
+  top: 0;
+}
+.agent-graph-table-label {
+  min-width: 140px;
+  color: var(--muted);
+}
+.agent-graph-delegation-list {
+  display: grid;
+  gap: 12px;
+}
+.agent-graph-delegation-edge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--secondary);
+}
+.agent-graph-delegation-from,
+.agent-graph-delegation-to {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.agent-graph-delegation-arrow {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.agent-graph-delegation-emoji {
+  font-size: 18px;
+}
 
 /* ── Notification Badge ───────────────────────────────── */
 
 .nav-badge {
-  display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 18px; padding: 0 5px;
-  font-size: 10px; font-weight: 700; line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
   border-radius: 9px;
   background: var(--badge-bg, var(--accent));
   color: var(--badge-fg, var(--bg));
   animation: scale-in 0.15s ease-out;
 }
-.nav--collapsed .nav-badge { min-width: 8px; height: 8px; padding: 0; font-size: 0; border-radius: 50%; }
-@keyframes scale-in { from { transform: scale(0); } to { transform: scale(1); } }
+.nav--collapsed .nav-badge {
+  min-width: 8px;
+  height: 8px;
+  padding: 0;
+  font-size: 0;
+  border-radius: 50%;
+}
+@keyframes scale-in {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}

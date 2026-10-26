@@ -173,8 +173,9 @@ export function renderChatControls(state: AppViewState) {
           )}
         </select>
       </label>
-      ${agents.length > 1
-        ? html`
+      ${
+        agents.length > 1
+          ? html`
           <label class="field chat-controls__agent">
             <select
               .value=${currentAgentId}
@@ -215,7 +216,7 @@ export function renderChatControls(state: AppViewState) {
             </select>
           </label>
         `
-        : nothing
+          : nothing
       }
       <button
         class="btn btn--sm btn--icon"

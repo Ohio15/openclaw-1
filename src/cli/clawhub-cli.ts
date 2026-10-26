@@ -15,9 +15,7 @@ import {
 } from "../agents/skills/clawhub-registry.js";
 
 export function registerClawHubCli(program: Command, managedSkillsDir: string): void {
-  const clawhub = program
-    .command("clawhub")
-    .description("Community skill management via ClawHub");
+  const clawhub = program.command("clawhub").description("Community skill management via ClawHub");
 
   clawhub
     .command("search")
@@ -34,7 +32,9 @@ export function registerClawHubCli(program: Command, managedSkillsDir: string): 
       }
 
       const display = results.slice(0, limit);
-      console.log(`Found ${results.length} skills${results.length > limit ? ` (showing ${limit})` : ""}:\n`);
+      console.log(
+        `Found ${results.length} skills${results.length > limit ? ` (showing ${limit})` : ""}:\n`,
+      );
 
       for (const skill of display) {
         const tags = skill.tags?.length ? ` [${skill.tags.join(", ")}]` : "";
@@ -77,7 +77,9 @@ export function registerClawHubCli(program: Command, managedSkillsDir: string): 
         return;
       }
 
-      console.log(`Available skills (${skills.length} total, showing ${Math.min(skills.length, limit)}):\n`);
+      console.log(
+        `Available skills (${skills.length} total, showing ${Math.min(skills.length, limit)}):\n`,
+      );
 
       for (const skill of skills.slice(0, limit)) {
         const domains = skill.domains?.length ? ` [${skill.domains.join(", ")}]` : "";

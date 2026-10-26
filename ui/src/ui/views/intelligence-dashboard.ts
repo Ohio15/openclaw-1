@@ -97,9 +97,9 @@ function maxTierCount(byTier: Record<string, { count: number; avgConfidence: num
 export function renderIntelligenceDashboard(props: IntelligenceDashboardProps) {
   if (!props.connected) {
     return html`
-      <section class="card" style="text-align: center; padding: 48px 24px;">
-        <div class="card-title" style="font-size: 1.25rem;">Intelligence Dashboard</div>
-        <div class="muted" style="margin-top: 12px;">
+      <section class="card" style="text-align: center; padding: 48px 24px">
+        <div class="card-title" style="font-size: 1.25rem">Intelligence Dashboard</div>
+        <div class="muted" style="margin-top: 12px">
           Connect to the gateway to view intelligence pipeline metrics.
         </div>
       </section>
@@ -171,21 +171,29 @@ function skelBlock(height = "24px") {
 }
 
 function renderSkeletonStyles() {
-  return html`<style>
-    @keyframes skeleton-pulse {
-      0%, 100% { opacity: 0.4; }
-      50% { opacity: 0.8; }
-    }
-  </style>`;
+  return html`
+    <style>
+      @keyframes skeleton-pulse {
+        0%,
+        100% {
+          opacity: 0.4;
+        }
+        50% {
+          opacity: 0.8;
+        }
+      }
+    </style>
+  `;
 }
 
 function statusRow(label: string, value: unknown, skeleton: boolean, colorClass = "") {
   return html`
     <div class="row" style="justify-content: space-between;">
       <span class="muted">${label}</span>
-      ${skeleton
-        ? skel("70px")
-        : html`<span class="${colorClass}" style="font-family: var(--mono);">${value}</span>`
+      ${
+        skeleton
+          ? skel("70px")
+          : html`<span class="${colorClass}" style="font-family: var(--mono);">${value}</span>`
       }
     </div>
   `;
@@ -236,12 +244,19 @@ function renderQualityMetrics(feedback: IntelligenceStats["feedback"] | null, sk
       <div class="card" style="text-align: center; padding: 20px 12px;">
         <div class="stat-label">${label}</div>
         <div style="font-size: 1.75rem; font-family: var(--mono); margin-top: 8px;">
-          ${skeleton
-            ? skel("60px", "28px")
-            : html`<span class="stat-value ${colorClass}">${value}</span>`
+          ${
+            skeleton
+              ? skel("60px", "28px")
+              : html`<span class="stat-value ${colorClass}">${value}</span>`
           }
         </div>
-        ${noData ? html`<div class="muted" style="font-size: 0.75rem; margin-top: 4px;">awaiting data</div>` : nothing}
+        ${
+          noData
+            ? html`
+                <div class="muted" style="font-size: 0.75rem; margin-top: 4px">awaiting data</div>
+              `
+            : nothing
+        }
       </div>
     `;
   }
@@ -274,24 +289,39 @@ function renderTierDistribution(
         <div class="card-title">Tier Distribution</div>
         <div class="card-sub">Model tier usage breakdown</div>
         <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
-          ${tierOrder.map((tier) => html`
+          ${tierOrder.map(
+            (tier) => html`
             <div style="display: flex; align-items: center; gap: 12px;">
               <span style="width: 80px; flex-shrink: 0; font-family: var(--mono); font-size: 0.85rem; color: var(--muted);">${tier}</span>
               <div style="flex: 1; height: 24px; background: var(--border); border-radius: 4px; overflow: hidden;">
                 <div style="width: ${skeleton ? "0" : "0"}%; height: 100%; background: var(--border); border-radius: 4px;"></div>
               </div>
-              <span style="width: 50px; flex-shrink: 0; text-align: right;">${skeleton ? skel("30px") : html`<span class="muted" style="font-family: var(--mono); font-size: 0.85rem;">0</span>`}</span>
-              <span style="width: 55px; flex-shrink: 0; text-align: right;">${skeleton ? skel("35px") : html`<span class="muted" style="font-family: var(--mono); font-size: 0.85rem;">--</span>`}</span>
+              <span style="width: 50px; flex-shrink: 0; text-align: right;">${
+                skeleton
+                  ? skel("30px")
+                  : html`
+                      <span class="muted" style="font-family: var(--mono); font-size: 0.85rem">0</span>
+                    `
+              }</span>
+              <span style="width: 55px; flex-shrink: 0; text-align: right;">${
+                skeleton
+                  ? skel("35px")
+                  : html`
+                      <span class="muted" style="font-family: var(--mono); font-size: 0.85rem">--</span>
+                    `
+              }</span>
             </div>
-          `)}
+          `,
+          )}
         </div>
       </section>
     `;
   }
 
   const sortedTiers = tiers.sort(
-    (a, b) => (tierOrder.indexOf(a) === -1 ? 99 : tierOrder.indexOf(a)) -
-              (tierOrder.indexOf(b) === -1 ? 99 : tierOrder.indexOf(b)),
+    (a, b) =>
+      (tierOrder.indexOf(a) === -1 ? 99 : tierOrder.indexOf(a)) -
+      (tierOrder.indexOf(b) === -1 ? 99 : tierOrder.indexOf(b)),
   );
   const max = maxTierCount(byTier);
 
@@ -398,17 +428,61 @@ function renderRecentActivity(
               </tr>
             </thead>
             <tbody>
-              ${placeholderRows.map(() => html`
+              ${placeholderRows.map(
+                () => html`
                 <tr style="border-bottom: 1px solid var(--border);">
-                  <td style="padding: 6px 8px;">${skeleton ? skel("100px") : html`<span class="muted">--</span>`}</td>
-                  <td style="padding: 6px 8px;">${skeleton ? skel("80px") : html`<span class="muted">--</span>`}</td>
-                  <td style="padding: 6px 8px;">${skeleton ? skel("55px") : html`<span class="muted">--</span>`}</td>
-                  <td style="padding: 6px 8px; text-align: right;">${skeleton ? skel("45px") : html`<span class="muted">--</span>`}</td>
-                  <td style="padding: 6px 8px; text-align: center;">${skeleton ? skel("20px") : html`<span class="muted">--</span>`}</td>
-                  <td style="padding: 6px 8px; text-align: center;">${skeleton ? skel("20px") : html`<span class="muted">--</span>`}</td>
-                  <td style="padding: 6px 8px; text-align: center;">${skeleton ? skel("20px") : html`<span class="muted">--</span>`}</td>
+                  <td style="padding: 6px 8px;">${
+                    skeleton
+                      ? skel("100px")
+                      : html`
+                          <span class="muted">--</span>
+                        `
+                  }</td>
+                  <td style="padding: 6px 8px;">${
+                    skeleton
+                      ? skel("80px")
+                      : html`
+                          <span class="muted">--</span>
+                        `
+                  }</td>
+                  <td style="padding: 6px 8px;">${
+                    skeleton
+                      ? skel("55px")
+                      : html`
+                          <span class="muted">--</span>
+                        `
+                  }</td>
+                  <td style="padding: 6px 8px; text-align: right;">${
+                    skeleton
+                      ? skel("45px")
+                      : html`
+                          <span class="muted">--</span>
+                        `
+                  }</td>
+                  <td style="padding: 6px 8px; text-align: center;">${
+                    skeleton
+                      ? skel("20px")
+                      : html`
+                          <span class="muted">--</span>
+                        `
+                  }</td>
+                  <td style="padding: 6px 8px; text-align: center;">${
+                    skeleton
+                      ? skel("20px")
+                      : html`
+                          <span class="muted">--</span>
+                        `
+                  }</td>
+                  <td style="padding: 6px 8px; text-align: center;">${
+                    skeleton
+                      ? skel("20px")
+                      : html`
+                          <span class="muted">--</span>
+                        `
+                  }</td>
                 </tr>
-              `)}
+              `,
+              )}
             </tbody>
           </table>
         </div>
@@ -513,14 +587,16 @@ function renderBudgetStatus(budget: IntelligenceStats["budget"] | null, skeleton
           <div class="card-title">Usage by Tier</div>
           <div class="card-sub">Token consumption per model tier</div>
           <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
-            ${["tiny", "small", "medium", "large", "reasoning"].map((tier) => html`
+            ${["tiny", "small", "medium", "large", "reasoning"].map(
+              (tier) => html`
               <div style="display: flex; align-items: center; gap: 12px;">
                 <span style="width: 70px; flex-shrink: 0; font-family: var(--mono); font-size: 0.85rem; color: var(--muted);">${tier}</span>
                 <div style="flex: 1; height: 20px; background: var(--border); border-radius: 4px;"></div>
                 <span style="width: 80px; flex-shrink: 0; text-align: right;">${skel("40px")}</span>
                 <span style="width: 60px; flex-shrink: 0; text-align: right;">${skel("35px")}</span>
               </div>
-            `)}
+            `,
+            )}
           </div>
         </div>
       </section>
@@ -528,17 +604,14 @@ function renderBudgetStatus(budget: IntelligenceStats["budget"] | null, skeleton
   }
 
   const tierKeys = Object.keys(budget.byTier);
-  const maxTokens = tierKeys.reduce(
-    (max, key) => Math.max(max, budget.byTier[key].tokens),
-    1,
-  );
+  const maxTokens = tierKeys.reduce((max, key) => Math.max(max, budget.byTier[key].tokens), 1);
 
-  const dailyCostPct = budget.dailyCostCap > 0
-    ? Math.min(100, (budget.dailyCost / budget.dailyCostCap) * 100)
-    : 0;
-  const sessionCostPct = budget.sessionCostCap > 0
-    ? Math.min(100, (budget.sessionCost / budget.sessionCostCap) * 100)
-    : 0;
+  const dailyCostPct =
+    budget.dailyCostCap > 0 ? Math.min(100, (budget.dailyCost / budget.dailyCostCap) * 100) : 0;
+  const sessionCostPct =
+    budget.sessionCostCap > 0
+      ? Math.min(100, (budget.sessionCost / budget.sessionCostCap) * 100)
+      : 0;
 
   const dailyCostColor = dailyCostPct >= 90 ? "danger" : dailyCostPct >= 70 ? "warn" : "ok";
   const sessionCostColor = sessionCostPct >= 90 ? "danger" : sessionCostPct >= 70 ? "warn" : "ok";
@@ -603,12 +676,15 @@ function renderBudgetStatus(budget: IntelligenceStats["budget"] | null, skeleton
         <div class="card-title">Usage by Tier</div>
         <div class="card-sub">Token consumption per model tier</div>
         <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
-          ${tierKeys.length === 0
-            ? html`<div class="muted" style="text-align: center; padding: 24px 0;">No tier usage data.</div>`
-            : tierKeys.map((tier) => {
-                const data = budget.byTier[tier];
-                const widthPct = Math.max(2, (data.tokens / maxTokens) * 100);
-                return html`
+          ${
+            tierKeys.length === 0
+              ? html`
+                  <div class="muted" style="text-align: center; padding: 24px 0">No tier usage data.</div>
+                `
+              : tierKeys.map((tier) => {
+                  const data = budget.byTier[tier];
+                  const widthPct = Math.max(2, (data.tokens / maxTokens) * 100);
+                  return html`
                   <div style="display: flex; align-items: center; gap: 12px;">
                     <span
                       style="
@@ -665,7 +741,7 @@ function renderBudgetStatus(budget: IntelligenceStats["budget"] | null, skeleton
                     </span>
                   </div>
                 `;
-              })
+                })
           }
         </div>
       </div>

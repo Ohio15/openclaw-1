@@ -12,10 +12,10 @@ This benchmark suite serves three goals:
 
 ## Files
 
-| File | Description |
-|------|-------------|
-| `suite.json` | 100 labeled evaluation entries |
-| `runner.ts` | Benchmark runner script |
+| File           | Description                                                                 |
+| -------------- | --------------------------------------------------------------------------- |
+| `suite.json`   | 100 labeled evaluation entries                                              |
+| `runner.ts`    | Benchmark runner script                                                     |
 | `results.json` | Output from the last runner execution (gitignored or committed as baseline) |
 
 ## Running the benchmark
@@ -28,11 +28,11 @@ pnpm --filter ./extensions/intelligence exec tsx benchmark/runner.ts
 
 ### Options
 
-| Flag | Description |
-|------|-------------|
-| `--verbose` | Print predicted vs expected for every entry |
+| Flag                | Description                                                                       |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `--verbose`         | Print predicted vs expected for every entry                                       |
 | `--category <name>` | Only evaluate entries in this category (trivial, simple, medium, hard, reasoning) |
-| `--json` | Output raw JSON results to stdout instead of the human-readable report |
+| `--json`            | Output raw JSON results to stdout instead of the human-readable report            |
 
 ### Examples
 
@@ -57,18 +57,21 @@ pnpm --filter ./extensions/intelligence exec tsx benchmark/runner.ts --json > la
 ### Category breakdown
 
 Shows accuracy per category (trivial, simple, medium, hard, reasoning). Expect:
+
 - Trivial/simple categories should have high accuracy — these are straightforward routing decisions
 - Hard/reasoning categories may have lower accuracy — these often need nuanced analysis that keyword heuristics miss
 
 ### Confusion matrix
 
 Rows are expected tiers, columns are predicted tiers. Diagonal entries are correct predictions. Off-diagonal entries show systematic misrouting:
+
 - If many "reasoning" entries are predicted as "medium", the heuristics under-escalate complex prompts
 - If many "tiny" entries are predicted as "large", the heuristics over-escalate simple prompts
 
 ### Misclassified entries
 
 Each misclassified entry shows:
+
 - The expected vs predicted tier/pipeline
 - The computed complexity score
 - The detected domain
@@ -107,6 +110,7 @@ Add entries to `suite.json` following this schema:
 Categories (20 each): trivial, simple, medium, hard, reasoning
 
 Domains (spread across categories):
+
 - auth/security: ~15 entries
 - database: ~12 entries
 - api/middleware: ~15 entries

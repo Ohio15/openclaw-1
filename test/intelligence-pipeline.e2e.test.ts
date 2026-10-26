@@ -8,8 +8,11 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
+import {
+  selectTier,
+  selectPipeline,
+} from "../extensions/intelligence/src/config/routing-authority.js";
 import { analyzeComplexity } from "../extensions/intelligence/src/pipeline/complexity-decomposer.js";
-import { selectTier, selectPipeline } from "../extensions/intelligence/src/config/routing-authority.js";
 import { ModelTierResolver } from "../extensions/intelligence/src/pipeline/model-tier-resolver.js";
 import { SubAgentOrchestrator } from "../extensions/intelligence/src/pipeline/sub-agent-orchestrator.js";
 
@@ -313,7 +316,9 @@ describe("Intelligence Pipeline E2E", () => {
 
       const override = resolver.resolve(tierSelection);
       expect(override).not.toBeNull();
-      expect(override!.modelOverride).toBe(NEXUS_TIER_MAP[expectedTier as keyof typeof NEXUS_TIER_MAP].model);
+      expect(override!.modelOverride).toBe(
+        NEXUS_TIER_MAP[expectedTier as keyof typeof NEXUS_TIER_MAP].model,
+      );
 
       reachedTiers.add(tierSelection.tier);
     }

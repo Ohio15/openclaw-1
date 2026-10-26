@@ -31,7 +31,7 @@ describe("analyzeComplexity", () => {
   // 3. Medium complexity — database + optimization
   it("returns medium complexity when database and optimization are mentioned", () => {
     const result = analyzeComplexity(
-      "Build a production-ready database layer with caching and performance optimization for our postgres queries"
+      "Build a production-ready database layer with caching and performance optimization for our postgres queries",
     );
     expect(result.complexity).toBeGreaterThanOrEqual(0.4);
     expect(result.complexity).toBeLessThanOrEqual(0.8);
@@ -44,7 +44,7 @@ describe("analyzeComplexity", () => {
   it("returns high complexity when auth, realtime, algorithms, and database are present", () => {
     const result = analyzeComplexity(
       "Build a realtime collaborative editor with websocket support, JWT authentication, " +
-      "conflict resolution algorithms using CRDT, backed by a postgres database"
+        "conflict resolution algorithms using CRDT, backed by a postgres database",
     );
     expect(result.complexity).toBeGreaterThanOrEqual(0.7);
     expect(result.complexity).toBeLessThanOrEqual(1.0);
@@ -81,7 +81,7 @@ describe("analyzeComplexity", () => {
   // 8. needsDecomposition true when complexity > 0.4
   it("sets needsDecomposition to true when complexity exceeds 0.4", () => {
     const result = analyzeComplexity(
-      "Implement JWT authentication with session management, a database ORM layer, and realtime websocket updates"
+      "Implement JWT authentication with session management, a database ORM layer, and realtime websocket updates",
     );
     expect(result.complexity).toBeGreaterThan(0.4);
     expect(result.needsDecomposition).toBe(true);
@@ -139,21 +139,25 @@ describe("analyzeComplexity", () => {
     const result = analyzeComplexity("add JWT authentication and a postgres database");
     const authIndicator = result.indicators.find((i) => i.indicator === "authentication");
     expect(authIndicator).toBeDefined();
-    expect(authIndicator!.matches).toEqual(expect.arrayContaining([expect.stringMatching(/JWT|auth/i)]));
+    expect(authIndicator!.matches).toEqual(
+      expect.arrayContaining([expect.stringMatching(/JWT|auth/i)]),
+    );
 
     const dbIndicator = result.indicators.find((i) => i.indicator === "database");
     expect(dbIndicator).toBeDefined();
-    expect(dbIndicator!.matches).toEqual(expect.arrayContaining([expect.stringMatching(/postgres|database/i)]));
+    expect(dbIndicator!.matches).toEqual(
+      expect.arrayContaining([expect.stringMatching(/postgres|database/i)]),
+    );
   });
 
   // 14. algorithms keyword has highest effective weight among single-match indicators
   it("gives algorithms the highest effective weight among single-match indicators", () => {
     const result = analyzeComplexity(
       "Implement an algorithm with JWT auth, realtime websocket, postgres database, " +
-      "caching optimization, production-ready, comprehensive unit test with multiple endpoints"
+        "caching optimization, production-ready, comprehensive unit test with multiple endpoints",
     );
     const singleMatchIndicators = result.indicators.filter(
-      (i) => i.indicator !== "multipleFeatures"
+      (i) => i.indicator !== "multipleFeatures",
     );
     const algorithmsIndicator = singleMatchIndicators.find((i) => i.indicator === "algorithms");
     expect(algorithmsIndicator).toBeDefined();

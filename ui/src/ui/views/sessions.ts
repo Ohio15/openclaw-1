@@ -217,10 +217,12 @@ export function renderSessions(props: SessionsProps) {
             ? html`
                 <div class="muted">No sessions found.</div>
               `
-            : rows.map((row) => html`
+            : rows.map(
+                (row) => html`
                 ${renderRow(row, props.basePath, props.onPatch, props.onDelete, props.loading, props.client, props.transcriptState, props.requestUpdate)}
                 ${renderSessionTranscript({ row, state: props.transcriptState })}
-              `)
+              `,
+              )
         }
       </div>
     </section>

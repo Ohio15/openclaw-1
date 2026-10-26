@@ -44,13 +44,20 @@ function bufferToBase64url(buffer) {
   return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');
 }`;
 
-export function registrationPage(setupToken: string, rpName: string, credentialCount: number): string {
+export function registrationPage(
+  setupToken: string,
+  rpName: string,
+  credentialCount: number,
+): string {
   const hasExisting = credentialCount > 0;
   const existingNote = hasExisting
     ? `<br><span style="color:#3fb950">${credentialCount} passkey(s) registered</span>`
     : "";
 
-  return pageShell("Register Device", rpName, `
+  return pageShell(
+    "Register Device",
+    rpName,
+    `
     <div style="text-align:center;padding:20px;max-width:400px;margin:0 auto">
       <div style="font-size:48px;margin-bottom:12px">&#x1f511;</div>
       <h2 style="color:#58a6ff;margin-bottom:8px">Register Your Phone</h2>
@@ -130,11 +137,15 @@ export function registrationPage(setupToken: string, rpName: string, credentialC
         }
       }
     </script>
-  `);
+  `,
+  );
 }
 
 export function registrationClosedPage(rpName: string): string {
-  return pageShell("Registration Closed", rpName, `
+  return pageShell(
+    "Registration Closed",
+    rpName,
+    `
     <div style="text-align:center;padding:20px;max-width:400px;margin:0 auto">
       <div style="font-size:48px;margin-bottom:12px">&#x1f6ab;</div>
       <h2 style="color:#f85149;margin-bottom:8px">Registration Closed</h2>
@@ -143,11 +154,15 @@ export function registrationClosedPage(rpName: string): string {
         An admin must generate a new setup token to register additional passkeys.
       </p>
     </div>
-  `);
+  `,
+  );
 }
 
 export function invalidTokenPage(rpName: string): string {
-  return pageShell("Invalid Token", rpName, `
+  return pageShell(
+    "Invalid Token",
+    rpName,
+    `
     <div style="text-align:center;padding:20px;max-width:400px;margin:0 auto">
       <div style="font-size:48px;margin-bottom:12px">&#x1f512;</div>
       <h2 style="color:#f85149;margin-bottom:8px">Invalid Setup Token</h2>
@@ -156,7 +171,8 @@ export function invalidTokenPage(rpName: string): string {
         Check the server console output for the token.
       </p>
     </div>
-  `);
+  `,
+  );
 }
 
 export function qrApprovalPage(
@@ -167,7 +183,10 @@ export function qrApprovalPage(
   remainingSeconds: number,
   hasPasskey: boolean,
 ): string {
-  return pageShell("Authorize", rpName, `
+  return pageShell(
+    "Authorize",
+    rpName,
+    `
     <div style="text-align:center;padding:20px;max-width:400px;margin:0 auto">
       <div style="font-size:48px;margin-bottom:8px">${hasPasskey ? "&#x1f510;" : "&#x1f511;"}</div>
       <h2 style="color:#58a6ff;margin-bottom:16px">Authorize Device</h2>
@@ -177,9 +196,11 @@ export function qrApprovalPage(
         <div style="color:#484f58;font-size:11px;margin-top:4px">${remainingSeconds}s remaining</div>
       </div>
 
-      ${hasPasskey
-        ? '<p style="color:#8b949e;font-size:13px;margin-bottom:16px">Verify with your fingerprint or Face ID</p>'
-        : '<p style="color:#8b949e;font-size:13px;margin-bottom:16px">Tap to approve this device</p>'}
+      ${
+        hasPasskey
+          ? '<p style="color:#8b949e;font-size:13px;margin-bottom:16px">Verify with your fingerprint or Face ID</p>'
+          : '<p style="color:#8b949e;font-size:13px;margin-bottom:16px">Tap to approve this device</p>'
+      }
 
       <button onclick="approve()" id="approve-btn"
         style="background:#1f6feb;color:white;border:none;border-radius:12px;
@@ -277,7 +298,8 @@ export function qrApprovalPage(
         if (navigator.vibrate) navigator.vibrate(100);
       }
     </script>
-  `);
+  `,
+  );
 }
 
 export function simplePage(rpName: string, title: string, body: string): string {

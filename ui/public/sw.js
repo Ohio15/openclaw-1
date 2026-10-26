@@ -3,21 +3,17 @@ const CACHE_NAME = "openclaw-__BUILD_HASH__";
 const PRECACHE_URLS = ["/", "/index.html"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)),
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)));
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key)),
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))),
       ),
-    ),
   );
   self.clients.claim();
 });
@@ -35,9 +31,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  const isStaticAsset = /\.(js|css|svg|png|ico|woff2?)(\?.*)?$/.test(
-    url.pathname,
-  );
+  const isStaticAsset = /\.(js|css|svg|png|ico|woff2?)(\?.*)?$/.test(url.pathname);
 
   if (isStaticAsset) {
     // Cache-first for static assets
@@ -56,8 +50,6 @@ self.addEventListener("fetch", (event) => {
     );
   } else {
     // Network-first for everything else (HTML, API, etc.)
-    event.respondWith(
-      fetch(request).catch(() => caches.match(request)),
-    );
+    event.respondWith(fetch(request).catch(() => caches.match(request)));
   }
 });

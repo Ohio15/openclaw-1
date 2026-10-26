@@ -12,12 +12,6 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { analyzeComplexity } from "./complexity-decomposer.js";
-import {
-  getSemanticKnowledge,
-  complexityBasedMaxResults,
-} from "./knowledge-retrieval.js";
 import {
   selectTier,
   selectPipeline,
@@ -25,6 +19,8 @@ import {
   type TierSelection,
   type PipelineSelection,
 } from "../config/routing-authority.js";
+import { analyzeComplexity } from "./complexity-decomposer.js";
+import { getSemanticKnowledge, complexityBasedMaxResults } from "./knowledge-retrieval.js";
 import { LearnedClassifier } from "./learned-classifier.js";
 
 // ============================================================================
@@ -59,11 +55,9 @@ export interface BeforeAgentAnalysis {
   requirementCount: number;
 }
 
-
 // ============================================================================
 // Helpers
 // ============================================================================
-
 
 /**
  * Extract user prompt from messages (last user message).
@@ -178,7 +172,8 @@ function tierRank(tier: string): number {
 function detectTaskType(text: string): string {
   const lower = text.toLowerCase();
 
-  if (/```|function\s|class\s|def\s|import\s|const\s|let\s|var\s/.test(text)) return "code_generation";
+  if (/```|function\s|class\s|def\s|import\s|const\s|let\s|var\s/.test(text))
+    return "code_generation";
   if (/\b(error|exception|bug|fix|debug|traceback|stack)\b/.test(lower)) return "debugging";
   if (/\b(refactor|restructure|clean up|simplify)\b/.test(lower)) return "refactoring";
   if (/\b(explain|what is|how does|why does|describe)\b/.test(lower)) return "code_explanation";
@@ -293,11 +288,7 @@ export class IntelligenceControlPlane {
       // Fallback to heuristic when no classifier model is available
       const taskType = detectTaskType(userPrompt);
       tierSelection = selectTier(complexity, domain, taskType);
-      pipelineSelection = selectPipeline(
-        complexity,
-        requirementCount,
-        userPrompt,
-      );
+      pipelineSelection = selectPipeline(complexity, requirementCount, userPrompt);
     }
 
     // 6. Semantic knowledge retrieval (not gated by domain — any query gets searched)
@@ -330,5 +321,4 @@ export class IntelligenceControlPlane {
       requirementCount,
     };
   }
-
 }

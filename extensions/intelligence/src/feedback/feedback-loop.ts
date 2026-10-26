@@ -82,7 +82,6 @@ export interface FeedbackInsights {
 // Helpers
 // ============================================================================
 
-
 // ============================================================================
 // FeedbackLoop Class
 // ============================================================================
@@ -144,9 +143,7 @@ export class FeedbackLoop {
    */
   async getRecentEntries(limit = 20): Promise<FeedbackEntry[]> {
     const entries = await this.readAll();
-    return entries
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, limit);
+    return entries.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit);
   }
 
   /**
@@ -198,7 +195,12 @@ export class FeedbackLoop {
 
       // Category
       const cat = entry.category ?? "unknown";
-      const catAcc = catMap.get(cat) ?? { count: 0, totalConfidence: 0, coherentCount: 0, refusalCount: 0 };
+      const catAcc = catMap.get(cat) ?? {
+        count: 0,
+        totalConfidence: 0,
+        coherentCount: 0,
+        refusalCount: 0,
+      };
       catAcc.count++;
       catAcc.totalConfidence += entry.confidence;
       if (entry.coherent) catAcc.coherentCount++;

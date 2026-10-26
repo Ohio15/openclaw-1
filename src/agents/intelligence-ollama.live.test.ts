@@ -1,16 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { isTruthyEnvValue } from "../infra/env.js";
+import {
+  selectTier,
+  type TierSelection,
+} from "../../extensions/intelligence/src/config/routing-authority.js";
 import { analyzeComplexity } from "../../extensions/intelligence/src/pipeline/complexity-decomposer.js";
-import { selectTier, type TierSelection } from "../../extensions/intelligence/src/config/routing-authority.js";
 import { ModelTierResolver } from "../../extensions/intelligence/src/pipeline/model-tier-resolver.js";
+import { isTruthyEnvValue } from "../infra/env.js";
 
 // ---------------------------------------------------------------------------
 // Gate: only run when explicitly opted-in via env var
 // ---------------------------------------------------------------------------
 
 const LIVE =
-  isTruthyEnvValue(process.env.LIVE) ||
-  isTruthyEnvValue(process.env.OPENCLAW_LIVE_OLLAMA);
+  isTruthyEnvValue(process.env.LIVE) || isTruthyEnvValue(process.env.OPENCLAW_LIVE_OLLAMA);
 
 const describeLive = LIVE ? describe : describe.skip;
 
@@ -81,8 +83,7 @@ async function chatOllama(
   const wallClockMs = Date.now() - start;
   return {
     content: data.message?.content ?? "",
-    totalDurationMs:
-      Math.round((data.total_duration ?? 0) / 1_000_000) || wallClockMs,
+    totalDurationMs: Math.round((data.total_duration ?? 0) / 1_000_000) || wallClockMs,
     evalCount: data.eval_count ?? 0,
   };
 }
@@ -100,10 +101,7 @@ function detectDomain(prompt: string): string | null {
   return null;
 }
 
-async function runPipelineTest(
-  prompt: string,
-  label: string,
-): Promise<BenchmarkEntry> {
+async function runPipelineTest(prompt: string, label: string): Promise<BenchmarkEntry> {
   const analysis = analyzeComplexity(prompt);
   const domain = detectDomain(prompt);
   const tierSelection: TierSelection = selectTier(analysis.complexity, domain);
@@ -189,64 +187,50 @@ describeLive(
 
     // ---- Connectivity ----
 
-    it(
-      "connects to Ollama (health check)",
-      { timeout: 15_000 },
-      async () => {
-        const res = await fetch(`${OLLAMA_URL}/api/tags`, {
-          signal: AbortSignal.timeout(10_000),
-        });
-        expect(res.ok).toBe(true);
-        const data = await res.json();
-        const modelNames = (data.models ?? []).map(
-          (m: { name: string }) => m.name,
-        );
-        logProgress(`Ollama reachable. Models: ${modelNames.join(", ")}`);
-        expect(modelNames.length).toBeGreaterThan(0);
-      },
-    );
+    it("connects to Ollama (health check)", { timeout: 15_000 }, async () => {
+      const res = await fetch(`${OLLAMA_URL}/api/tags`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      expect(res.ok).toBe(true);
+      const data = await res.json();
+      const modelNames = (data.models ?? []).map((m: { name: string }) => m.name);
+      logProgress(`Ollama reachable. Models: ${modelNames.join(", ")}`);
+      expect(modelNames.length).toBeGreaterThan(0);
+    });
 
     // ---- Tier routing ----
 
-    it(
-      "routes trivial prompt to tiny/small tier -> qwen3.5:9b",
-      { timeout: 300_000 },
-      async () => {
-        const entry = await runPipelineTest(PROMPT_TRIVIAL, "trivial");
+    it("routes trivial prompt to tiny/small tier -> qwen3.5:9b", { timeout: 300_000 }, async () => {
+      const entry = await runPipelineTest(PROMPT_TRIVIAL, "trivial");
 
-        expect(entry.content.length).toBeGreaterThan(0);
-        expect(entry.content.toLowerCase()).toContain("4");
+      expect(entry.content.length).toBeGreaterThan(0);
+      expect(entry.content.toLowerCase()).toContain("4");
 
-        const acceptableTiers = ["tiny", "small"];
-        expect(acceptableTiers).toContain(entry.tier);
-        expect(entry.model).toBe("qwen3.5:9b");
-      },
-    );
+      const acceptableTiers = ["tiny", "small"];
+      expect(acceptableTiers).toContain(entry.tier);
+      expect(entry.model).toBe("qwen3.5:9b");
+    });
 
-    it(
-      "routes medium prompt to medium tier -> qwen2.5:14b",
-      { timeout: 300_000 },
-      async () => {
-        const entry = await runPipelineTest(PROMPT_MEDIUM, "medium");
+    it("routes medium prompt to medium tier -> qwen2.5:14b", { timeout: 300_000 }, async () => {
+      const entry = await runPipelineTest(PROMPT_MEDIUM, "medium");
 
-        expect(entry.content.length).toBeGreaterThan(10);
+      expect(entry.content.length).toBeGreaterThan(10);
 
-        const lowerText = entry.content.toLowerCase();
-        const hasRelevantContent =
-          lowerText.includes("express") ||
-          lowerText.includes("endpoint") ||
-          lowerText.includes("api") ||
-          lowerText.includes("router") ||
-          lowerText.includes("function") ||
-          lowerText.includes("app.") ||
-          lowerText.includes("const ") ||
-          lowerText.includes("import ");
-        expect(hasRelevantContent).toBe(true);
+      const lowerText = entry.content.toLowerCase();
+      const hasRelevantContent =
+        lowerText.includes("express") ||
+        lowerText.includes("endpoint") ||
+        lowerText.includes("api") ||
+        lowerText.includes("router") ||
+        lowerText.includes("function") ||
+        lowerText.includes("app.") ||
+        lowerText.includes("const ") ||
+        lowerText.includes("import ");
+      expect(hasRelevantContent).toBe(true);
 
-        expect(entry.tier).toBe("medium");
-        expect(entry.model).toBe("qwen2.5:14b");
-      },
-    );
+      expect(entry.tier).toBe("medium");
+      expect(entry.model).toBe("qwen2.5:14b");
+    });
 
     it(
       "routes reasoning prompt to reasoning tier -> qwen3:30b-a3b",
@@ -330,94 +314,71 @@ describeLive(
       },
     );
 
-    it(
-      "responses do not appear truncated mid-sentence",
-      { timeout: 300_000 },
-      async () => {
-        const prompt =
-          "Briefly explain the difference between a stack and a queue data structure.";
-        const entry = await runPipelineTest(prompt, "truncation-check");
+    it("responses do not appear truncated mid-sentence", { timeout: 300_000 }, async () => {
+      const prompt = "Briefly explain the difference between a stack and a queue data structure.";
+      const entry = await runPipelineTest(prompt, "truncation-check");
 
-        expect(entry.content.length).toBeGreaterThan(10);
+      expect(entry.content.length).toBeGreaterThan(10);
 
-        // Rough truncation check: text should end with punctuation, a code fence,
-        // a closing tag, or a complete-looking line (not mid-word).
-        const trimmed = entry.content.trimEnd();
-        const lastChar = trimmed.charAt(trimmed.length - 1);
-        const endsCleanly =
-          /[.!?)\]}`'"]/.test(lastChar) ||
-          trimmed.endsWith("```") ||
-          trimmed.endsWith("---") ||
-          // Some models end with a newline after a complete thought. Accept if
-          // the last line has > 5 chars (unlikely mid-word truncation).
-          trimmed.split("\n").pop()!.trim().length > 5;
-        expect(endsCleanly).toBe(true);
-      },
-    );
+      // Rough truncation check: text should end with punctuation, a code fence,
+      // a closing tag, or a complete-looking line (not mid-word).
+      const trimmed = entry.content.trimEnd();
+      const lastChar = trimmed.charAt(trimmed.length - 1);
+      const endsCleanly =
+        /[.!?)\]}`'"]/.test(lastChar) ||
+        trimmed.endsWith("```") ||
+        trimmed.endsWith("---") ||
+        // Some models end with a newline after a complete thought. Accept if
+        // the last line has > 5 chars (unlikely mid-word truncation).
+        trimmed.split("\n").pop()!.trim().length > 5;
+      expect(endsCleanly).toBe(true);
+    });
 
     // ---- Edge cases ----
 
-    it(
-      "handles rapid sequential prompts without errors",
-      { timeout: 600_000 },
-      async () => {
-        logProgress("rapid sequential: sending 3 prompts");
+    it("handles rapid sequential prompts without errors", { timeout: 600_000 }, async () => {
+      logProgress("rapid sequential: sending 3 prompts");
 
-        const prompts = [PROMPT_RAPID_1, PROMPT_RAPID_2, PROMPT_RAPID_3];
+      const prompts = [PROMPT_RAPID_1, PROMPT_RAPID_2, PROMPT_RAPID_3];
 
-        // Send sequentially in quick succession (no artificial delay)
-        for (const prompt of prompts) {
-          const entry = await runPipelineTest(prompt, "rapid-sequential");
-          expect(entry.content.length).toBeGreaterThan(0);
-          logProgress(
-            `rapid sequential: got response (${entry.content.length} chars)`,
-          );
-        }
-      },
-    );
+      // Send sequentially in quick succession (no artificial delay)
+      for (const prompt of prompts) {
+        const entry = await runPipelineTest(prompt, "rapid-sequential");
+        expect(entry.content.length).toBeGreaterThan(0);
+        logProgress(`rapid sequential: got response (${entry.content.length} chars)`);
+      }
+    });
 
     // ---- Tier-specific model verification ----
 
-    it(
-      "tiny tier model resolves to qwen3.5:9b",
-      { timeout: 10_000 },
-      async () => {
-        const override = resolver.resolve({ tier: "tiny", reason: "test" });
-        expect(override).not.toBeNull();
-        expect(override!.modelOverride).toBe("ollama/qwen3.5:9b");
+    it("tiny tier model resolves to qwen3.5:9b", { timeout: 10_000 }, async () => {
+      const override = resolver.resolve({ tier: "tiny", reason: "test" });
+      expect(override).not.toBeNull();
+      expect(override!.modelOverride).toBe("ollama/qwen3.5:9b");
 
-        const ollamaModel = override!.modelOverride!.replace(/^ollama\//, "");
-        expect(ollamaModel).toBe("qwen3.5:9b");
-      },
-    );
+      const ollamaModel = override!.modelOverride!.replace(/^ollama\//, "");
+      expect(ollamaModel).toBe("qwen3.5:9b");
+    });
 
-    it(
-      "medium tier model resolves to qwen2.5:14b",
-      { timeout: 10_000 },
-      async () => {
-        const override = resolver.resolve({ tier: "medium", reason: "test" });
-        expect(override).not.toBeNull();
-        expect(override!.modelOverride).toBe("ollama/qwen2.5:14b");
+    it("medium tier model resolves to qwen2.5:14b", { timeout: 10_000 }, async () => {
+      const override = resolver.resolve({ tier: "medium", reason: "test" });
+      expect(override).not.toBeNull();
+      expect(override!.modelOverride).toBe("ollama/qwen2.5:14b");
 
-        const ollamaModel = override!.modelOverride!.replace(/^ollama\//, "");
-        expect(ollamaModel).toBe("qwen2.5:14b");
-      },
-    );
+      const ollamaModel = override!.modelOverride!.replace(/^ollama\//, "");
+      expect(ollamaModel).toBe("qwen2.5:14b");
+    });
 
-    it(
-      "reasoning tier model resolves to qwen3:30b-a3b",
-      { timeout: 10_000 },
-      async () => {
-        const override = resolver.resolve({
-          tier: "reasoning",
-          reason: "test",
-        });
-        expect(override).not.toBeNull();
-        expect(override!.modelOverride).toBe("ollama/qwen3:30b-a3b");
+    it("reasoning tier model resolves to qwen3:30b-a3b", { timeout: 10_000 }, async () => {
+      const override = resolver.resolve({
+        tier: "reasoning",
+        reason: "test",
+      });
+      expect(override).not.toBeNull();
+      expect(override!.modelOverride).toBe("ollama/qwen3:30b-a3b");
 
-        const ollamaModel = override!.modelOverride!.replace(/^ollama\//, "");
-        expect(ollamaModel).toBe("qwen3:30b-a3b");
-      },
-    );
+      const ollamaModel = override!.modelOverride!.replace(/^ollama\//, "");
+      expect(ollamaModel).toBe("qwen3:30b-a3b");
+    });
   },
 );

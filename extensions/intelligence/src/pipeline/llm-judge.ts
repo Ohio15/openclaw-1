@@ -79,17 +79,16 @@ const MAX_RESPONSE_CHARS = 4_000;
  * Build the structured prompt for the LLM judge.
  * Exported for testing.
  */
-export function buildJudgePrompt(
-  userPrompt: string,
-  assistantResponse: string,
-): string {
-  const truncatedPrompt = userPrompt.length > MAX_USER_PROMPT_CHARS
-    ? userPrompt.slice(0, MAX_USER_PROMPT_CHARS) + "\n[... truncated]"
-    : userPrompt;
+export function buildJudgePrompt(userPrompt: string, assistantResponse: string): string {
+  const truncatedPrompt =
+    userPrompt.length > MAX_USER_PROMPT_CHARS
+      ? userPrompt.slice(0, MAX_USER_PROMPT_CHARS) + "\n[... truncated]"
+      : userPrompt;
 
-  const truncatedResponse = assistantResponse.length > MAX_RESPONSE_CHARS
-    ? assistantResponse.slice(0, MAX_RESPONSE_CHARS) + "\n[... truncated]"
-    : assistantResponse;
+  const truncatedResponse =
+    assistantResponse.length > MAX_RESPONSE_CHARS
+      ? assistantResponse.slice(0, MAX_RESPONSE_CHARS) + "\n[... truncated]"
+      : assistantResponse;
 
   return `You are a quality evaluator for AI assistant responses. Evaluate the following response to a user's request.
 
@@ -143,9 +142,7 @@ export function parseJudgeResponse(
 
   // Extract REASONING (everything after "REASONING:" on the same line or until end)
   const reasoningMatch = raw.match(/REASONING:\s*(.+)/i);
-  const reasoning = reasoningMatch
-    ? reasoningMatch[1].trim()
-    : "No reasoning provided";
+  const reasoning = reasoningMatch ? reasoningMatch[1].trim() : "No reasoning provided";
 
   return { verdict, confidence, reasoning };
 }
@@ -160,33 +157,24 @@ export function parseJudgeResponse(
  * On any failure (timeout, connection error, parse failure), returns a
  * fallback result based on the heuristic gate instead of crashing.
  */
-export async function evaluateWithLLMJudge(
-  params: LLMJudgeParams,
-): Promise<LLMJudgeResult> {
+export async function evaluateWithLLMJudge(params: LLMJudgeParams): Promise<LLMJudgeResult> {
   const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const start = Date.now();
 
   try {
     const prompt = buildJudgePrompt(params.userPrompt, params.assistantResponse);
 
-    const result = await generateCompletion(
-      params.ollamaBaseUrl,
-      params.model,
-      prompt,
-      {
-        timeoutMs,
-        temperature: 0.1,
-        numPredict: 150,
-      },
-    );
+    const result = await generateCompletion(params.ollamaBaseUrl, params.model, prompt, {
+      timeoutMs,
+      temperature: 0.1,
+      numPredict: 150,
+    });
 
     const evaluationTimeMs = Date.now() - start;
 
     if (!result.ok) {
       // Ollama call failed — fall back to heuristic
-      console.warn(
-        `[llm-judge] Ollama call failed (${result.errorType}): ${result.message}`,
-      );
+      console.warn(`[llm-judge] Ollama call failed (${result.errorType}): ${result.message}`);
       return heuristicFallback(params.heuristicResult, evaluationTimeMs, result.message);
     }
 
@@ -195,9 +183,7 @@ export async function evaluateWithLLMJudge(
 
     if (!parsed) {
       // Parse failed — fall back to heuristic
-      console.warn(
-        `[llm-judge] Failed to parse judge response: ${result.response.slice(0, 200)}`,
-      );
+      console.warn(`[llm-judge] Failed to parse judge response: ${result.response.slice(0, 200)}`);
       return heuristicFallback(
         params.heuristicResult,
         evaluationTimeMs,

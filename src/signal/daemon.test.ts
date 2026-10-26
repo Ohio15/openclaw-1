@@ -152,9 +152,7 @@ describe("HIGH #4 — port pre-flight before spawning signal-cli daemon", () => 
 
     expect(handle.exited).toBe(true);
     expect(error).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith(
-      expect.stringContaining("signal-cli daemon exited"),
-    );
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("signal-cli daemon exited"));
   });
 
   it("stop() is a no-op once child has exited", async () => {

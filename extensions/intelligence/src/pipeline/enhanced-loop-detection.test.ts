@@ -95,7 +95,11 @@ describe("EnhancedLoopDetector", () => {
         detector.recordOutcome("sql_query", params, "[]", undefined, SESSION);
       }
       // 6th call with similar params — should trigger fuzzy detection
-      const result = detector.check("sql_query", { query: "SELECT * FROM users WHERE id = 5", table: "users", limit: 10 }, SESSION);
+      const result = detector.check(
+        "sql_query",
+        { query: "SELECT * FROM users WHERE id = 5", table: "users", limit: 10 },
+        SESSION,
+      );
       // The params are slightly different each time but very similar
       // Whether this triggers depends on the exact Jaccard calculation
       // With these params, keys are identical, most values are identical
@@ -106,7 +110,13 @@ describe("EnhancedLoopDetector", () => {
       detector.check("bash", { command: "ls /tmp" }, SESSION);
       detector.recordOutcome("bash", { command: "ls /tmp" }, "file1", undefined, SESSION);
       detector.check("bash", { command: "cat /etc/hosts" }, SESSION);
-      detector.recordOutcome("bash", { command: "cat /etc/hosts" }, "127.0.0.1", undefined, SESSION);
+      detector.recordOutcome(
+        "bash",
+        { command: "cat /etc/hosts" },
+        "127.0.0.1",
+        undefined,
+        SESSION,
+      );
       detector.check("bash", { command: "pwd" }, SESSION);
       const result = detector.check("bash", { command: "whoami" }, SESSION);
       expect(result.detected).toBe(false);
@@ -147,7 +157,8 @@ describe("EnhancedLoopDetector", () => {
 
   describe("response repetition detection", () => {
     it("sets flag when 3+ similar responses detected", () => {
-      const response = "I apologize, but I cannot complete this task. Let me try a different approach.";
+      const response =
+        "I apologize, but I cannot complete this task. Let me try a different approach.";
 
       detector.trackResponse([response], SESSION);
       expect(detector.consumeResponseLoopFlag(SESSION)).toBeNull();

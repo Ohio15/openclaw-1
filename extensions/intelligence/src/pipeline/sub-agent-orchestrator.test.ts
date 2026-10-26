@@ -15,9 +15,7 @@ describe("SubAgentOrchestrator", () => {
   }
 
   describe("buildChainedPrompt", () => {
-    const singleTask: SubTask[] = [
-      makeTask({ name: "Analyze", description: "Analyze the data" }),
-    ];
+    const singleTask: SubTask[] = [makeTask({ name: "Analyze", description: "Analyze the data" })];
 
     const multiTasks: SubTask[] = [
       makeTask({ name: "Research", description: "Gather information" }),
@@ -51,7 +49,7 @@ describe("SubAgentOrchestrator", () => {
     it("includes dependency references when a task has explicit dependencies", () => {
       const result = orchestrator.buildChainedPrompt(multiTasks, null);
       expect(result).toContain(
-        "Consider the output from the following prior step(s) when completing this step: Research, Analyze."
+        "Consider the output from the following prior step(s) when completing this step: Research, Analyze.",
       );
     });
 
@@ -61,9 +59,7 @@ describe("SubAgentOrchestrator", () => {
         makeTask({ name: "Second", description: "Do second thing" }),
       ];
       const result = orchestrator.buildChainedPrompt(tasks, null);
-      expect(result).toContain(
-        "Consider the output from Step 1 when completing this step."
-      );
+      expect(result).toContain("Consider the output from Step 1 when completing this step.");
     });
 
     it("does not include a dependency reference for the first task with no dependencies", () => {
@@ -75,21 +71,18 @@ describe("SubAgentOrchestrator", () => {
     it("includes step tag instructions for each task", () => {
       const result = orchestrator.buildChainedPrompt(multiTasks, null);
       expect(result).toContain(
-        "Output your work for this step between <step-1> and </step-1> tags."
+        "Output your work for this step between <step-1> and </step-1> tags.",
       );
       expect(result).toContain(
-        "Output your work for this step between <step-2> and </step-2> tags."
+        "Output your work for this step between <step-2> and </step-2> tags.",
       );
       expect(result).toContain(
-        "Output your work for this step between <step-3> and </step-3> tags."
+        "Output your work for this step between <step-3> and </step-3> tags.",
       );
     });
 
     it("includes domain context section when domainContext is provided", () => {
-      const result = orchestrator.buildChainedPrompt(
-        singleTask,
-        "This is about quantum physics."
-      );
+      const result = orchestrator.buildChainedPrompt(singleTask, "This is about quantum physics.");
       expect(result).toContain("### Domain Context");
       expect(result).toContain("This is about quantum physics.");
     });
@@ -135,8 +128,7 @@ describe("SubAgentOrchestrator", () => {
     });
 
     it("extracts final tag content", () => {
-      const response =
-        "<step-1>Work</step-1>\n<final>The integrated answer.</final>";
+      const response = "<step-1>Work</step-1>\n<final>The integrated answer.</final>";
       const outputs = orchestrator.extractSubTaskOutputs(response);
       expect(outputs.get("final")).toBe("The integrated answer.");
     });
@@ -148,13 +140,7 @@ describe("SubAgentOrchestrator", () => {
     });
 
     it("handles multiline content within tags", () => {
-      const response = [
-        "<step-1>",
-        "Line one",
-        "Line two",
-        "Line three",
-        "</step-1>",
-      ].join("\n");
+      const response = ["<step-1>", "Line one", "Line two", "Line three", "</step-1>"].join("\n");
       const outputs = orchestrator.extractSubTaskOutputs(response);
       expect(outputs.get("step-1")).toBe("Line one\nLine two\nLine three");
     });

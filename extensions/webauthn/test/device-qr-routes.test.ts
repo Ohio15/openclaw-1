@@ -1,6 +1,9 @@
-import { Readable } from "node:stream";
+import fsp from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Socket } from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { Readable } from "node:stream";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   createDeviceQrHandler,
@@ -9,9 +12,6 @@ import {
   type DeviceQrRoutesDeps,
 } from "../src/device-qr-routes.js";
 import { PasskeyStore } from "../src/passkey-store.js";
-import fsp from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
 
 describe("DeviceQrRoutes", () => {
   const silentLogger = {
@@ -84,7 +84,11 @@ describe("DeviceQrRoutes", () => {
     return readable as unknown as IncomingMessage;
   }
 
-  function mockRes(): ServerResponse & { _status: number; _headers: Record<string, string>; _body: string } {
+  function mockRes(): ServerResponse & {
+    _status: number;
+    _headers: Record<string, string>;
+    _body: string;
+  } {
     const headers: Record<string, string> = {};
     let body = "";
     let status = 200;
@@ -114,7 +118,11 @@ describe("DeviceQrRoutes", () => {
         return res;
       },
     };
-    return res as unknown as ServerResponse & { _status: number; _headers: Record<string, string>; _body: string };
+    return res as unknown as ServerResponse & {
+      _status: number;
+      _headers: Record<string, string>;
+      _body: string;
+    };
   }
 
   it("POST /auth/request generates code in NEXUS-XXXX format", async () => {

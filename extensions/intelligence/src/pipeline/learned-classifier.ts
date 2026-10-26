@@ -122,7 +122,12 @@ function findBestSplit(
   indices: number[],
   getLabel: (s: TrainingSample) => string,
   featureSubset: number[],
-): { featureIndex: number; threshold: number; leftIndices: number[]; rightIndices: number[] } | null {
+): {
+  featureIndex: number;
+  threshold: number;
+  leftIndices: number[];
+  rightIndices: number[];
+} | null {
   const totalCount = indices.length;
   if (totalCount <= 1) return null;
 
@@ -242,7 +247,15 @@ function buildTree(
     featureIndex: split.featureIndex,
     threshold: split.threshold,
     left: buildTree(samples, split.leftIndices, getLabel, maxDepth, minSamplesLeaf, rng, depth + 1),
-    right: buildTree(samples, split.rightIndices, getLabel, maxDepth, minSamplesLeaf, rng, depth + 1),
+    right: buildTree(
+      samples,
+      split.rightIndices,
+      getLabel,
+      maxDepth,
+      minSamplesLeaf,
+      rng,
+      depth + 1,
+    ),
     prediction: null,
     distribution,
   };
@@ -251,7 +264,10 @@ function buildTree(
 /**
  * Predict using a single decision tree.
  */
-function predictTree(node: TreeNode, features: number[]): { label: string; distribution: Record<string, number> } {
+function predictTree(
+  node: TreeNode,
+  features: number[],
+): { label: string; distribution: Record<string, number> } {
   if (node.featureIndex === -1 || !node.left || !node.right) {
     return { label: node.prediction ?? "", distribution: node.distribution };
   }
@@ -414,7 +430,8 @@ export class LearnedClassifier {
       tier,
       pipeline,
       tierConfidence: totalTierVotes > 0 ? (tierVotes[tier] || 0) / totalTierVotes : 0,
-      pipelineConfidence: totalPipelineVotes > 0 ? (pipelineVotes[pipeline] || 0) / totalPipelineVotes : 0,
+      pipelineConfidence:
+        totalPipelineVotes > 0 ? (pipelineVotes[pipeline] || 0) / totalPipelineVotes : 0,
     };
   }
 

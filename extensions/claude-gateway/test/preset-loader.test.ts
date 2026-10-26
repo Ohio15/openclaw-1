@@ -29,7 +29,10 @@ describe("PresetLoader", () => {
   }
 
   it("loads YAML files from directory", () => {
-    writeYaml(tmpDir, "monitor.yml", `
+    writeYaml(
+      tmpDir,
+      "monitor.yml",
+      `
 name: monitor
 display_name: System Monitor
 description: Monitors system health
@@ -38,8 +41,12 @@ allowed_tools:
   - bash
 tags:
   - ops
-`);
-    writeYaml(tmpDir, "deploy.yaml", `
+`,
+    );
+    writeYaml(
+      tmpDir,
+      "deploy.yaml",
+      `
 name: deploy
 display_name: Deployer
 description: Deploys services
@@ -49,7 +56,8 @@ allowed_tools:
   - git
 tags:
   - ci
-`);
+`,
+    );
 
     const store = createPresetLoader(tmpDir, silentLogger);
     const all = store.listAll();
@@ -64,14 +72,18 @@ tags:
   it("handles env var substitution with ${VAR} and ${VAR:default}", () => {
     process.env.TEST_PRESET_TOKEN = "secret-abc";
 
-    writeYaml(tmpDir, "envtest.yml", `
+    writeYaml(
+      tmpDir,
+      "envtest.yml",
+      `
 name: envtest
 display_name: Env Test
 description: Uses env vars
 system_prompt: Token is \${TEST_PRESET_TOKEN} and fallback is \${MISSING_VAR:fallback-value}
 allowed_tools: []
 tags: []
-`);
+`,
+    );
 
     const store = createPresetLoader(tmpDir, silentLogger);
     const preset = store.get("envtest");
@@ -86,14 +98,18 @@ tags: []
     // Ensure the var does not exist
     delete process.env.TOTALLY_MISSING_PRESET_VAR;
 
-    writeYaml(tmpDir, "missing-env.yml", `
+    writeYaml(
+      tmpDir,
+      "missing-env.yml",
+      `
 name: missing-env
 display_name: Missing Env
 description: Has unresolved var
 system_prompt: Value is \${TOTALLY_MISSING_PRESET_VAR}
 allowed_tools: []
 tags: []
-`);
+`,
+    );
 
     const store = createPresetLoader(tmpDir, silentLogger);
     const preset = store.get("missing-env");
@@ -103,14 +119,18 @@ tags: []
   });
 
   it("skips non-YAML files", () => {
-    writeYaml(tmpDir, "valid.yml", `
+    writeYaml(
+      tmpDir,
+      "valid.yml",
+      `
 name: valid
 display_name: Valid
 description: A valid preset
 system_prompt: Hello
 allowed_tools: []
 tags: []
-`);
+`,
+    );
     fs.writeFileSync(path.join(tmpDir, "readme.txt"), "This is not a preset");
     fs.writeFileSync(path.join(tmpDir, "config.json"), '{"not": "a preset"}');
     fs.writeFileSync(path.join(tmpDir, "notes.md"), "# Notes");
@@ -134,7 +154,9 @@ tags: []
     const warnings: unknown[][] = [];
     const logger = {
       info: () => {},
-      warn: (...args: unknown[]) => { warnings.push(args); },
+      warn: (...args: unknown[]) => {
+        warnings.push(args);
+      },
       error: () => {},
     };
 
@@ -147,7 +169,10 @@ tags: []
   });
 
   it("detects scheduled presets", () => {
-    writeYaml(tmpDir, "scheduled.yml", `
+    writeYaml(
+      tmpDir,
+      "scheduled.yml",
+      `
 name: scheduled-job
 display_name: Scheduled Job
 description: Runs on a cron
@@ -155,15 +180,20 @@ system_prompt: Do things
 allowed_tools: []
 schedule: "0 * * * *"
 tags: []
-`);
-    writeYaml(tmpDir, "unscheduled.yml", `
+`,
+    );
+    writeYaml(
+      tmpDir,
+      "unscheduled.yml",
+      `
 name: unscheduled-job
 display_name: Unscheduled Job
 description: No schedule
 system_prompt: Do other things
 allowed_tools: []
 tags: []
-`);
+`,
+    );
 
     const store = createPresetLoader(tmpDir, silentLogger);
     const scheduled = store.scheduled();
@@ -174,27 +204,35 @@ tags: []
   });
 
   it("reload picks up new files", () => {
-    writeYaml(tmpDir, "first.yml", `
+    writeYaml(
+      tmpDir,
+      "first.yml",
+      `
 name: first
 display_name: First
 description: First preset
 system_prompt: First
 allowed_tools: []
 tags: []
-`);
+`,
+    );
 
     const store = createPresetLoader(tmpDir, silentLogger);
     expect(store.listAll()).toHaveLength(1);
 
     // Add a new file after initial load
-    writeYaml(tmpDir, "second.yml", `
+    writeYaml(
+      tmpDir,
+      "second.yml",
+      `
 name: second
 display_name: Second
 description: Second preset
 system_prompt: Second
 allowed_tools: []
 tags: []
-`);
+`,
+    );
 
     store.reload();
     expect(store.listAll()).toHaveLength(2);

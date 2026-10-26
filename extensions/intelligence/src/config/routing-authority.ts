@@ -270,11 +270,6 @@ export function selectPipeline(
 /**
  * Get quality threshold for a given profile.
  */
-export function getQualityThreshold(
-  profile: string = "development",
-): QualityProfile {
-  return (
-    QUALITY_THRESHOLDS.profiles[profile] ??
-    QUALITY_THRESHOLDS.profiles.development
-  );
+export function getQualityThreshold(profile: string = "development"): QualityProfile {
+  return QUALITY_THRESHOLDS.profiles[profile] ?? QUALITY_THRESHOLDS.profiles.development;
 }

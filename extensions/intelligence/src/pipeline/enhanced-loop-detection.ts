@@ -213,11 +213,7 @@ export class EnhancedLoopDetector {
    * Check if the upcoming tool call is part of a detected loop pattern.
    * Called from `before_tool_call` hook.
    */
-  check(
-    toolName: string,
-    params: Record<string, unknown>,
-    sessionKey: string,
-  ): EnhancedLoopResult {
+  check(toolName: string, params: Record<string, unknown>, sessionKey: string): EnhancedLoopResult {
     if (!this.config.enabled) {
       return { detected: false, count: 0 };
     }

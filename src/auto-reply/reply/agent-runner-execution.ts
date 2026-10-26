@@ -22,6 +22,7 @@ import {
 } from "../../config/sessions.js";
 import { logVerbose } from "../../globals.js";
 import { emitAgentEvent, registerAgentRunContext } from "../../infra/agent-events.js";
+import { consumeCascadeSignal } from "../../intelligence/cascade-state.js";
 import { defaultRuntime } from "../../runtime.js";
 import {
   isMarkdownCapableMessageChannel,
@@ -37,7 +38,6 @@ import {
   buildTemplateSenderContext,
   resolveRunAuthProfile,
 } from "./agent-runner-utils.js";
-import { consumeCascadeSignal } from "../../intelligence/cascade-state.js";
 import { resolveEnforceFinalTag } from "./agent-runner-utils.js";
 import { type BlockReplyPipeline } from "./block-reply-pipeline.js";
 import type { FollowupRun } from "./queue.js";
@@ -454,8 +454,8 @@ export async function runAgentTurnWithFallback(params: {
           cascadeAttempts += 1;
           logVerbose(
             `Cascade quality fallback: escalating from "${signal.currentTier}" to ` +
-            `"${signal.escalatedTier ?? "unknown"}" (attempt ${cascadeAttempts}/${CASCADE_MAX_RETRIES}, ` +
-            `model=${signal.escalatedModel}, provider=${signal.escalatedProvider ?? "default"})`,
+              `"${signal.escalatedTier ?? "unknown"}" (attempt ${cascadeAttempts}/${CASCADE_MAX_RETRIES}, ` +
+              `model=${signal.escalatedModel}, provider=${signal.escalatedProvider ?? "default"})`,
           );
           // Override the provider/model for the next iteration with the
           // pre-resolved escalation from the intelligence extension

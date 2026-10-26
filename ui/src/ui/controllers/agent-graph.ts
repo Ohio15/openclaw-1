@@ -122,9 +122,10 @@ export function compileAgentGraphData(opts: {
     const modelLabel = config.entry?.model
       ? resolveModelLabel(config.entry.model)
       : resolveModelLabel(config.defaults?.model);
-    const modelPrimary = resolveModelPrimary(config.entry?.model)
-      ?? resolveModelPrimary(config.defaults?.model)
-      ?? null;
+    const modelPrimary =
+      resolveModelPrimary(config.entry?.model) ??
+      resolveModelPrimary(config.defaults?.model) ??
+      null;
     const fallbacks = resolveModelFallbacks(config.entry?.model) ?? [];
 
     const workspace = config.entry?.workspace || config.defaults?.workspace || "default";
@@ -135,7 +136,9 @@ export function compileAgentGraphData(opts: {
     const toolsEntry = config.entry?.tools;
     const toolsProfile = toolsEntry?.profile ?? config.globalTools?.profile ?? null;
     const toolsDenyCount = Array.isArray(toolsEntry?.deny) ? toolsEntry.deny.length : 0;
-    const toolsAlsoAllowCount = Array.isArray(toolsEntry?.alsoAllow) ? toolsEntry.alsoAllow.length : 0;
+    const toolsAlsoAllowCount = Array.isArray(toolsEntry?.alsoAllow)
+      ? toolsEntry.alsoAllow.length
+      : 0;
 
     // Channels — all agents share the same channel set in OpenClaw
     const agentChannelIds = [...activeChannelIds];
@@ -143,10 +146,7 @@ export function compileAgentGraphData(opts: {
 
     const emoji = resolveAgentEmoji(agent, identity);
     const displayName =
-      identity?.name?.trim() ||
-      agent.identity?.name?.trim() ||
-      agent.name?.trim() ||
-      agent.id;
+      identity?.name?.trim() || agent.identity?.name?.trim() || agent.name?.trim() || agent.id;
 
     const isDefault = Boolean(defaultId && agent.id === defaultId);
     const sessionCount = sessionsByAgent.get(agent.id) ?? 0;

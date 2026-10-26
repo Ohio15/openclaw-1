@@ -65,9 +65,7 @@ describe("OPENCLAW_SIGNAL_INBOUND_ENABLED kill-switch", () => {
       enabled: false,
     });
     expect(typeof statusCalls[0]?.lastError).toBe("string");
-    expect(String(statusCalls[0]?.lastError)).toContain(
-      "OPENCLAW_SIGNAL_INBOUND_ENABLED=false",
-    );
+    expect(String(statusCalls[0]?.lastError)).toContain("OPENCLAW_SIGNAL_INBOUND_ENABLED=false");
     expect(resolved).toBe(false);
 
     abort.abort();

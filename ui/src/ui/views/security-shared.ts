@@ -23,10 +23,7 @@ export function severityBadge(severity: SecurityAuditSeverity): TemplateResult {
   >`;
 }
 
-export function severityBanner(
-  critical: number,
-  warn: number,
-): TemplateResult {
+export function severityBanner(critical: number, warn: number): TemplateResult {
   if (critical > 0) {
     return html`<div
       class="callout callout--danger"
@@ -35,9 +32,9 @@ export function severityBanner(
       <span style="font-size:1.25rem;">&#x26a0;</span>
       <span
         ><strong>${critical} critical</strong> finding${critical > 1 ? "s" : ""} require
-        attention${warn > 0
-          ? html`, plus <strong>${warn}</strong> warning${warn > 1 ? "s" : ""}`
-          : ""}</span
+        attention${
+          warn > 0 ? html`, plus <strong>${warn}</strong> warning${warn > 1 ? "s" : ""}` : ""
+        }</span
       >
     </div>`;
   }
@@ -52,13 +49,24 @@ export function severityBanner(
       >
     </div>`;
   }
-  return html`<div
-    class="callout callout--ok"
-    style="background:var(--success-bg, rgba(34,197,94,0.12));border-left:4px solid var(--success, #22c55e);padding:12px 16px;border-radius:6px;margin-bottom:16px;display:flex;align-items:center;gap:8px;"
-  >
-    <span style="font-size:1.25rem;">&#x2705;</span>
-    <span><strong>All clear</strong> — no critical or warning findings</span>
-  </div>`;
+  return html`
+    <div
+      class="callout callout--ok"
+      style="
+        background: var(--success-bg, rgba(34, 197, 94, 0.12));
+        border-left: 4px solid var(--success, #22c55e);
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      "
+    >
+      <span style="font-size: 1.25rem">&#x2705;</span>
+      <span><strong>All clear</strong> — no critical or warning findings</span>
+    </div>
+  `;
 }
 
 export function statChip(

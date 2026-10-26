@@ -287,8 +287,7 @@ export async function startGatewayServer(
 
   // Create auth rate limiter — enabled by default with sensible defaults.
   const rateLimitConfig = cfgAtStart.gateway?.auth?.rateLimit;
-  const authRateLimiter: AuthRateLimiter | undefined =
-    createAuthRateLimiter(rateLimitConfig ?? {});
+  const authRateLimiter: AuthRateLimiter | undefined = createAuthRateLimiter(rateLimitConfig ?? {});
 
   let controlUiRootState: ControlUiRootState | undefined;
   if (controlUiRootOverride) {

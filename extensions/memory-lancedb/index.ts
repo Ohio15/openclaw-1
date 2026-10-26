@@ -305,7 +305,11 @@ const memoryPlugin = {
     const resolvedDbPath = api.resolvePath(cfg.dbPath!);
     const vectorDim = vectorDimsForModel(cfg.embedding.model ?? "text-embedding-3-small");
     const db = new MemoryDB(resolvedDbPath, vectorDim);
-    const embeddings = new Embeddings(cfg.embedding.apiKey, cfg.embedding.model!, cfg.embedding.baseUrl);
+    const embeddings = new Embeddings(
+      cfg.embedding.apiKey,
+      cfg.embedding.model!,
+      cfg.embedding.baseUrl,
+    );
 
     api.logger.info(`memory-lancedb: plugin registered (db: ${resolvedDbPath}, lazy init)`);
 

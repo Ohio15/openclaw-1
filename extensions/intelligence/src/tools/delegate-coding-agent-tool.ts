@@ -64,15 +64,15 @@ export function createDelegateCodingAgentTool(
 
       logger.info(
         `intelligence: delegating coding task to ${agent ?? config.defaultAgent} ` +
-        `(${task.length} chars, timeout=${timeoutMs ?? "default"})`,
+          `(${task.length} chars, timeout=${timeoutMs ?? "default"})`,
       );
 
       const result = await delegator.delegate(task, agent, workingDir, timeoutMs, signal);
 
       logger.info(
         `intelligence: delegation complete — success=${result.success}, ` +
-        `exit=${result.exitCode}, duration=${result.durationMs}ms, ` +
-        `truncated=${result.truncated}, timedOut=${result.timedOut}`,
+          `exit=${result.exitCode}, duration=${result.durationMs}ms, ` +
+          `truncated=${result.truncated}, timedOut=${result.timedOut}`,
       );
 
       // Format output for the agent
@@ -98,8 +98,8 @@ export function createDelegateCodingAgentTool(
 
       parts.push(
         `\n---\nDelegation stats: agent=${agent ?? config.defaultAgent}, ` +
-        `duration=${Math.round(result.durationMs / 1000)}s, ` +
-        `exit=${result.exitCode}`,
+          `duration=${Math.round(result.durationMs / 1000)}s, ` +
+          `exit=${result.exitCode}`,
       );
 
       return {
