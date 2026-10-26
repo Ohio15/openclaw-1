@@ -339,7 +339,7 @@ function extractRecentErrors(entries: LogEntry[]): RecentLogError[] {
   return entries
     .filter((e) => e.level === "error" || e.level === "fatal")
     .slice(-10)
-    .reverse()
+    .toReversed()
     .map((e) => ({
       time: e.time ?? null,
       subsystem: e.subsystem ?? null,

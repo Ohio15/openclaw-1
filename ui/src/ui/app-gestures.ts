@@ -37,7 +37,9 @@ let mqListener: ((e: MediaQueryListEvent) => void) | null = null;
 export function setupChatGestures(host: GestureHost, onRefresh: RefreshFn): void {
   teardownChatGestures();
 
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return;
+  }
 
   mediaQuery = window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`);
 
@@ -51,10 +53,14 @@ export function setupChatGestures(host: GestureHost, onRefresh: RefreshFn): void
     // Wait for Lit render to complete so the chat container exists in DOM
     void host.updateComplete.then(() => {
       const container = host.querySelector(".chat-split-container") as HTMLElement | null;
-      if (!container) return;
+      if (!container) {
+        return;
+      }
 
       // Already attached to this container
-      if (activeDetector) return;
+      if (activeDetector) {
+        return;
+      }
 
       activeDetector = new GestureDetector(container, {
         onSwipeRight: () => {

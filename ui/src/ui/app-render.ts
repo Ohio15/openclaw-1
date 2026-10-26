@@ -3,7 +3,7 @@ import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
 import { t } from "../i18n/index.ts";
 import { refreshChatAvatar } from "./app-chat.ts";
 import { renderUsageTab } from "./app-render-usage-tab.ts";
-import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
+import { renderChatControls, renderTab } from "./app-render.helpers.ts";
 import type { AppViewState } from "./app-view-state.ts";
 import type { OpenClawApp } from "./app.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
@@ -49,7 +49,7 @@ import { loadLogs } from "./controllers/logs.ts";
 import { buildMetricsDashboardData } from "./controllers/metrics.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
-import { fetchPreset, fetchPresets, reloadPresets, runPreset } from "./controllers/presets.ts";
+import { fetchPreset, reloadPresets, runPreset } from "./controllers/presets.ts";
 import { loadSecurityAudit, patchSecurityToggle } from "./controllers/security.ts";
 import { deleteSessionAndRefresh, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
@@ -355,20 +355,20 @@ export function renderApp(state: AppViewState) {
                 running: state.presetsRunning,
                 reloading: state.presetsReloading,
                 onFilterChange: (value: string) => {
-                  (state as any).presetsFilter = value;
+                  state.presetsFilter = value;
                 },
-                onReload: () => reloadPresets(state as any),
-                onRun: (name: string) => runPreset(state as any, name),
+                onReload: () => reloadPresets(state),
+                onRun: (name: string) => runPreset(state, name),
                 onToggleExpand: async (name: string) => {
                   if (state.presetsExpandedPreset === name) {
-                    (state as any).presetsExpandedPreset = null;
-                    (state as any).presetsExpandedDetail = null;
+                    state.presetsExpandedPreset = null;
+                    state.presetsExpandedDetail = null;
                   } else {
-                    (state as any).presetsExpandedPreset = name;
-                    (state as any).presetsExpandedDetail = null;
-                    const detail = await fetchPreset(state as any, name);
+                    state.presetsExpandedPreset = name;
+                    state.presetsExpandedDetail = null;
+                    const detail = await fetchPreset(state, name);
                     if (state.presetsExpandedPreset === name) {
-                      (state as any).presetsExpandedDetail = detail;
+                      state.presetsExpandedDetail = detail;
                     }
                   }
                 },

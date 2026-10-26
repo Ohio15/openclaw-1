@@ -50,10 +50,6 @@ const TELEGRAM_TEST_TIMINGS = {
   textFragmentGapMs: 30,
 } as const;
 
-const sleep = async (ms: number) => {
-  await new Promise<void>((resolve) => setTimeout(resolve, ms));
-};
-
 describe("createTelegramBot", () => {
   beforeEach(() => {
     process.env.TZ = "UTC";
