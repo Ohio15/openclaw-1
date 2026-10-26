@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VERSION_PARSE_HELPER="/usr/local/install-sh-common/version-parse.sh"
+if [[ ! -f "$VERSION_PARSE_HELPER" ]]; then
+  VERSION_PARSE_HELPER="${SCRIPT_DIR}/../install-sh-common/version-parse.sh"
+fi
+# shellcheck source=../install-sh-common/version-parse.sh
+source "$VERSION_PARSE_HELPER"
+
 INSTALL_URL="${OPENCLAW_INSTALL_URL:-https://openclaw.bot/install.sh}"
 DEFAULT_PACKAGE="openclaw"
 PACKAGE_NAME="${OPENCLAW_INSTALL_PACKAGE:-$DEFAULT_PACKAGE}"
@@ -37,7 +45,7 @@ if [[ -z "$CMD_PATH" ]]; then
   exit 1
 fi
 echo "==> Verify CLI installed: $CLI_NAME"
-INSTALLED_VERSION="$("$CMD_PATH" --version 2>/dev/null | head -n 1 | tr -d '\r')"
+INSTALLED_VERSION="$(read_openclaw_cli_version "$CMD_PATH")"
 
 echo "cli=$CLI_NAME installed=$INSTALLED_VERSION expected=$LATEST_VERSION"
 if [[ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]]; then
