@@ -94,7 +94,8 @@ jobs:
             esac
 
             case "$path" in
-              apps/android/*|apps/shared/*)
+              # ci.yml holds the android job itself, so editing it must exercise it.
+              apps/android/*|apps/shared/*|.github/workflows/ci.yml)
                 run_android=true
                 ;;
             esac
