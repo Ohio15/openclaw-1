@@ -46,24 +46,29 @@ describe("SessionTokenStore", () => {
   });
 
   it("expired tokens fail validation", () => {
+    // Freeze the clock BEFORE creating the token so expiry is independent of wall-clock drift.
+    const frozenNow = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(frozenNow);
     const store = createStore();
     const token = store.createSessionToken();
 
     // Advance time past the 24-hour TTL (86_400_000ms)
-    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 86_400_001);
+    nowSpy.mockReturnValue(frozenNow + 86_400_001);
 
     const valid = store.validateSessionToken(token);
     expect(valid).toBe(false);
   });
 
   it("cleanup removes expired tokens while keeping valid ones", () => {
+    // Freeze the clock BEFORE creating tokens so expiry is independent of wall-clock drift.
+    const realNow = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNow);
     const store = createStore();
-    const realNow = Date.now();
 
     const oldToken = store.createSessionToken();
 
     // Advance time past TTL
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(realNow + 86_400_001);
+    nowSpy.mockReturnValue(realNow + 86_400_001);
 
     // Creating a new token triggers cleanup internally
     const freshToken = store.createSessionToken();
