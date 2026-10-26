@@ -14,14 +14,23 @@ export type SecurityPostureProps = {
 function resolve(obj: Record<string, unknown> | null, path: string[]): unknown {
   let current: unknown = obj;
   for (const key of path) {
-    if (current == null || typeof current !== "object") return undefined;
+    if (current == null || typeof current !== "object") {
+      return undefined;
+    }
     current = (current as Record<string, unknown>)[key];
   }
   return current;
 }
 
+/** Render a scalar config value as text; non-scalars (objects/arrays) fall back. */
+function scalarText(value: unknown, fallback: string): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : fallback;
+}
+
 function levelForValue(key: string, value: unknown): "safe" | "caution" | "risky" {
-  const s = String(value ?? "").toLowerCase();
+  const s = scalarText(value, "").toLowerCase();
   switch (key) {
     case "sandbox":
       return s === "all" ? "safe" : s === "non-main" ? "caution" : "risky";
@@ -40,10 +49,10 @@ function levelForValue(key: string, value: unknown): "safe" | "caution" | "risky
 
 export function renderSecurityPosture(props: SecurityPostureProps): TemplateResult {
   const cfg = props.configForm;
-  const sandboxMode = String(resolve(cfg, ["agents", "defaults", "sandbox", "mode"]) ?? "off");
-  const execPolicy = String(resolve(cfg, ["tools", "exec", "security"]) ?? "open");
-  const gatewayBind = String(resolve(cfg, ["gateway", "bind"]) ?? "loopback");
-  const authMode = String(resolve(cfg, ["gateway", "auth", "mode"]) ?? "none");
+  const sandboxMode = scalarText(resolve(cfg, ["agents", "defaults", "sandbox", "mode"]), "off");
+  const execPolicy = scalarText(resolve(cfg, ["tools", "exec", "security"]), "open");
+  const gatewayBind = scalarText(resolve(cfg, ["gateway", "bind"]), "loopback");
+  const authMode = scalarText(resolve(cfg, ["gateway", "auth", "mode"]), "none");
   const elevated = resolve(cfg, ["tools", "elevated", "enabled"]);
   const sessionsStr = props.sessionsCount != null ? String(props.sessionsCount) : "—";
 

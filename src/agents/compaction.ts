@@ -417,7 +417,9 @@ export function maskOldToolResults(
 
   const masked = messages.map((msg, idx) => {
     // Keep recent messages untouched
-    if (idx >= recentBoundary) return msg;
+    if (idx >= recentBoundary) {
+      return msg;
+    }
 
     // Only mask toolResult messages (role === "toolResult")
     if (!msg || typeof msg !== "object" || (msg as { role?: unknown }).role !== "toolResult") {
@@ -435,7 +437,9 @@ export function maskOldToolResults(
     };
 
     // Don't mask error results — they're usually short and diagnostically important
-    if (toolResultMsg.isError) return msg;
+    if (toolResultMsg.isError) {
+      return msg;
+    }
 
     // Don't mask if content is already small (< 200 chars total)
     const totalChars = toolResultMsg.content.reduce((sum, block) => {
@@ -445,7 +449,9 @@ export function maskOldToolResults(
       return sum;
     }, 0);
 
-    if (totalChars < 200) return msg;
+    if (totalChars < 200) {
+      return msg;
+    }
 
     // Mask: replace content with a placeholder preserving tool identity
     const estimatedTokens = Math.ceil(totalChars / 4);

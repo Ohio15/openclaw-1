@@ -910,12 +910,8 @@ describe("handleCommands /allowlist", () => {
       expect(result.shouldContinue).toBe(false);
       expect(writeConfigFileMock).toHaveBeenCalledTimes(1);
       const written = writeConfigFileMock.mock.calls[0]?.[0] as Record<string, unknown>;
-      const accounts = (
-        (written.channels as Record<string, Record<string, unknown>>).telegram as Record<
-          string,
-          unknown
-        >
-      ).accounts as Record<string, unknown>;
+      const accounts = (written.channels as Record<string, Record<string, unknown>>).telegram
+        .accounts as Record<string, unknown>;
       // An OWN key holding the operator's data — not a write through the
       // inherited `constructor` slot, and not a silent no-op.
       expect(Object.hasOwn(accounts, "constructor")).toBe(true);

@@ -35,6 +35,7 @@ import type {
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import type { ConfigHistoryEntry } from "./views/config-history.ts";
+import type { IntelligenceStats } from "./views/intelligence-dashboard.ts";
 import type { SecurityActivityEntry, SecurityAuditReport } from "./views/security.types.ts";
 import type { SessionTranscriptState } from "./views/session-transcript.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
@@ -194,7 +195,7 @@ export type AppViewState = {
   usageLogFilterHasTools: boolean;
   usageLogFilterQuery: string;
   intelligenceLoading: boolean;
-  intelligenceStats: any;
+  intelligenceStats: IntelligenceStats | null;
   securityAuditReport: SecurityAuditReport | null;
   securityAuditLoading: boolean;
   securityAuditError: string | null;
@@ -251,7 +252,7 @@ export type AppViewState = {
   presetsExpandedPreset: string | null;
   presetsExpandedDetail: PresetDetail | null;
   routingLoading: boolean;
-  routingStats: any;
+  routingStats: IntelligenceStats | null;
   routingError: string | null;
   unreadChatCount: number;
   client: GatewayBrowserClient | null;

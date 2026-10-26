@@ -34,10 +34,18 @@ const NEXUS_TIER_MAP = {
 
 function detectDomain(prompt: string): string | null {
   const lower = prompt.toLowerCase();
-  if (/\b(auth|jwt|oauth|session|login|permission)\b/.test(lower)) return "auth";
-  if (/\b(database|postgres|mongodb|sql|orm)\b/.test(lower)) return "database";
-  if (/\b(cache|lru_cache|redis)\b/.test(lower)) return "cache";
-  if (/\b(rate.?limit|token.?bucket)\b/.test(lower)) return "rate_limiter";
+  if (/\b(auth|jwt|oauth|session|login|permission)\b/.test(lower)) {
+    return "auth";
+  }
+  if (/\b(database|postgres|mongodb|sql|orm)\b/.test(lower)) {
+    return "database";
+  }
+  if (/\b(cache|lru_cache|redis)\b/.test(lower)) {
+    return "cache";
+  }
+  if (/\b(rate.?limit|token.?bucket)\b/.test(lower)) {
+    return "rate_limiter";
+  }
   return null;
 }
 

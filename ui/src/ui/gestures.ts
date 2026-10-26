@@ -51,14 +51,20 @@ export class GestureDetector {
 
   private onTouchStart = (e: TouchEvent): void => {
     const touch = e.touches[0];
-    if (!touch) return;
+    if (!touch) {
+      return;
+    }
 
     // Ignore gestures originating from interactive elements
     const origin = e.target as HTMLElement | null;
-    if (origin && INTERACTIVE_TAGS.has(origin.tagName)) return;
+    if (origin && INTERACTIVE_TAGS.has(origin.tagName)) {
+      return;
+    }
 
     // Ignore touches near screen edges to avoid conflicting with iOS back gesture
-    if (touch.clientX < 20 || touch.clientX > window.innerWidth - 20) return;
+    if (touch.clientX < 20 || touch.clientX > window.innerWidth - 20) {
+      return;
+    }
 
     this.startX = touch.clientX;
     this.startY = touch.clientY;
@@ -67,9 +73,13 @@ export class GestureDetector {
   };
 
   private onTouchMove = (e: TouchEvent): void => {
-    if (!this.tracking) return;
+    if (!this.tracking) {
+      return;
+    }
     const touch = e.touches[0];
-    if (!touch) return;
+    if (!touch) {
+      return;
+    }
 
     const dx = touch.clientX - this.startX;
     const dy = touch.clientY - this.startY;
@@ -81,16 +91,22 @@ export class GestureDetector {
   };
 
   private onTouchEnd = (e: TouchEvent): void => {
-    if (!this.tracking) return;
+    if (!this.tracking) {
+      return;
+    }
     this.tracking = false;
 
     const touch = e.changedTouches[0];
-    if (!touch) return;
+    if (!touch) {
+      return;
+    }
 
     const dx = touch.clientX - this.startX;
     const dy = touch.clientY - this.startY;
     const elapsed = Date.now() - this.startTime;
-    if (elapsed === 0) return;
+    if (elapsed === 0) {
+      return;
+    }
 
     const absDx = Math.abs(dx);
     const absDy = Math.abs(dy);
