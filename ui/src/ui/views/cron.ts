@@ -113,7 +113,9 @@ export function renderCron(props: CronProps) {
       </div>
       ${
         props.jobs.length === 0
-          ? html`<div class="muted" style="margin-top: 12px">No jobs yet. Create one below.</div>`
+          ? html`
+              <div class="muted" style="margin-top: 12px">No jobs yet. Create one below.</div>
+            `
           : html`<div class="list" style="margin-top: 12px;">${props.jobs.map((job) => renderJob(job, props))}</div>`
       }
     </section>
@@ -124,9 +126,13 @@ export function renderCron(props: CronProps) {
       <div class="card-sub">Latest runs for ${selectedRunTitle}.</div>
       ${
         props.runsJobId == null
-          ? html`<div class="muted" style="margin-top: 12px">Click a job above to view its run history.</div>`
+          ? html`
+              <div class="muted" style="margin-top: 12px">Click a job above to view its run history.</div>
+            `
           : orderedRuns.length === 0
-            ? html`<div class="muted" style="margin-top: 12px">No runs yet.</div>`
+            ? html`
+                <div class="muted" style="margin-top: 12px">No runs yet.</div>
+              `
             : html`<div class="list" style="margin-top: 12px;">${orderedRuns.map((entry) => renderRun(entry, props.basePath))}</div>`
       }
     </section>
@@ -295,7 +301,9 @@ export function renderCron(props: CronProps) {
             >
               ${
                 supportsAnnounce
-                  ? html`<option value="announce">Announce summary (default)</option>`
+                  ? html`
+                      <option value="announce">Announce summary (default)</option>
+                    `
                   : nothing
               }
               <option value="webhook">Webhook POST</option>

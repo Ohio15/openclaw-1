@@ -38,7 +38,7 @@ export class SubAgentOrchestrator {
     lines.push("");
     lines.push(
       "This request requires a structured, multi-step approach. " +
-      "Complete each step in order, wrapping your output for each step in the specified tags.",
+        "Complete each step in order, wrapping your output for each step in the specified tags.",
     );
     lines.push("");
 
@@ -73,7 +73,7 @@ export class SubAgentOrchestrator {
     lines.push("### Final Integration");
     lines.push(
       "After completing all steps, provide a cohesive final answer that integrates " +
-      "all step outputs between <final> and </final> tags.",
+        "all step outputs between <final> and </final> tags.",
     );
 
     return lines.join("\n");
@@ -103,5 +103,4 @@ export class SubAgentOrchestrator {
 
     return outputs;
   }
-
 }

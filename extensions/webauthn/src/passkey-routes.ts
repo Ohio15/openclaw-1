@@ -16,11 +16,11 @@ import {
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
 
 type PluginLogger = OpenClawPluginApi["logger"];
-import type { PasskeyStore } from "./passkey-store.js";
-import type { ChallengeStore } from "./challenge-store.js";
-import type { SessionTokenStore } from "./session-tokens.js";
-import type { PendingDevicesMap } from "./device-qr-routes.js";
 import type { WebAuthnConfig } from "../index.js";
+import type { ChallengeStore } from "./challenge-store.js";
+import type { PendingDevicesMap } from "./device-qr-routes.js";
+import type { PasskeyStore } from "./passkey-store.js";
+import type { SessionTokenStore } from "./session-tokens.js";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -240,7 +240,8 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
           return true;
         }
 
-        const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+        const { credential, credentialDeviceType, credentialBackedUp } =
+          verification.registrationInfo;
 
         // credential.id is already a Base64URLString in v13;
         // Store as standard base64 for consistency with the Python version
@@ -452,7 +453,9 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
 
         const approvalToken = config.deviceApprovalToken ?? "";
         if (!approvalToken) {
-          logger.warn("webauthn: deviceApprovalToken not configured — device approval will have an empty token");
+          logger.warn(
+            "webauthn: deviceApprovalToken not configured — device approval will have an empty token",
+          );
         }
         device.status = "approved";
         device.token = approvalToken;

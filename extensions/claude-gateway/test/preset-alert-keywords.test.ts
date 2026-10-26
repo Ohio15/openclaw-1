@@ -24,9 +24,7 @@ describe("PresetAlertKeywords", () => {
   });
 
   it("CRITICAL takes precedence over WARNING", () => {
-    const result = detectAlertKeywords(
-      "WARNING: Disk usage high. CRITICAL: Service down.",
-    );
+    const result = detectAlertKeywords("WARNING: Disk usage high. CRITICAL: Service down.");
 
     expect(result.detected).toBe(true);
     expect(result.severity).toBe("critical");

@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createPresetHttpHandler } from "../src/preset-routes.js";
+import { Readable } from "node:stream";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { PresetStore } from "../src/preset-loader.js";
+import { createPresetHttpHandler } from "../src/preset-routes.js";
 import type { PresetConfig } from "../src/types.js";
 
 describe("PresetRoutes", () => {
@@ -45,7 +45,9 @@ describe("PresetRoutes", () => {
       scheduled: () => [...presetsMap.values()].filter((p) => p.schedule),
       reload: () => {},
     };
-    reloadFn = vi.fn().mockResolvedValue({ presetsLoaded: 2, cronSync: { added: 0, updated: 0, removed: 0 } });
+    reloadFn = vi
+      .fn()
+      .mockResolvedValue({ presetsLoaded: 2, cronSync: { added: 0, updated: 0, removed: 0 } });
 
     handler = createPresetHttpHandler({
       presetStore,
@@ -56,7 +58,11 @@ describe("PresetRoutes", () => {
   });
 
   function mockReq(method: string, url: string): IncomingMessage {
-    const readable = new Readable({ read() { this.push(null); } });
+    const readable = new Readable({
+      read() {
+        this.push(null);
+      },
+    });
     Object.assign(readable, {
       method,
       url,
@@ -68,7 +74,11 @@ describe("PresetRoutes", () => {
     return readable as unknown as IncomingMessage;
   }
 
-  function mockRes(): ServerResponse & { _status: number; _headers: Record<string, string>; _body: string } {
+  function mockRes(): ServerResponse & {
+    _status: number;
+    _headers: Record<string, string>;
+    _body: string;
+  } {
     const headers: Record<string, string> = {};
     let body = "";
     let status = 200;
@@ -98,7 +108,11 @@ describe("PresetRoutes", () => {
         return res;
       },
     };
-    return res as unknown as ServerResponse & { _status: number; _headers: Record<string, string>; _body: string };
+    return res as unknown as ServerResponse & {
+      _status: number;
+      _headers: Record<string, string>;
+      _body: string;
+    };
   }
 
   it("GET /gateway/presets returns preset list", async () => {

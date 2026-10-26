@@ -139,14 +139,15 @@ export async function syncPresetsToCron(
       added++;
     } else {
       // Existing — check if schedule changed
-      const currentExpr =
-        existing.schedule.kind === "cron" ? existing.schedule.expr : undefined;
+      const currentExpr = existing.schedule.kind === "cron" ? existing.schedule.expr : undefined;
       if (currentExpr !== preset.schedule) {
         await cron.update(existing.id, {
           schedule: { kind: "cron", expr: preset.schedule! },
           description: `[Gateway Preset] ${preset.display_name}: ${preset.description}`,
         });
-        log.info(`[claude-gateway] Updated cron job for preset: ${preset.name} (${currentExpr} → ${preset.schedule})`);
+        log.info(
+          `[claude-gateway] Updated cron job for preset: ${preset.name} (${currentExpr} → ${preset.schedule})`,
+        );
         updated++;
       }
     }

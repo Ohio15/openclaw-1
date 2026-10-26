@@ -1,7 +1,7 @@
 import type { GatewayBrowserClient } from "../gateway.ts";
 import type { ConfigSchemaResponse, ConfigSnapshot, ConfigUiHints } from "../types.ts";
-import type { ConfigHistoryEntry } from "../views/config-history.ts";
 import type { JsonSchema } from "../views/config-form.shared.ts";
+import type { ConfigHistoryEntry } from "../views/config-history.ts";
 import { coerceFormValues } from "./config/form-coerce.ts";
 import {
   cloneConfigObject,
@@ -292,14 +292,15 @@ export function recordConfigHistory(state: ConfigState): void {
   }
 
   // Avoid duplicate entries for the same hash
-  if (state.configHistoryEntries.length > 0 && state.configHistoryEntries[0].hash === snapshot.hash) {
+  if (
+    state.configHistoryEntries.length > 0 &&
+    state.configHistoryEntries[0].hash === snapshot.hash
+  ) {
     return;
   }
 
   const previousConfig =
-    state.configHistoryEntries.length > 0
-      ? state.configHistoryEntries[0].config
-      : null;
+    state.configHistoryEntries.length > 0 ? state.configHistoryEntries[0].config : null;
 
   const changedFields = computeChangedFields(previousConfig, snapshot.config);
 

@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
-import type { IncomingMessage, ServerResponse } from "node:http";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createPwaHttpHandler } from "../src/pwa-routes.js";
 
@@ -15,28 +15,48 @@ describe("PWA HTTP Handler", () => {
     tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "openclaw-pwa-test-"));
 
     // Create realistic PWA files
-    fs.writeFileSync(path.join(tmpDir, "index.html"), `<!DOCTYPE html>
+    fs.writeFileSync(
+      path.join(tmpDir, "index.html"),
+      `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Claude Gateway</title></head>
 <body><div id="app"></div><script src="app.js"></script></body>
-</html>`, "utf-8");
+</html>`,
+      "utf-8",
+    );
 
-    fs.writeFileSync(path.join(tmpDir, "styles.css"), `body { background: #0d1117; color: #c9d1d9; }
-.chat { display: flex; flex-direction: column; }`, "utf-8");
+    fs.writeFileSync(
+      path.join(tmpDir, "styles.css"),
+      `body { background: #0d1117; color: #c9d1d9; }
+.chat { display: flex; flex-direction: column; }`,
+      "utf-8",
+    );
 
-    fs.writeFileSync(path.join(tmpDir, "app.js"), `(function() {
+    fs.writeFileSync(
+      path.join(tmpDir, "app.js"),
+      `(function() {
   const app = document.getElementById('app');
   app.textContent = 'Claude Gateway';
-})();`, "utf-8");
+})();`,
+      "utf-8",
+    );
 
-    fs.writeFileSync(path.join(tmpDir, "manifest.json"), JSON.stringify({
-      name: "Claude Gateway",
-      short_name: "Gateway",
-      start_url: "/gateway/ui/",
-      display: "standalone",
-      theme_color: "#0d1117",
-      background_color: "#0d1117",
-    }, null, 2), "utf-8");
+    fs.writeFileSync(
+      path.join(tmpDir, "manifest.json"),
+      JSON.stringify(
+        {
+          name: "Claude Gateway",
+          short_name: "Gateway",
+          start_url: "/gateway/ui/",
+          display: "standalone",
+          theme_color: "#0d1117",
+          background_color: "#0d1117",
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
 
     handler = createPwaHttpHandler(tmpDir);
   });
@@ -48,7 +68,11 @@ describe("PWA HTTP Handler", () => {
   });
 
   function mockReq(method: string, url: string): IncomingMessage {
-    const readable = new Readable({ read() { this.push(null); } });
+    const readable = new Readable({
+      read() {
+        this.push(null);
+      },
+    });
     Object.assign(readable, {
       method,
       url,
@@ -60,7 +84,11 @@ describe("PWA HTTP Handler", () => {
     return readable as unknown as IncomingMessage;
   }
 
-  function mockRes(): ServerResponse & { _status: number; _headers: Record<string, string>; _body: Buffer } {
+  function mockRes(): ServerResponse & {
+    _status: number;
+    _headers: Record<string, string>;
+    _body: Buffer;
+  } {
     const headers: Record<string, string> = {};
     const chunks: Buffer[] = [];
     let status = 200;
@@ -92,7 +120,11 @@ describe("PWA HTTP Handler", () => {
         return res;
       },
     };
-    return res as unknown as ServerResponse & { _status: number; _headers: Record<string, string>; _body: Buffer };
+    return res as unknown as ServerResponse & {
+      _status: number;
+      _headers: Record<string, string>;
+      _body: Buffer;
+    };
   }
 
   it("PWA index.html served at /gateway/ui/", async () => {
@@ -105,7 +137,7 @@ describe("PWA HTTP Handler", () => {
 
     const html = res._body.toString("utf-8");
     expect(html).toContain("<!DOCTYPE html>");
-    expect(html).toContain("<div id=\"app\">");
+    expect(html).toContain('<div id="app">');
     expect(html).toContain("Claude Gateway");
   });
 

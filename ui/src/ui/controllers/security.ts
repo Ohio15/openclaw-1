@@ -41,5 +41,9 @@ export function patchSecurityToggle(
   path: (string | number)[],
   value: unknown,
 ): void {
-  updateConfigFormValue(state as unknown as Parameters<typeof updateConfigFormValue>[0], path, value);
+  updateConfigFormValue(
+    state as unknown as Parameters<typeof updateConfigFormValue>[0],
+    path,
+    value,
+  );
 }

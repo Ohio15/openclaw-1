@@ -10,8 +10,6 @@ import type { Tab } from "./navigation.ts";
 import type { UiSettings } from "./storage.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
 import type { ThemeMode } from "./theme.ts";
-import type { ConfigHistoryEntry } from "./views/config-history.ts";
-import type { SessionTranscriptState } from "./views/session-transcript.ts";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
@@ -36,7 +34,9 @@ import type {
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import type { ConfigHistoryEntry } from "./views/config-history.ts";
 import type { SecurityActivityEntry, SecurityAuditReport } from "./views/security.types.ts";
+import type { SessionTranscriptState } from "./views/session-transcript.ts";
 import type { SessionLogEntry } from "./views/usage.ts";
 
 export type AppViewState = {

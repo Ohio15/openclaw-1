@@ -13,7 +13,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-
 import { extractFeatures, FEATURE_NAMES } from "../src/pipeline/feature-extractor.js";
 import {
   LearnedClassifier,
@@ -145,9 +144,7 @@ function train(): void {
     }
   }
 
-  console.log(
-    `  Round-trip verification: ${roundTripCorrect}/${samples.length} predictions match`,
-  );
+  console.log(`  Round-trip verification: ${roundTripCorrect}/${samples.length} predictions match`);
 
   if (roundTripCorrect !== samples.length) {
     console.error("  WARNING: Round-trip mismatch detected!");

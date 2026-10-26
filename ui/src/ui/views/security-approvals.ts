@@ -65,18 +65,23 @@ export function renderSecurityApprovals(props: SecurityApprovalsProps): Template
     <section class="card" style="margin-bottom:24px;">
       <h3 style="margin:0 0 12px;font-size:1rem;font-weight:600;">
         Approval Queue
-        ${props.queue.length > 0
-          ? html`<span
+        ${
+          props.queue.length > 0
+            ? html`<span
               style="background:var(--danger);color:white;padding:2px 7px;border-radius:10px;font-size:0.7rem;margin-left:8px;vertical-align:middle;"
               >${props.queue.length}</span
             >`
-          : ""}
+            : ""
+        }
       </h3>
-      ${props.queue.length === 0
-        ? html`<div style="padding:24px;text-align:center;opacity:0.4;font-size:0.85rem;">
-            No pending approvals.
-          </div>`
-        : html`
+      ${
+        props.queue.length === 0
+          ? html`
+              <div style="padding: 24px; text-align: center; opacity: 0.4; font-size: 0.85rem">
+                No pending approvals.
+              </div>
+            `
+          : html`
             <div style="overflow-x:auto;">
               <table
                 style="width:100%;border-collapse:collapse;font-size:0.85rem;"
@@ -96,7 +101,8 @@ export function renderSecurityApprovals(props: SecurityApprovalsProps): Template
                 </tbody>
               </table>
             </div>
-          `}
+          `
+      }
     </section>
   `;
 }

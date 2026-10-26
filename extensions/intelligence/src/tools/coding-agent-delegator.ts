@@ -138,7 +138,7 @@ export class CodingAgentDelegator {
 
     // Build env — merge specific vars, don't leak full environment
     const childEnv: Record<string, string> = {
-      ...process.env as Record<string, string>,
+      ...(process.env as Record<string, string>),
       ...(backend.env ?? {}),
     };
 
@@ -186,7 +186,11 @@ export class CodingAgentDelegator {
       }
 
       // Track active delegation
-      this.active.set(delegationId, { process: child, agentId: effectiveAgent, startedAt: startTime });
+      this.active.set(delegationId, {
+        process: child,
+        agentId: effectiveAgent,
+        startedAt: startTime,
+      });
 
       // Collect output
       const appendOutput = (chunk: Buffer) => {

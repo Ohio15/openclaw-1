@@ -8,12 +8,8 @@
  * @module knowledge-retrieval
  */
 
+import { AgenticRAGPipeline, type RAGResult, type Retriever } from "./agentic-rag.js";
 import { buildKnowledgeContext } from "./domain-knowledge.js";
-import {
-  AgenticRAGPipeline,
-  type RAGResult,
-  type Retriever,
-} from "./agentic-rag.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,8 +48,7 @@ interface RecallResponse {
 // Configuration
 // ---------------------------------------------------------------------------
 
-const SHARED_BRAIN_URL =
-  process.env.SHARED_BRAIN_URL || "http://shared-brain-mcp:3100";
+const SHARED_BRAIN_URL = process.env.SHARED_BRAIN_URL || "http://shared-brain-mcp:3100";
 const SHARED_BRAIN_API_KEY = process.env.SHARED_BRAIN_API_KEY || "";
 
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -101,10 +96,7 @@ function parseSSE(body: string): unknown | null {
 async function initializeSession(): Promise<string | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      REQUEST_TIMEOUT_MS,
-    );
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -132,17 +124,13 @@ async function initializeSession(): Promise<string | null> {
     clearTimeout(timeout);
 
     if (!res.ok) {
-      console.warn(
-        `[knowledge-retrieval] MCP initialize failed: HTTP ${res.status}`,
-      );
+      console.warn(`[knowledge-retrieval] MCP initialize failed: HTTP ${res.status}`);
       return null;
     }
 
     const sessionId = res.headers.get("mcp-session-id");
     if (!sessionId) {
-      console.warn(
-        "[knowledge-retrieval] MCP initialize response missing mcp-session-id header",
-      );
+      console.warn("[knowledge-retrieval] MCP initialize response missing mcp-session-id header");
       return null;
     }
 
@@ -183,10 +171,7 @@ async function getSessionId(forceRefresh = false): Promise<string | null> {
  * Call brain_recall on shared-brain MCP.
  * Returns parsed recall results or null on failure.
  */
-async function recallFromBrain(
-  query: string,
-  limit: number,
-): Promise<RecallResult[] | null> {
+async function recallFromBrain(query: string, limit: number): Promise<RecallResult[] | null> {
   const sessionId = await getSessionId();
   if (!sessionId) return null;
 
@@ -212,10 +197,7 @@ async function doRecall(
 ): Promise<RecallResult[] | "SESSION_EXPIRED" | null> {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      REQUEST_TIMEOUT_MS,
-    );
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -247,9 +229,7 @@ async function doRecall(
       if (res.status === 400 || res.status === 404 || res.status === 409) {
         return "SESSION_EXPIRED";
       }
-      console.warn(
-        `[knowledge-retrieval] brain_recall failed: HTTP ${res.status}`,
-      );
+      console.warn(`[knowledge-retrieval] brain_recall failed: HTTP ${res.status}`);
       return null;
     }
 
@@ -267,22 +247,14 @@ async function doRecall(
     // Check for JSON-RPC error (session expired, etc.)
     if (parsed.error) {
       const msg = parsed.error.message?.toLowerCase() || "";
-      if (
-        msg.includes("session") ||
-        msg.includes("expired") ||
-        msg.includes("invalid")
-      ) {
+      if (msg.includes("session") || msg.includes("expired") || msg.includes("invalid")) {
         return "SESSION_EXPIRED";
       }
-      console.warn(
-        `[knowledge-retrieval] brain_recall RPC error: ${parsed.error.message}`,
-      );
+      console.warn(`[knowledge-retrieval] brain_recall RPC error: ${parsed.error.message}`);
       return null;
     }
 
-    const textContent = parsed.result?.content?.find(
-      (c) => c.type === "text",
-    );
+    const textContent = parsed.result?.content?.find((c) => c.type === "text");
     if (!textContent?.text) return null;
 
     const recallData: RecallResponse = JSON.parse(textContent.text);

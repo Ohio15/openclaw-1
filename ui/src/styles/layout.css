@@ -212,7 +212,9 @@
   color: var(--fg-muted);
   cursor: pointer;
   flex-shrink: 0;
-  transition: opacity 0.15s, color 0.15s;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
 }
 
 .topbar-new-session:hover {

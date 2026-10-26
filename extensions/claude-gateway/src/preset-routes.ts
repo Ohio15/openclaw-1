@@ -12,8 +12,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { PresetStore } from "./preset-loader.js";
 import type { CronApi } from "./preset-cron-sync.js";
+import type { PresetStore } from "./preset-loader.js";
 
 type PresetRoutesDeps = {
   presetStore: PresetStore;

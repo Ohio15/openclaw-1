@@ -1,13 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { describe, it, expect, vi } from "vitest";
 import { extractFeatures, FEATURE_NAMES } from "./feature-extractor.js";
-import {
-  LearnedClassifier,
-  type TrainingSample,
-} from "./learned-classifier.js";
+import { LearnedClassifier, type TrainingSample } from "./learned-classifier.js";
 
 // ============================================================================
 // Feature Extractor Tests
@@ -75,8 +71,8 @@ describe("extractFeatures", () => {
     const short = extractFeatures("Hello");
     const long = extractFeatures(
       "Build a complete microservices architecture with authentication, rate limiting, " +
-      "database layer, caching, real-time updates, and comprehensive test coverage. " +
-      "The system should handle 10,000 concurrent users across multiple regions.",
+        "database layer, caching, real-time updates, and comprehensive test coverage. " +
+        "The system should handle 10,000 concurrent users across multiple regions.",
     );
     // charCountNorm = index 0
     expect(long[0]).toBeGreaterThan(short[0]);
@@ -109,7 +105,7 @@ describe("LearnedClassifier", () => {
       {
         features: extractFeatures(
           "Build an Express API with JWT authentication, PostgreSQL database, " +
-          "rate limiting, and comprehensive test coverage",
+            "rate limiting, and comprehensive test coverage",
         ),
         tierLabel: "large",
         pipelineLabel: "complex",
@@ -117,8 +113,8 @@ describe("LearnedClassifier", () => {
       {
         features: extractFeatures(
           "Design a distributed system architecture for a real-time collaborative editor " +
-          "with CRDT-based conflict resolution, websocket communication, horizontal scaling, " +
-          "and eventual consistency guarantees across multiple data centers",
+            "with CRDT-based conflict resolution, websocket communication, horizontal scaling, " +
+            "and eventual consistency guarantees across multiple data centers",
         ),
         tierLabel: "reasoning",
         pipelineLabel: "complex",
@@ -143,9 +139,7 @@ describe("LearnedClassifier", () => {
 
   it("throws when predicting without training", () => {
     const classifier = new LearnedClassifier();
-    expect(() =>
-      classifier.predict(extractFeatures("hello")),
-    ).toThrow(/not trained/i);
+    expect(() => classifier.predict(extractFeatures("hello"))).toThrow(/not trained/i);
   });
 
   it("serialization round-trips produce matching predictions", () => {
@@ -262,9 +256,7 @@ describe("control-plane heuristic fallback", () => {
     const cp = new IntelligenceControlPlane({ enabled: true });
 
     // Run analysis — should not throw
-    const result = await cp.analyzeBeforeAgent([
-      { role: "user", content: "What is a variable?" },
-    ]);
+    const result = await cp.analyzeBeforeAgent([{ role: "user", content: "What is a variable?" }]);
 
     expect(result.tierSelection).toBeDefined();
     expect(result.tierSelection.tier).toBeDefined();

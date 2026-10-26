@@ -58,7 +58,8 @@ Use a HashMap for this use case.`;
     });
 
     it("passes a plain text response with no code", () => {
-      const response = "The error is caused by a missing null check on line 42. The variable `user` can be undefined when the session expires.";
+      const response =
+        "The error is caused by a missing null check on line 42. The variable `user` can be undefined when the session expires.";
       const result = assessQuality(response);
       expect(result.verdict).toBe("pass");
       expect(result.score).toBe(1.0);
@@ -85,7 +86,8 @@ export function processOrder(order: Order) {
     });
 
     it("flags trailing ellipsis truncation", () => {
-      const response = "Here is the implementation of the rate limiter. First we need to create the middleware...";
+      const response =
+        "Here is the implementation of the rate limiter. First we need to create the middleware...";
       const result = assessQuality(response);
       expect(result.verdict).toBe("flag");
       expect(result.issues.some((i) => i.type === "truncation")).toBe(true);
@@ -131,20 +133,23 @@ That's the complete implementation.`;
 
   describe("retry verdict", () => {
     it("retries on explicit 'I cannot provide'", () => {
-      const response = "I cannot provide a complete implementation of this system as it would require extensive setup.";
+      const response =
+        "I cannot provide a complete implementation of this system as it would require extensive setup.";
       const result = assessQuality(response);
       expect(result.verdict).toBe("retry");
       expect(result.issues.some((i) => i.type === "explicit_refusal")).toBe(true);
     });
 
     it("retries on 'this task is too complex'", () => {
-      const response = "This task is too complex to implement in a single response. Let me outline the approach instead.";
+      const response =
+        "This task is too complex to implement in a single response. Let me outline the approach instead.";
       const result = assessQuality(response);
       expect(result.verdict).toBe("retry");
     });
 
     it("retries on 'too extensive to implement'", () => {
-      const response = "This is too extensive to implement here. Here's a high-level overview instead.";
+      const response =
+        "This is too extensive to implement here. Here's a high-level overview instead.";
       const result = assessQuality(response);
       expect(result.verdict).toBe("retry");
     });
@@ -170,7 +175,9 @@ function c() {
 
       const result = assessQuality(response);
       expect(result.verdict).toBe("retry");
-      expect(result.issues.filter((i) => i.type === "placeholder").length).toBeGreaterThanOrEqual(3);
+      expect(result.issues.filter((i) => i.type === "placeholder").length).toBeGreaterThanOrEqual(
+        3,
+      );
     });
   });
 

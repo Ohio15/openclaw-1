@@ -9,8 +9,8 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "openclaw": "workspace:*",
-    "@types/qrcode": "^1.5.5"
+    "@types/qrcode": "^1.5.5",
+    "openclaw": "workspace:*"
   },
   "openclaw": {
     "extensions": [

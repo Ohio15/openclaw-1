@@ -78,10 +78,7 @@ describe("PresetCronSync", () => {
 
   it("skips non-scheduled presets", async () => {
     const cron = createMockCronApi([]);
-    const presets = [
-      makePreset({ name: "no-schedule" }),
-      makePreset({ name: "also-no-schedule" }),
-    ];
+    const presets = [makePreset({ name: "no-schedule" }), makePreset({ name: "also-no-schedule" })];
 
     const result = await syncPresetsToCron(cron, presets, undefined, silentLogger);
 
@@ -94,18 +91,19 @@ describe("PresetCronSync", () => {
   it("updates cron job when schedule changes", async () => {
     const existingJob = makeCronJob("monitor", "0 * * * *");
     const cron = createMockCronApi([existingJob]);
-    const presets = [
-      makePreset({ name: "monitor", schedule: "*/30 * * * *" }),
-    ];
+    const presets = [makePreset({ name: "monitor", schedule: "*/30 * * * *" })];
 
     const result = await syncPresetsToCron(cron, presets, undefined, silentLogger);
 
     expect(result.added).toBe(0);
     expect(result.updated).toBe(1);
     expect(result.removed).toBe(0);
-    expect(cron.update).toHaveBeenCalledWith(existingJob.id, expect.objectContaining({
-      schedule: { kind: "cron", expr: "*/30 * * * *" },
-    }));
+    expect(cron.update).toHaveBeenCalledWith(
+      existingJob.id,
+      expect.objectContaining({
+        schedule: { kind: "cron", expr: "*/30 * * * *" },
+      }),
+    );
   });
 
   it("removes cron job for deleted preset", async () => {
@@ -125,9 +123,7 @@ describe("PresetCronSync", () => {
   it("no-op when nothing changed", async () => {
     const existingJob = makeCronJob("monitor", "0 * * * *");
     const cron = createMockCronApi([existingJob]);
-    const presets = [
-      makePreset({ name: "monitor", schedule: "0 * * * *" }),
-    ];
+    const presets = [makePreset({ name: "monitor", schedule: "0 * * * *" })];
 
     const result = await syncPresetsToCron(cron, presets, undefined, silentLogger);
 
@@ -141,9 +137,7 @@ describe("PresetCronSync", () => {
 
   it("uses preset: naming convention", async () => {
     const cron = createMockCronApi([]);
-    const presets = [
-      makePreset({ name: "health-check", schedule: "*/5 * * * *" }),
-    ];
+    const presets = [makePreset({ name: "health-check", schedule: "*/5 * * * *" })];
 
     await syncPresetsToCron(cron, presets, undefined, silentLogger);
 

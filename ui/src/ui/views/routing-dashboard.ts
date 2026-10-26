@@ -45,11 +45,36 @@ interface TierDef {
 }
 
 const TIER_DEFINITIONS: TierDef[] = [
-  { name: "tiny", maxComplexity: 0.2, description: "Quick factual lookups, simple formatting", maxTokens: 512 },
-  { name: "small", maxComplexity: 0.4, description: "Simple code generation, explanations", maxTokens: 4096 },
-  { name: "medium", maxComplexity: 0.6, description: "Standard code generation, refactoring", maxTokens: 8192 },
-  { name: "large", maxComplexity: 0.85, description: "Complex code, security-sensitive tasks", maxTokens: 8192 },
-  { name: "reasoning", maxComplexity: 1.0, description: "Algorithm design, architecture decisions", maxTokens: 8192 },
+  {
+    name: "tiny",
+    maxComplexity: 0.2,
+    description: "Quick factual lookups, simple formatting",
+    maxTokens: 512,
+  },
+  {
+    name: "small",
+    maxComplexity: 0.4,
+    description: "Simple code generation, explanations",
+    maxTokens: 4096,
+  },
+  {
+    name: "medium",
+    maxComplexity: 0.6,
+    description: "Standard code generation, refactoring",
+    maxTokens: 8192,
+  },
+  {
+    name: "large",
+    maxComplexity: 0.85,
+    description: "Complex code, security-sensitive tasks",
+    maxTokens: 8192,
+  },
+  {
+    name: "reasoning",
+    maxComplexity: 1.0,
+    description: "Algorithm design, architecture decisions",
+    maxTokens: 8192,
+  },
 ];
 
 interface DomainEscalation {
@@ -116,12 +141,18 @@ const QUALITY_THRESHOLDS = {
 
 function tierColor(tier: string): string {
   switch (tier) {
-    case "tiny": return "var(--muted)";
-    case "small": return "var(--info)";
-    case "medium": return "var(--accent)";
-    case "large": return "var(--warn)";
-    case "reasoning": return "var(--danger)";
-    default: return "var(--text)";
+    case "tiny":
+      return "var(--muted)";
+    case "small":
+      return "var(--info)";
+    case "medium":
+      return "var(--accent)";
+    case "large":
+      return "var(--warn)";
+    case "reasoning":
+      return "var(--danger)";
+    default:
+      return "var(--text)";
   }
 }
 
@@ -154,12 +185,19 @@ function skel(width: string, height = "14px") {
 }
 
 function renderSkeletonStyles() {
-  return html`<style>
-    @keyframes skeleton-pulse {
-      0%, 100% { opacity: 0.4; }
-      50% { opacity: 0.8; }
-    }
-  </style>`;
+  return html`
+    <style>
+      @keyframes skeleton-pulse {
+        0%,
+        100% {
+          opacity: 0.4;
+        }
+        50% {
+          opacity: 0.8;
+        }
+      }
+    </style>
+  `;
 }
 
 // ============================================================================
@@ -169,9 +207,9 @@ function renderSkeletonStyles() {
 export function renderRoutingDashboard(props: RoutingDashboardProps) {
   if (!props.connected) {
     return html`
-      <section class="card" style="text-align: center; padding: 48px 24px;">
-        <div class="card-title" style="font-size: 1.25rem;">Routing Dashboard</div>
-        <div class="muted" style="margin-top: 12px;">
+      <section class="card" style="text-align: center; padding: 48px 24px">
+        <div class="card-title" style="font-size: 1.25rem">Routing Dashboard</div>
+        <div class="muted" style="margin-top: 12px">
           Connect to the gateway to view model routing configuration and statistics.
         </div>
       </section>
@@ -199,9 +237,10 @@ export function renderRoutingDashboard(props: RoutingDashboardProps) {
       </button>
     </div>
 
-    ${props.error
-      ? html`<div class="callout danger" style="margin-bottom: 18px;">${props.error}</div>`
-      : nothing
+    ${
+      props.error
+        ? html`<div class="callout danger" style="margin-bottom: 18px;">${props.error}</div>`
+        : nothing
     }
 
     <!-- Section 1: Tier Configuration Cards -->
@@ -280,18 +319,20 @@ function renderTierCards(
               <div style="border-top: 1px solid var(--border); margin-top: 4px; padding-top: 6px;">
                 <div class="row" style="justify-content: space-between;">
                   <span class="muted">Requests</span>
-                  ${skeleton
-                    ? skel("30px")
-                    : html`<span style="font-family: var(--mono); color: var(--text-strong);">
+                  ${
+                    skeleton
+                      ? skel("30px")
+                      : html`<span style="font-family: var(--mono); color: var(--text-strong);">
                         ${hasLive ? liveData!.count.toLocaleString() : "0"}
                       </span>`
                   }
                 </div>
                 <div class="row" style="justify-content: space-between; margin-top: 4px;">
                   <span class="muted">Avg Confidence</span>
-                  ${skeleton
-                    ? skel("40px")
-                    : html`<span style="font-family: var(--mono); color: ${hasLive && liveData!.avgConfidence >= 0.8 ? 'var(--ok)' : hasLive && liveData!.avgConfidence >= 0.6 ? 'var(--warn)' : hasLive ? 'var(--danger)' : 'var(--muted)'};">
+                  ${
+                    skeleton
+                      ? skel("40px")
+                      : html`<span style="font-family: var(--mono); color: ${hasLive && liveData!.avgConfidence >= 0.8 ? "var(--ok)" : hasLive && liveData!.avgConfidence >= 0.6 ? "var(--warn)" : hasLive ? "var(--danger)" : "var(--muted)"};">
                         ${hasLive ? pct(liveData!.avgConfidence) : "--"}
                       </span>`
                   }
@@ -337,7 +378,7 @@ function renderComplexitySpectrum() {
                 font-size: 0.7rem;
                 font-family: var(--mono);
                 color: var(--text-strong);
-                border-right: ${i < TIER_DEFINITIONS.length - 1 ? '1px solid var(--bg)' : 'none'};
+                border-right: ${i < TIER_DEFINITIONS.length - 1 ? "1px solid var(--bg)" : "none"};
                 position: relative;
               " title="${tier.name}: 0-${tier.maxComplexity}">
                 <span style="
@@ -360,9 +401,11 @@ function renderComplexitySpectrum() {
           color: var(--muted);
         ">
           <span>0.0</span>
-          ${TIER_DEFINITIONS.map((tier) => html`
+          ${TIER_DEFINITIONS.map(
+            (tier) => html`
             <span>${tier.maxComplexity.toFixed(1)}</span>
-          `)}
+          `,
+          )}
         </div>
       </div>
     </section>
@@ -373,10 +416,7 @@ function renderComplexitySpectrum() {
 // Section 3: Active Routing Config + Pipeline Rules
 // ============================================================================
 
-function renderRoutingConfig(
-  config: IntelligenceStats["config"] | null,
-  skeleton: boolean,
-) {
+function renderRoutingConfig(config: IntelligenceStats["config"] | null, skeleton: boolean) {
   return html`
     <section class="grid grid-cols-2" style="margin-bottom: 18px;">
       <div class="card">
@@ -385,54 +425,60 @@ function renderRoutingConfig(
         <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
           <div class="row" style="justify-content: space-between;">
             <span class="muted">Intelligence Routing</span>
-            ${skeleton
-              ? skel("60px")
-              : html`<span class="${config?.enabled ? 'ok' : 'danger'}" style="font-family: var(--mono);">
+            ${
+              skeleton
+                ? skel("60px")
+                : html`<span class="${config?.enabled ? "ok" : "danger"}" style="font-family: var(--mono);">
                   ${config?.enabled ? "Active" : "Disabled"}
                 </span>`
             }
           </div>
           <div class="row" style="justify-content: space-between;">
             <span class="muted">Chaining Enabled</span>
-            ${skeleton
-              ? skel("60px")
-              : html`<span class="${config?.chainingEnabled ? 'ok' : 'muted'}" style="font-family: var(--mono);">
+            ${
+              skeleton
+                ? skel("60px")
+                : html`<span class="${config?.chainingEnabled ? "ok" : "muted"}" style="font-family: var(--mono);">
                   ${config?.chainingEnabled ? "Yes" : "No"}
                 </span>`
             }
           </div>
           <div class="row" style="justify-content: space-between;">
             <span class="muted">Chaining Threshold</span>
-            ${skeleton
-              ? skel("40px")
-              : html`<span style="font-family: var(--mono); color: var(--text-strong);">
+            ${
+              skeleton
+                ? skel("40px")
+                : html`<span style="font-family: var(--mono); color: var(--text-strong);">
                   ${config?.chainingThreshold?.toFixed(2) ?? "--"}
                 </span>`
             }
           </div>
           <div class="row" style="justify-content: space-between;">
             <span class="muted">Knowledge Source</span>
-            ${skeleton
-              ? skel("60px")
-              : html`<span style="font-family: var(--mono); color: var(--text-strong);">
+            ${
+              skeleton
+                ? skel("60px")
+                : html`<span style="font-family: var(--mono); color: var(--text-strong);">
                   ${config?.knowledgeSource ?? "--"}
                 </span>`
             }
           </div>
           <div class="row" style="justify-content: space-between;">
             <span class="muted">RAG Max Iterations</span>
-            ${skeleton
-              ? skel("30px")
-              : html`<span style="font-family: var(--mono); color: var(--text-strong);">
+            ${
+              skeleton
+                ? skel("30px")
+                : html`<span style="font-family: var(--mono); color: var(--text-strong);">
                   ${config?.ragMaxIterations ?? "--"}
                 </span>`
             }
           </div>
           <div class="row" style="justify-content: space-between;">
             <span class="muted">RAG Relevance Threshold</span>
-            ${skeleton
-              ? skel("40px")
-              : html`<span style="font-family: var(--mono); color: var(--text-strong);">
+            ${
+              skeleton
+                ? skel("40px")
+                : html`<span style="font-family: var(--mono); color: var(--text-strong);">
                   ${config?.ragRelevanceThreshold ?? "--"}
                 </span>`
             }
@@ -509,7 +555,8 @@ function renderDomainEscalations() {
         Domains that force a minimum tier regardless of complexity score (requires complexity >= 0.3)
       </div>
       <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px;">
-        ${Array.from(categories.entries()).map(([category, domains]) => html`
+        ${Array.from(categories.entries()).map(
+          ([category, domains]) => html`
           <div style="
             padding: 12px;
             border: 1px solid var(--border);
@@ -525,7 +572,8 @@ function renderDomainEscalations() {
               border-bottom: 1px solid var(--border);
             ">${category}</div>
             <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-              ${domains.map((d) => html`
+              ${domains.map(
+                (d) => html`
                 <span style="
                   display: inline-flex;
                   align-items: center;
@@ -540,10 +588,12 @@ function renderDomainEscalations() {
                   <span style="color: var(--text);">${d.domain}</span>
                   <span style="color: ${tierColor(d.tier)}; font-weight: 500;">${d.tier}</span>
                 </span>
-              `)}
+              `,
+              )}
             </div>
           </div>
-        `)}
+        `,
+        )}
       </div>
     </section>
   `;
@@ -601,10 +651,30 @@ function renderTaskTypeMappings() {
 
 function renderQualityThresholds() {
   const thresholds = [
-    { label: "Min Acceptable", value: QUALITY_THRESHOLDS.minAcceptable, color: "var(--danger)", desc: "Responses below this are rejected" },
-    { label: "Good", value: QUALITY_THRESHOLDS.good, color: "var(--warn)", desc: "Sufficient for most tasks" },
-    { label: "High", value: QUALITY_THRESHOLDS.high, color: "var(--ok)", desc: "Required for production/security" },
-    { label: "Auto-Approve", value: QUALITY_THRESHOLDS.autoApprove, color: "var(--accent-2)", desc: "No human review needed" },
+    {
+      label: "Min Acceptable",
+      value: QUALITY_THRESHOLDS.minAcceptable,
+      color: "var(--danger)",
+      desc: "Responses below this are rejected",
+    },
+    {
+      label: "Good",
+      value: QUALITY_THRESHOLDS.good,
+      color: "var(--warn)",
+      desc: "Sufficient for most tasks",
+    },
+    {
+      label: "High",
+      value: QUALITY_THRESHOLDS.high,
+      color: "var(--ok)",
+      desc: "Required for production/security",
+    },
+    {
+      label: "Auto-Approve",
+      value: QUALITY_THRESHOLDS.autoApprove,
+      color: "var(--accent-2)",
+      desc: "No human review needed",
+    },
   ];
 
   return html`
@@ -641,7 +711,8 @@ function renderQualityThresholds() {
               opacity: 0.4;
             "></div>
           </div>
-          ${thresholds.map((t) => html`
+          ${thresholds.map(
+            (t) => html`
             <div style="
               position: absolute;
               left: ${t.value * 100}%;
@@ -658,11 +729,13 @@ function renderQualityThresholds() {
                 opacity: 0.7;
               "></div>
             </div>
-          `)}
+          `,
+          )}
         </div>
         <!-- Threshold details -->
         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
-          ${thresholds.map((t) => html`
+          ${thresholds.map(
+            (t) => html`
             <div style="text-align: center;">
               <div style="
                 font-family: var(--mono);
@@ -678,7 +751,8 @@ function renderQualityThresholds() {
               ">${t.label}</div>
               <div class="muted" style="font-size: 0.72rem; margin-top: 2px;">${t.desc}</div>
             </div>
-          `)}
+          `,
+          )}
         </div>
       </div>
     </section>
@@ -702,16 +776,37 @@ function renderPipelineUsage(
       <div class="card-title">Pipeline Distribution</div>
       <div class="card-sub">Live breakdown of simple vs complex pipeline usage</div>
       <div style="margin-top: 16px;">
-        ${skeleton
-          ? html`
-              <div style="display: flex; gap: 12px;">
-                <div style="flex: 1; height: 80px; background: var(--border); border-radius: 6px; animation: skeleton-pulse 1.8s ease-in-out infinite;"></div>
-                <div style="flex: 1; height: 80px; background: var(--border); border-radius: 6px; animation: skeleton-pulse 1.8s ease-in-out infinite;"></div>
-              </div>
-            `
-          : !hasPipelineData
-            ? html`<div class="muted" style="text-align: center; padding: 24px 0;">No pipeline usage data recorded yet.</div>`
-            : html`
+        ${
+          skeleton
+            ? html`
+                <div style="display: flex; gap: 12px">
+                  <div
+                    style="
+                      flex: 1;
+                      height: 80px;
+                      background: var(--border);
+                      border-radius: 6px;
+                      animation: skeleton-pulse 1.8s ease-in-out infinite;
+                    "
+                  ></div>
+                  <div
+                    style="
+                      flex: 1;
+                      height: 80px;
+                      background: var(--border);
+                      border-radius: 6px;
+                      animation: skeleton-pulse 1.8s ease-in-out infinite;
+                    "
+                  ></div>
+                </div>
+              `
+            : !hasPipelineData
+              ? html`
+                  <div class="muted" style="text-align: center; padding: 24px 0">
+                    No pipeline usage data recorded yet.
+                  </div>
+                `
+              : html`
                 <!-- Stacked bar -->
                 <div style="display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin-bottom: 16px; border: 1px solid var(--border);">
                   ${pipelines.map((name) => {
@@ -729,7 +824,7 @@ function renderPipelineUsage(
                         font-size: 0.72rem;
                         font-family: var(--mono);
                         color: var(--text-strong);
-                        min-width: ${widthPct > 5 ? '0' : '24'}px;
+                        min-width: ${widthPct > 5 ? "0" : "24"}px;
                       " title="${name}: ${data.count} (${pct(data.count / totalEntries)})">
                         <span style="text-shadow: 0 1px 2px rgba(0,0,0,0.5); font-weight: 500;">
                           ${widthPct > 10 ? `${name} ${pct(data.count / totalEntries)}` : ""}
@@ -743,7 +838,12 @@ function renderPipelineUsage(
                   ${pipelines.map((name) => {
                     const data = byPipeline![name];
                     const color = name === "simple" ? "var(--ok)" : "var(--warn)";
-                    const confColor = data.avgConfidence >= 0.8 ? "var(--ok)" : data.avgConfidence >= 0.6 ? "var(--warn)" : "var(--danger)";
+                    const confColor =
+                      data.avgConfidence >= 0.8
+                        ? "var(--ok)"
+                        : data.avgConfidence >= 0.6
+                          ? "var(--warn)"
+                          : "var(--danger)";
                     return html`
                       <div style="
                         padding: 12px;

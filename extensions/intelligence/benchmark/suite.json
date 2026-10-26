@@ -7,7 +7,10 @@
     "expectedTier": "tiny",
     "expectedPipeline": "simple",
     "qualityCriteria": ["Explains ... syntax", "Shows array and object spread examples"],
-    "antiPatterns": ["Overly long response", "Confuses with rest parameters without clarifying difference"],
+    "antiPatterns": [
+      "Overly long response",
+      "Confuses with rest parameters without clarifying difference"
+    ],
     "tags": ["javascript", "syntax", "beginner"]
   },
   {
@@ -50,8 +53,15 @@
     "domain": "general",
     "expectedTier": "tiny",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Valid markdown table syntax", "Correct data in cells", "Header row present"],
-    "antiPatterns": ["Adds extra columns", "Explains how markdown tables work instead of just doing it"],
+    "qualityCriteria": [
+      "Valid markdown table syntax",
+      "Correct data in cells",
+      "Header row present"
+    ],
+    "antiPatterns": [
+      "Adds extra columns",
+      "Explains how markdown tables work instead of just doing it"
+    ],
     "tags": ["formatting", "markdown"]
   },
   {
@@ -116,7 +126,10 @@
     "domain": "general",
     "expectedTier": "tiny",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Represents async operation result", "Mentions pending/fulfilled/rejected states"],
+    "qualityCriteria": [
+      "Represents async operation result",
+      "Mentions pending/fulfilled/rejected states"
+    ],
     "antiPatterns": ["Full async/await tutorial", "Promise chaining deep dive"],
     "tags": ["javascript", "async"]
   },
@@ -138,7 +151,10 @@
     "domain": "general",
     "expectedTier": "tiny",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Temporarily saves uncommitted changes", "Mentions clean working directory"],
+    "qualityCriteria": [
+      "Temporarily saves uncommitted changes",
+      "Mentions clean working directory"
+    ],
     "antiPatterns": ["Full git workflow tutorial", "All stash subcommands"],
     "tags": ["git", "basics"]
   },
@@ -171,7 +187,11 @@
     "domain": "general",
     "expectedTier": "tiny",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["JavaScript with types", "Compiles to JavaScript", "Catches errors at compile time"],
+    "qualityCriteria": [
+      "JavaScript with types",
+      "Compiles to JavaScript",
+      "Catches errors at compile time"
+    ],
     "antiPatterns": ["Type system deep dive", "Advanced generics examples"],
     "tags": ["typescript", "basics"]
   },
@@ -226,7 +246,11 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Working TypeScript function", "Proper type annotations", "Handles empty string"],
+    "qualityCriteria": [
+      "Working TypeScript function",
+      "Proper type annotations",
+      "Handles empty string"
+    ],
     "antiPatterns": ["Multiple complex implementations", "Performance benchmarking"],
     "tags": ["typescript", "string-manipulation"]
   },
@@ -237,8 +261,15 @@
     "domain": "api",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Identifies initial render before data loads", "Suggests optional chaining or default value", "Mentions loading state"],
-    "antiPatterns": ["Redesigns entire data fetching strategy", "Suggests switching to a different state management library"],
+    "qualityCriteria": [
+      "Identifies initial render before data loads",
+      "Suggests optional chaining or default value",
+      "Mentions loading state"
+    ],
+    "antiPatterns": [
+      "Redesigns entire data fetching strategy",
+      "Suggests switching to a different state management library"
+    ],
     "tags": ["react", "debugging", "api"]
   },
   {
@@ -248,7 +279,13 @@
     "domain": "infrastructure",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["DATABASE_URL or individual PG vars", "REDIS_URL", "PORT", "NODE_ENV", "Placeholder values not real secrets"],
+    "qualityCriteria": [
+      "DATABASE_URL or individual PG vars",
+      "REDIS_URL",
+      "PORT",
+      "NODE_ENV",
+      "Placeholder values not real secrets"
+    ],
     "antiPatterns": ["Includes actual credentials", "Over-engineers with 50+ variables"],
     "tags": ["config", "node", "devops"]
   },
@@ -259,7 +296,11 @@
     "domain": "infrastructure",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Uses docker ps or docker inspect", "Conditional start logic", "Proper bash syntax"],
+    "qualityCriteria": [
+      "Uses docker ps or docker inspect",
+      "Conditional start logic",
+      "Proper bash syntax"
+    ],
     "antiPatterns": ["Full Docker Compose setup", "Container orchestration discussion"],
     "tags": ["bash", "docker", "devops"]
   },
@@ -270,7 +311,11 @@
     "domain": "database",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Correct WHERE clause with date comparison", "email_verified check", "Uses NOW() or CURRENT_TIMESTAMP"],
+    "qualityCriteria": [
+      "Correct WHERE clause with date comparison",
+      "email_verified check",
+      "Uses NOW() or CURRENT_TIMESTAMP"
+    ],
     "antiPatterns": ["Schema design discussion", "Index optimization advice"],
     "tags": ["sql", "database", "query"]
   },
@@ -281,7 +326,11 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Correct TypeScript interface syntax", "Optional published date with ?", "Proper types for each field"],
+    "qualityCriteria": [
+      "Correct TypeScript interface syntax",
+      "Optional published date with ?",
+      "Proper types for each field"
+    ],
     "antiPatterns": ["Full blog API implementation", "Database schema alongside"],
     "tags": ["typescript", "types"]
   },
@@ -292,8 +341,15 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Mentions flat config migration", "Explains parser config change", "Suggests specific fix"],
-    "antiPatterns": ["Full ESLint configuration tutorial", "Suggests downgrading instead of fixing"],
+    "qualityCriteria": [
+      "Mentions flat config migration",
+      "Explains parser config change",
+      "Suggests specific fix"
+    ],
+    "antiPatterns": [
+      "Full ESLint configuration tutorial",
+      "Suggests downgrading instead of fixing"
+    ],
     "tags": ["tooling", "debugging", "eslint"]
   },
   {
@@ -303,7 +359,12 @@
     "domain": "api",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Captures start time", "Logs on response finish", "Calls next()", "Correct middleware signature"],
+    "qualityCriteria": [
+      "Captures start time",
+      "Logs on response finish",
+      "Calls next()",
+      "Correct middleware signature"
+    ],
     "antiPatterns": ["Full logging framework setup", "Morgan integration instead of custom"],
     "tags": ["express", "middleware", "logging"]
   },
@@ -314,7 +375,12 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["display: flex", "justify-content: center", "align-items: center", "Height handling"],
+    "qualityCriteria": [
+      "display: flex",
+      "justify-content: center",
+      "align-items: center",
+      "Height handling"
+    ],
     "antiPatterns": ["Multiple centering methods compared", "Browser compatibility discussion"],
     "tags": ["css", "layout"]
   },
@@ -325,8 +391,15 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Recursive approach or structuredClone", "Handles nested objects and arrays", "Type annotations"],
-    "antiPatterns": ["Handles every edge case (Map, Set, WeakRef, etc.)", "Performance benchmarking"],
+    "qualityCriteria": [
+      "Recursive approach or structuredClone",
+      "Handles nested objects and arrays",
+      "Type annotations"
+    ],
+    "antiPatterns": [
+      "Handles every edge case (Map, Set, WeakRef, etc.)",
+      "Performance benchmarking"
+    ],
     "tags": ["typescript", "utility"]
   },
   {
@@ -336,7 +409,11 @@
     "domain": "api",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Install and configure cors middleware", "Shows correct origin config", "Mentions credentials if relevant"],
+    "qualityCriteria": [
+      "Install and configure cors middleware",
+      "Shows correct origin config",
+      "Mentions credentials if relevant"
+    ],
     "antiPatterns": ["Redesigns API architecture", "Suggests proxy without explaining CORS"],
     "tags": ["cors", "express", "debugging"]
   },
@@ -347,7 +424,11 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Reasonable email regex", "Explains what it matches", "Acknowledges limitations"],
+    "qualityCriteria": [
+      "Reasonable email regex",
+      "Explains what it matches",
+      "Acknowledges limitations"
+    ],
     "antiPatterns": ["RFC 5322 compliant monster regex", "Email validation philosophy essay"],
     "tags": ["regex", "validation"]
   },
@@ -358,7 +439,11 @@
     "domain": "database",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Identifies host/network issue between host and container", "Suggests using host.docker.internal or container network", "Checks port mapping"],
+    "qualityCriteria": [
+      "Identifies host/network issue between host and container",
+      "Suggests using host.docker.internal or container network",
+      "Checks port mapping"
+    ],
     "antiPatterns": ["Full Docker networking tutorial", "Suggests reinstalling PostgreSQL"],
     "tags": ["docker", "postgres", "debugging", "networking"]
   },
@@ -369,7 +454,12 @@
     "domain": "infrastructure",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Valid YAML syntax", "Correct trigger events", "pnpm setup action", "Node setup action"],
+    "qualityCriteria": [
+      "Valid YAML syntax",
+      "Correct trigger events",
+      "pnpm setup action",
+      "Node setup action"
+    ],
     "antiPatterns": ["Full CI/CD pipeline with deploy", "Matrix strategy across 10 Node versions"],
     "tags": ["ci-cd", "github-actions", "pnpm"]
   },
@@ -380,8 +470,15 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Correct debounce logic with clearTimeout", "Generic type signature", "Returns debounced function"],
-    "antiPatterns": ["Throttle vs debounce comparison essay", "Library recommendation instead of implementation"],
+    "qualityCriteria": [
+      "Correct debounce logic with clearTimeout",
+      "Generic type signature",
+      "Returns debounced function"
+    ],
+    "antiPatterns": [
+      "Throttle vs debounce comparison essay",
+      "Library recommendation instead of implementation"
+    ],
     "tags": ["typescript", "utility", "patterns"]
   },
   {
@@ -391,8 +488,16 @@
     "domain": "infrastructure",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Multi-stage build or efficient layering", "pnpm install", "NODE_ENV=production", "Non-root user"],
-    "antiPatterns": ["Kubernetes deployment alongside", "Development Dockerfile instead of production"],
+    "qualityCriteria": [
+      "Multi-stage build or efficient layering",
+      "pnpm install",
+      "NODE_ENV=production",
+      "Non-root user"
+    ],
+    "antiPatterns": [
+      "Kubernetes deployment alongside",
+      "Development Dockerfile instead of production"
+    ],
     "tags": ["docker", "node", "devops"]
   },
   {
@@ -402,7 +507,11 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Generic type parameters", "Correct return type", "Preserves spread behavior"],
+    "qualityCriteria": [
+      "Generic type parameters",
+      "Correct return type",
+      "Preserves spread behavior"
+    ],
     "antiPatterns": ["Deep merge implementation", "Overcomplicates with conditional types"],
     "tags": ["typescript", "migration"]
   },
@@ -413,7 +522,11 @@
     "domain": "database",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["ALTER TABLE ADD COLUMN syntax", "DEFAULT NOW()", "TIMESTAMP WITH TIME ZONE"],
+    "qualityCriteria": [
+      "ALTER TABLE ADD COLUMN syntax",
+      "DEFAULT NOW()",
+      "TIMESTAMP WITH TIME ZONE"
+    ],
     "antiPatterns": ["Full migration framework setup", "Schema redesign"],
     "tags": ["sql", "postgres", "migration"]
   },
@@ -424,7 +537,11 @@
     "domain": "general",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Checks module resolution setting", "Mentions .js extension requirement for ESM", "tsconfig moduleResolution"],
+    "qualityCriteria": [
+      "Checks module resolution setting",
+      "Mentions .js extension requirement for ESM",
+      "tsconfig moduleResolution"
+    ],
     "antiPatterns": ["Full TypeScript configuration guide", "Suggests switching to CommonJS"],
     "tags": ["typescript", "debugging", "module-resolution"]
   },
@@ -435,7 +552,12 @@
     "domain": "api",
     "expectedTier": "small",
     "expectedPipeline": "simple",
-    "qualityCriteria": ["Tracks request count per IP", "Resets after time window", "Returns 429 when exceeded", "Correct middleware signature"],
+    "qualityCriteria": [
+      "Tracks request count per IP",
+      "Resets after time window",
+      "Returns 429 when exceeded",
+      "Correct middleware signature"
+    ],
     "antiPatterns": ["Redis-backed distributed rate limiter", "Token bucket algorithm"],
     "tags": ["express", "middleware", "rate-limiting"]
   },
@@ -446,8 +568,20 @@
     "domain": "api",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["All CRUD routes implemented", "Prisma schema with proper types", "Zod validation schemas", "Pagination with cursor or offset", "Error handling middleware", "Status enum usage"],
-    "antiPatterns": ["Missing validation on any endpoint", "No error handling", "Hardcoded pagination values", "No Prisma schema"],
+    "qualityCriteria": [
+      "All CRUD routes implemented",
+      "Prisma schema with proper types",
+      "Zod validation schemas",
+      "Pagination with cursor or offset",
+      "Error handling middleware",
+      "Status enum usage"
+    ],
+    "antiPatterns": [
+      "Missing validation on any endpoint",
+      "No error handling",
+      "Hardcoded pagination values",
+      "No Prisma schema"
+    ],
     "tags": ["express", "prisma", "rest-api", "crud"]
   },
   {
@@ -457,8 +591,19 @@
     "domain": "database",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Junction tables for many-to-many", "Foreign key constraints", "Indexes on lookup columns", "Role-permission model", "Organization scoping"],
-    "antiPatterns": ["Single table with JSON columns", "No indexes", "Missing foreign keys", "No unique constraints"],
+    "qualityCriteria": [
+      "Junction tables for many-to-many",
+      "Foreign key constraints",
+      "Indexes on lookup columns",
+      "Role-permission model",
+      "Organization scoping"
+    ],
+    "antiPatterns": [
+      "Single table with JSON columns",
+      "No indexes",
+      "Missing foreign keys",
+      "No unique constraints"
+    ],
     "tags": ["postgres", "schema-design", "multi-tenant"]
   },
   {
@@ -468,8 +613,18 @@
     "domain": "auth",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Reads from both header and cookie", "Verifies JWT signature", "Handles expired tokens", "Refresh token flow", "TypeScript request augmentation"],
-    "antiPatterns": ["No error handling for invalid tokens", "Stores tokens in localStorage", "No token expiry check"],
+    "qualityCriteria": [
+      "Reads from both header and cookie",
+      "Verifies JWT signature",
+      "Handles expired tokens",
+      "Refresh token flow",
+      "TypeScript request augmentation"
+    ],
+    "antiPatterns": [
+      "No error handling for invalid tokens",
+      "Stores tokens in localStorage",
+      "No token expiry check"
+    ],
     "tags": ["auth", "jwt", "middleware", "express"]
   },
   {
@@ -479,8 +634,19 @@
     "domain": "api",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Multer configuration with size limits", "MIME type validation", "Thumbnail generation with sharp", "S3 upload with proper keys", "Error handling for each stage"],
-    "antiPatterns": ["No file type validation", "Stores files on local disk", "No size limit", "Missing error handling"],
+    "qualityCriteria": [
+      "Multer configuration with size limits",
+      "MIME type validation",
+      "Thumbnail generation with sharp",
+      "S3 upload with proper keys",
+      "Error handling for each stage"
+    ],
+    "antiPatterns": [
+      "No file type validation",
+      "Stores files on local disk",
+      "No size limit",
+      "Missing error handling"
+    ],
     "tags": ["file-upload", "s3", "image-processing", "express"]
   },
   {
@@ -490,8 +656,19 @@
     "domain": "database",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Migration tracking table", "Ordered execution", "Rollback support", "CLI with clear commands", "Transaction wrapping per migration"],
-    "antiPatterns": ["No transaction safety", "No rollback support", "Unordered execution", "No status tracking"],
+    "qualityCriteria": [
+      "Migration tracking table",
+      "Ordered execution",
+      "Rollback support",
+      "CLI with clear commands",
+      "Transaction wrapping per migration"
+    ],
+    "antiPatterns": [
+      "No transaction safety",
+      "No rollback support",
+      "Unordered execution",
+      "No status tracking"
+    ],
     "tags": ["database", "migrations", "cli", "postgres"]
   },
   {
@@ -501,8 +678,19 @@
     "domain": "api",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Authentication on connection", "Room join/leave logic", "Message persistence queue", "Reconnection with message replay", "Typed message protocol"],
-    "antiPatterns": ["No authentication", "No offline handling", "Untyped messages", "No reconnection strategy"],
+    "qualityCriteria": [
+      "Authentication on connection",
+      "Room join/leave logic",
+      "Message persistence queue",
+      "Reconnection with message replay",
+      "Typed message protocol"
+    ],
+    "antiPatterns": [
+      "No authentication",
+      "No offline handling",
+      "Untyped messages",
+      "No reconnection strategy"
+    ],
     "tags": ["websocket", "real-time", "notifications"]
   },
   {
@@ -512,8 +700,19 @@
     "domain": "api",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Redis primary with memory fallback", "Tag-based invalidation", "Per-route TTL", "Deterministic cache key generation", "Middleware integration"],
-    "antiPatterns": ["No fallback mechanism", "No invalidation strategy", "Global TTL only", "Cache key collisions"],
+    "qualityCriteria": [
+      "Redis primary with memory fallback",
+      "Tag-based invalidation",
+      "Per-route TTL",
+      "Deterministic cache key generation",
+      "Middleware integration"
+    ],
+    "antiPatterns": [
+      "No fallback mechanism",
+      "No invalidation strategy",
+      "Global TTL only",
+      "Cache key collisions"
+    ],
     "tags": ["caching", "redis", "middleware", "performance"]
   },
   {
@@ -523,8 +722,18 @@
     "domain": "database",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Generic Prisma implementation", "Both pagination styles", "Consistent response shape with metadata", "Deleted record handling", "Type-safe API"],
-    "antiPatterns": ["Hardcoded to one model", "No metadata in response", "Ignores deleted record edge case"],
+    "qualityCriteria": [
+      "Generic Prisma implementation",
+      "Both pagination styles",
+      "Consistent response shape with metadata",
+      "Deleted record handling",
+      "Type-safe API"
+    ],
+    "antiPatterns": [
+      "Hardcoded to one model",
+      "No metadata in response",
+      "Ignores deleted record edge case"
+    ],
     "tags": ["prisma", "pagination", "database", "generics"]
   },
   {
@@ -534,8 +743,18 @@
     "domain": "api",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Router-per-version structure", "Shared logic between versions", "Deprecation headers", "Version negotiation", "Clear migration path"],
-    "antiPatterns": ["Duplicates all code per version", "No deprecation signaling", "Breaking changes without versioning"],
+    "qualityCriteria": [
+      "Router-per-version structure",
+      "Shared logic between versions",
+      "Deprecation headers",
+      "Version negotiation",
+      "Clear migration path"
+    ],
+    "antiPatterns": [
+      "Duplicates all code per version",
+      "No deprecation signaling",
+      "Breaking changes without versioning"
+    ],
     "tags": ["api-versioning", "express", "architecture"]
   },
   {
@@ -545,8 +764,19 @@
     "domain": "api",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Separate validation for body/query/params", "Structured error response", "Field-level error messages", "OpenAPI generation", "Generic middleware factory"],
-    "antiPatterns": ["Only validates body", "Generic error messages", "No OpenAPI integration", "Non-reusable validation"],
+    "qualityCriteria": [
+      "Separate validation for body/query/params",
+      "Structured error response",
+      "Field-level error messages",
+      "OpenAPI generation",
+      "Generic middleware factory"
+    ],
+    "antiPatterns": [
+      "Only validates body",
+      "Generic error messages",
+      "No OpenAPI integration",
+      "Non-reusable validation"
+    ],
     "tags": ["validation", "zod", "middleware", "openapi"]
   },
   {
@@ -556,8 +786,19 @@
     "domain": "database",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["PostgreSQL table for jobs", "Polling worker with FOR UPDATE SKIP LOCKED", "Exponential backoff retry", "Concurrency control", "Dead letter queue"],
-    "antiPatterns": ["No retry mechanism", "Race conditions on job pickup", "No dead letter handling", "Unbounded concurrency"],
+    "qualityCriteria": [
+      "PostgreSQL table for jobs",
+      "Polling worker with FOR UPDATE SKIP LOCKED",
+      "Exponential backoff retry",
+      "Concurrency control",
+      "Dead letter queue"
+    ],
+    "antiPatterns": [
+      "No retry mechanism",
+      "Race conditions on job pickup",
+      "No dead letter handling",
+      "Unbounded concurrency"
+    ],
     "tags": ["job-queue", "postgres", "background-jobs", "concurrency"]
   },
   {
@@ -567,8 +808,19 @@
     "domain": "database",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Automatic middleware for mutations", "Before/after state capture", "User and IP attribution", "Indexed audit table", "Query-friendly schema"],
-    "antiPatterns": ["Manual logging per route", "No before state", "No indexing on audit table", "Logs in same table as data"],
+    "qualityCriteria": [
+      "Automatic middleware for mutations",
+      "Before/after state capture",
+      "User and IP attribution",
+      "Indexed audit table",
+      "Query-friendly schema"
+    ],
+    "antiPatterns": [
+      "Manual logging per route",
+      "No before state",
+      "No indexing on audit table",
+      "Logs in same table as data"
+    ],
     "tags": ["audit-logging", "middleware", "postgres", "compliance"]
   },
   {
@@ -578,8 +830,19 @@
     "domain": "infrastructure",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Individual check results", "Overall status aggregation", "Shallow vs deep separation", "Timeout per check", "Correct HTTP status codes"],
-    "antiPatterns": ["Only checks if server is running", "No timeout on checks", "Returns 200 when unhealthy", "No individual check detail"],
+    "qualityCriteria": [
+      "Individual check results",
+      "Overall status aggregation",
+      "Shallow vs deep separation",
+      "Timeout per check",
+      "Correct HTTP status codes"
+    ],
+    "antiPatterns": [
+      "Only checks if server is running",
+      "No timeout on checks",
+      "Returns 200 when unhealthy",
+      "No individual check detail"
+    ],
     "tags": ["health-check", "monitoring", "devops"]
   },
   {
@@ -589,8 +852,19 @@
     "domain": "general",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Handlebars template rendering", "Queue-based sending", "Retry logic", "Attachment support", "Send/fail logging"],
-    "antiPatterns": ["Synchronous sending", "No retry on failure", "Hardcoded templates", "No logging"],
+    "qualityCriteria": [
+      "Handlebars template rendering",
+      "Queue-based sending",
+      "Retry logic",
+      "Attachment support",
+      "Send/fail logging"
+    ],
+    "antiPatterns": [
+      "Synchronous sending",
+      "No retry on failure",
+      "Hardcoded templates",
+      "No logging"
+    ],
     "tags": ["email", "templates", "queue", "nodemailer"]
   },
   {
@@ -600,8 +874,19 @@
     "domain": "auth",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Context-scoped roles", "Permission resolution logic", "Middleware for route protection", "Resource-level checks", "Hierarchical role support"],
-    "antiPatterns": ["Global roles only", "Hardcoded role checks", "No resource scoping", "String comparison for permissions"],
+    "qualityCriteria": [
+      "Context-scoped roles",
+      "Permission resolution logic",
+      "Middleware for route protection",
+      "Resource-level checks",
+      "Hierarchical role support"
+    ],
+    "antiPatterns": [
+      "Global roles only",
+      "Hardcoded role checks",
+      "No resource scoping",
+      "String comparison for permissions"
+    ],
     "tags": ["rbac", "auth", "authorization", "middleware"]
   },
   {
@@ -611,8 +896,19 @@
     "domain": "api",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Multiple flag types", "Management CRUD API", "Client SDK with caching", "Real-time flag updates", "User segment targeting"],
-    "antiPatterns": ["Boolean-only flags", "No real-time updates", "Requires redeploy", "No segment targeting"],
+    "qualityCriteria": [
+      "Multiple flag types",
+      "Management CRUD API",
+      "Client SDK with caching",
+      "Real-time flag updates",
+      "User segment targeting"
+    ],
+    "antiPatterns": [
+      "Boolean-only flags",
+      "No real-time updates",
+      "Requires redeploy",
+      "No segment targeting"
+    ],
     "tags": ["feature-flags", "api", "sdk", "real-time"]
   },
   {
@@ -622,8 +918,19 @@
     "domain": "general",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Streaming export for large data", "CSV and JSON format support", "Filter parameters", "Progress tracking mechanism", "Memory-efficient"],
-    "antiPatterns": ["Loads all data into memory", "Only supports small datasets", "No progress feedback", "Single format only"],
+    "qualityCriteria": [
+      "Streaming export for large data",
+      "CSV and JSON format support",
+      "Filter parameters",
+      "Progress tracking mechanism",
+      "Memory-efficient"
+    ],
+    "antiPatterns": [
+      "Loads all data into memory",
+      "Only supports small datasets",
+      "No progress feedback",
+      "Single format only"
+    ],
     "tags": ["data-export", "streaming", "csv", "performance"]
   },
   {
@@ -633,8 +940,19 @@
     "domain": "general",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Three retry strategies", "Configurable per-call", "Circuit breaker integration", "Max retry limits", "TypeScript generics for return types"],
-    "antiPatterns": ["Single retry strategy", "No circuit breaker", "Unlimited retries", "No jitter option"],
+    "qualityCriteria": [
+      "Three retry strategies",
+      "Configurable per-call",
+      "Circuit breaker integration",
+      "Max retry limits",
+      "TypeScript generics for return types"
+    ],
+    "antiPatterns": [
+      "Single retry strategy",
+      "No circuit breaker",
+      "Unlimited retries",
+      "No jitter option"
+    ],
     "tags": ["retry", "circuit-breaker", "resilience", "patterns"]
   },
   {
@@ -644,8 +962,19 @@
     "domain": "general",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Environment-aware formatting", "Log level support", "Request context propagation", "Child logger pattern", "JSON output for production"],
-    "antiPatterns": ["console.log wrapper only", "No structured output", "No context propagation", "Single format"],
+    "qualityCriteria": [
+      "Environment-aware formatting",
+      "Log level support",
+      "Request context propagation",
+      "Child logger pattern",
+      "JSON output for production"
+    ],
+    "antiPatterns": [
+      "console.log wrapper only",
+      "No structured output",
+      "No context propagation",
+      "Single format"
+    ],
     "tags": ["logging", "observability", "node"]
   },
   {
@@ -655,8 +984,19 @@
     "domain": "api",
     "expectedTier": "medium",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Event registration API", "HMAC payload signing", "Retry with backoff", "Delivery status tracking", "Subscriber management"],
-    "antiPatterns": ["No signature verification", "Fire and forget delivery", "No retry mechanism", "No delivery tracking"],
+    "qualityCriteria": [
+      "Event registration API",
+      "HMAC payload signing",
+      "Retry with backoff",
+      "Delivery status tracking",
+      "Subscriber management"
+    ],
+    "antiPatterns": [
+      "No signature verification",
+      "Fire and forget delivery",
+      "No retry mechanism",
+      "No delivery tracking"
+    ],
     "tags": ["webhooks", "api", "events", "security"]
   },
   {
@@ -666,8 +1006,20 @@
     "domain": "general",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Clear service boundaries with single responsibility", "Event-driven for cross-service communication", "Saga pattern for distributed transactions", "Each service owns its data", "Failure isolation and circuit breakers", "Addresses data consistency"],
-    "antiPatterns": ["Distributed monolith", "Shared database between services", "Synchronous chains across services", "No failure handling"],
+    "qualityCriteria": [
+      "Clear service boundaries with single responsibility",
+      "Event-driven for cross-service communication",
+      "Saga pattern for distributed transactions",
+      "Each service owns its data",
+      "Failure isolation and circuit breakers",
+      "Addresses data consistency"
+    ],
+    "antiPatterns": [
+      "Distributed monolith",
+      "Shared database between services",
+      "Synchronous chains across services",
+      "No failure handling"
+    ],
     "tags": ["architecture", "microservices", "system-design", "e-commerce"]
   },
   {
@@ -677,8 +1029,20 @@
     "domain": "security",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Identifies SQL injection", "Identifies plain text password storage", "Identifies hardcoded JWT secret", "Identifies wildcard CORS", "Identifies missing rate limiting", "Identifies excessive body size", "Provides fix for each vulnerability"],
-    "antiPatterns": ["Misses SQL injection", "Suggests minor fixes without addressing critical issues", "No remediation guidance"],
+    "qualityCriteria": [
+      "Identifies SQL injection",
+      "Identifies plain text password storage",
+      "Identifies hardcoded JWT secret",
+      "Identifies wildcard CORS",
+      "Identifies missing rate limiting",
+      "Identifies excessive body size",
+      "Provides fix for each vulnerability"
+    ],
+    "antiPatterns": [
+      "Misses SQL injection",
+      "Suggests minor fixes without addressing critical issues",
+      "No remediation guidance"
+    ],
     "tags": ["security", "audit", "express", "auth"]
   },
   {
@@ -688,8 +1052,20 @@
     "domain": "database",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["EXPLAIN ANALYZE recommendation", "Composite index suggestions", "Query rewrite with CTEs or subqueries", "Materialized view for common aggregations", "Table partitioning by date range", "Tradeoff analysis for each approach"],
-    "antiPatterns": ["Only suggests adding indexes", "No EXPLAIN usage", "Ignores partitioning", "No tradeoff discussion"],
+    "qualityCriteria": [
+      "EXPLAIN ANALYZE recommendation",
+      "Composite index suggestions",
+      "Query rewrite with CTEs or subqueries",
+      "Materialized view for common aggregations",
+      "Table partitioning by date range",
+      "Tradeoff analysis for each approach"
+    ],
+    "antiPatterns": [
+      "Only suggests adding indexes",
+      "No EXPLAIN usage",
+      "Ignores partitioning",
+      "No tradeoff discussion"
+    ],
     "tags": ["postgres", "performance", "optimization", "query-tuning"]
   },
   {
@@ -699,8 +1075,21 @@
     "domain": "auth",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Authorization code flow with PKCE", "Refresh token rotation", "Token revocation endpoint", "Scope validation", "CSRF protection", "Secure token storage", "Attack mitigation explanations"],
-    "antiPatterns": ["Simplified OAuth without PKCE", "No token rotation", "No revocation support", "Missing security protections"],
+    "qualityCriteria": [
+      "Authorization code flow with PKCE",
+      "Refresh token rotation",
+      "Token revocation endpoint",
+      "Scope validation",
+      "CSRF protection",
+      "Secure token storage",
+      "Attack mitigation explanations"
+    ],
+    "antiPatterns": [
+      "Simplified OAuth without PKCE",
+      "No token rotation",
+      "No revocation support",
+      "Missing security protections"
+    ],
     "tags": ["oauth", "auth", "security", "protocol"]
   },
   {
@@ -710,8 +1099,20 @@
     "domain": "algorithm",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Sliding window implementation", "Redis Lua script for atomicity", "Per-tier configuration", "Burst handling", "Graceful degradation fallback", "Race condition prevention"],
-    "antiPatterns": ["Fixed window instead of sliding", "Non-atomic Redis operations", "No fallback when Redis is down", "Single rate limit for all tiers"],
+    "qualityCriteria": [
+      "Sliding window implementation",
+      "Redis Lua script for atomicity",
+      "Per-tier configuration",
+      "Burst handling",
+      "Graceful degradation fallback",
+      "Race condition prevention"
+    ],
+    "antiPatterns": [
+      "Fixed window instead of sliding",
+      "Non-atomic Redis operations",
+      "No fallback when Redis is down",
+      "Single rate limit for all tiers"
+    ],
     "tags": ["rate-limiting", "redis", "distributed-systems", "algorithm"]
   },
   {
@@ -721,8 +1122,20 @@
     "domain": "infrastructure",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Parallel job structure", "Dependency caching strategy", "Docker layer caching", "Selective test running based on changes", "Specific time savings estimate per optimization", "Addresses monorepo-specific challenges"],
-    "antiPatterns": ["Vague suggestions without specifics", "Ignores caching", "Suggests removing tests", "No time estimates"],
+    "qualityCriteria": [
+      "Parallel job structure",
+      "Dependency caching strategy",
+      "Docker layer caching",
+      "Selective test running based on changes",
+      "Specific time savings estimate per optimization",
+      "Addresses monorepo-specific challenges"
+    ],
+    "antiPatterns": [
+      "Vague suggestions without specifics",
+      "Ignores caching",
+      "Suggests removing tests",
+      "No time estimates"
+    ],
     "tags": ["ci-cd", "performance", "github-actions", "devops", "monorepo"]
   },
   {
@@ -732,8 +1145,20 @@
     "domain": "database",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Primary/replica routing", "Health check mechanism", "Automatic failover", "Connection pooling", "Graceful shutdown with draining", "Read/write splitting"],
-    "antiPatterns": ["Single connection without pooling", "No failover", "No health checks", "Abrupt connection termination"],
+    "qualityCriteria": [
+      "Primary/replica routing",
+      "Health check mechanism",
+      "Automatic failover",
+      "Connection pooling",
+      "Graceful shutdown with draining",
+      "Read/write splitting"
+    ],
+    "antiPatterns": [
+      "Single connection without pooling",
+      "No failover",
+      "No health checks",
+      "Abrupt connection termination"
+    ],
     "tags": ["database", "connection-pool", "high-availability", "postgres"]
   },
   {
@@ -743,8 +1168,20 @@
     "domain": "general",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Heap snapshot methodology", "Specific tools (clinic.js, heapdump, Chrome DevTools)", "Common leak patterns for each technology", "Load test reproduction strategy", "Step-by-step debugging approach", "Addresses file upload stream handling"],
-    "antiPatterns": ["Just suggests adding more memory", "No systematic approach", "Ignores specific technologies mentioned", "No reproduction strategy"],
+    "qualityCriteria": [
+      "Heap snapshot methodology",
+      "Specific tools (clinic.js, heapdump, Chrome DevTools)",
+      "Common leak patterns for each technology",
+      "Load test reproduction strategy",
+      "Step-by-step debugging approach",
+      "Addresses file upload stream handling"
+    ],
+    "antiPatterns": [
+      "Just suggests adding more memory",
+      "No systematic approach",
+      "Ignores specific technologies mentioned",
+      "No reproduction strategy"
+    ],
     "tags": ["debugging", "memory-leak", "node", "performance"]
   },
   {
@@ -754,8 +1191,20 @@
     "domain": "infrastructure",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Active-active architecture", "GDPR data residency handling", "Latency-optimized read routing", "Conflict resolution for concurrent writes", "Strong consistency path for financial data", "DNS-level routing strategy"],
-    "antiPatterns": ["Active-passive only", "Ignores data residency", "No conflict resolution", "Hand-waves consistency"],
+    "qualityCriteria": [
+      "Active-active architecture",
+      "GDPR data residency handling",
+      "Latency-optimized read routing",
+      "Conflict resolution for concurrent writes",
+      "Strong consistency path for financial data",
+      "DNS-level routing strategy"
+    ],
+    "antiPatterns": [
+      "Active-passive only",
+      "Ignores data residency",
+      "No conflict resolution",
+      "Hand-waves consistency"
+    ],
     "tags": ["multi-region", "architecture", "gdpr", "database-replication", "system-design"]
   },
   {
@@ -765,8 +1214,20 @@
     "domain": "security",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["X3DH or similar key exchange", "Client-side encryption with Web Crypto", "Server never sees plaintext", "Key rotation mechanism", "Offline message handling", "Forward secrecy consideration"],
-    "antiPatterns": ["Server-side encryption called E2E", "No key exchange protocol", "No key rotation", "No offline handling"],
+    "qualityCriteria": [
+      "X3DH or similar key exchange",
+      "Client-side encryption with Web Crypto",
+      "Server never sees plaintext",
+      "Key rotation mechanism",
+      "Offline message handling",
+      "Forward secrecy consideration"
+    ],
+    "antiPatterns": [
+      "Server-side encryption called E2E",
+      "No key exchange protocol",
+      "No key rotation",
+      "No offline handling"
+    ],
     "tags": ["encryption", "e2ee", "web-crypto", "security", "messaging"]
   },
   {
@@ -776,8 +1237,20 @@
     "domain": "general",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Separate command and query models", "Event store implementation", "Projection rebuilding", "Out-of-order event handling", "Eventual consistency management", "Idempotent event processing"],
-    "antiPatterns": ["CRUD disguised as CQRS", "No event store", "No projection rebuilding", "Ignores out-of-order events"],
+    "qualityCriteria": [
+      "Separate command and query models",
+      "Event store implementation",
+      "Projection rebuilding",
+      "Out-of-order event handling",
+      "Eventual consistency management",
+      "Idempotent event processing"
+    ],
+    "antiPatterns": [
+      "CRUD disguised as CQRS",
+      "No event store",
+      "No projection rebuilding",
+      "Ignores out-of-order events"
+    ],
     "tags": ["cqrs", "event-sourcing", "architecture", "patterns"]
   },
   {
@@ -787,8 +1260,20 @@
     "domain": "api",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Idempotency key mechanism", "Response caching for replay", "Concurrent duplicate handling with locks", "TTL-based cleanup", "Race condition prevention", "Database-level uniqueness"],
-    "antiPatterns": ["Only handles sequential duplicates", "No concurrent request handling", "No cleanup strategy", "Application-level only without database backing"],
+    "qualityCriteria": [
+      "Idempotency key mechanism",
+      "Response caching for replay",
+      "Concurrent duplicate handling with locks",
+      "TTL-based cleanup",
+      "Race condition prevention",
+      "Database-level uniqueness"
+    ],
+    "antiPatterns": [
+      "Only handles sequential duplicates",
+      "No concurrent request handling",
+      "No cleanup strategy",
+      "Application-level only without database backing"
+    ],
     "tags": ["idempotency", "concurrency", "api-design", "high-throughput"]
   },
   {
@@ -798,8 +1283,20 @@
     "domain": "database",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["tsvector/tsquery implementation", "GIN/GiST index strategy", "Trigram similarity for typo tolerance", "Faceted search with aggregations", "Search highlighting with ts_headline", "Autocomplete with prefix matching"],
-    "antiPatterns": ["LIKE queries instead of FTS", "No indexing strategy", "No typo tolerance", "No result ranking"],
+    "qualityCriteria": [
+      "tsvector/tsquery implementation",
+      "GIN/GiST index strategy",
+      "Trigram similarity for typo tolerance",
+      "Faceted search with aggregations",
+      "Search highlighting with ts_headline",
+      "Autocomplete with prefix matching"
+    ],
+    "antiPatterns": [
+      "LIKE queries instead of FTS",
+      "No indexing strategy",
+      "No typo tolerance",
+      "No result ranking"
+    ],
     "tags": ["full-text-search", "postgres", "search", "performance"]
   },
   {
@@ -809,8 +1306,20 @@
     "domain": "auth",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Policy composition with boolean logic", "Resource attribute evaluation", "Time-based conditions", "IP restrictions", "Evaluation engine implementation", "Performance optimization for complex policies"],
-    "antiPatterns": ["Simple RBAC labeled as ABAC", "No policy composition", "O(n) evaluation for every request", "Hardcoded policies"],
+    "qualityCriteria": [
+      "Policy composition with boolean logic",
+      "Resource attribute evaluation",
+      "Time-based conditions",
+      "IP restrictions",
+      "Evaluation engine implementation",
+      "Performance optimization for complex policies"
+    ],
+    "antiPatterns": [
+      "Simple RBAC labeled as ABAC",
+      "No policy composition",
+      "O(n) evaluation for every request",
+      "Hardcoded policies"
+    ],
     "tags": ["abac", "authorization", "policy-engine", "security"]
   },
   {
@@ -820,8 +1329,20 @@
     "domain": "general",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Strangler fig pattern", "Domain-driven service boundary identification", "Data migration strategy with dual-write", "Cross-service transaction handling", "Zero-downtime migration steps", "Realistic timeline with phases"],
-    "antiPatterns": ["Big bang rewrite", "No data migration strategy", "Ignores cross-service transactions", "Unrealistic timeline"],
+    "qualityCriteria": [
+      "Strangler fig pattern",
+      "Domain-driven service boundary identification",
+      "Data migration strategy with dual-write",
+      "Cross-service transaction handling",
+      "Zero-downtime migration steps",
+      "Realistic timeline with phases"
+    ],
+    "antiPatterns": [
+      "Big bang rewrite",
+      "No data migration strategy",
+      "Ignores cross-service transactions",
+      "Unrealistic timeline"
+    ],
     "tags": ["microservices", "migration", "architecture", "monolith"]
   },
   {
@@ -831,8 +1352,20 @@
     "domain": "database",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Type-safe column references", "Compile-time query validation", "All SQL operations supported", "Nested WHERE clauses", "Subquery support", "Clean builder API"],
-    "antiPatterns": ["String concatenation", "No type safety", "Missing SQL operations", "SQL injection vulnerability"],
+    "qualityCriteria": [
+      "Type-safe column references",
+      "Compile-time query validation",
+      "All SQL operations supported",
+      "Nested WHERE clauses",
+      "Subquery support",
+      "Clean builder API"
+    ],
+    "antiPatterns": [
+      "String concatenation",
+      "No type safety",
+      "Missing SQL operations",
+      "SQL injection vulnerability"
+    ],
     "tags": ["query-builder", "typescript", "type-safety", "database"]
   },
   {
@@ -842,8 +1375,20 @@
     "domain": "infrastructure",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Identifies graceful shutdown issue", "Checks preStop hook configuration", "Examines readiness probe timing", "Considers connection draining", "Addresses PgBouncer connection handling", "Provides concrete fix with YAML"],
-    "antiPatterns": ["Generic Kubernetes troubleshooting", "Ignores graceful shutdown", "Suggests increasing replicas as fix", "No concrete fix"],
+    "qualityCriteria": [
+      "Identifies graceful shutdown issue",
+      "Checks preStop hook configuration",
+      "Examines readiness probe timing",
+      "Considers connection draining",
+      "Addresses PgBouncer connection handling",
+      "Provides concrete fix with YAML"
+    ],
+    "antiPatterns": [
+      "Generic Kubernetes troubleshooting",
+      "Ignores graceful shutdown",
+      "Suggests increasing replicas as fix",
+      "No concrete fix"
+    ],
     "tags": ["kubernetes", "debugging", "deployment", "infrastructure"]
   },
   {
@@ -853,8 +1398,20 @@
     "domain": "algorithm",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["OT transformation functions for insert/delete", "Server coordination with operation ordering", "Client-side optimistic prediction", "Conflict resolution correctness", "OT vs CRDT tradeoff discussion", "Convergence guarantee explanation"],
-    "antiPatterns": ["Last-write-wins conflict resolution", "No concurrent edit handling", "Incorrect transformation functions", "No convergence proof/reasoning"],
+    "qualityCriteria": [
+      "OT transformation functions for insert/delete",
+      "Server coordination with operation ordering",
+      "Client-side optimistic prediction",
+      "Conflict resolution correctness",
+      "OT vs CRDT tradeoff discussion",
+      "Convergence guarantee explanation"
+    ],
+    "antiPatterns": [
+      "Last-write-wins conflict resolution",
+      "No concurrent edit handling",
+      "Incorrect transformation functions",
+      "No convergence proof/reasoning"
+    ],
     "tags": ["collaborative-editing", "ot", "real-time", "algorithm", "distributed-systems"]
   },
   {
@@ -864,8 +1421,20 @@
     "domain": "database",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Multi-phase migration approach", "No table locks", "Dual-write/dual-read phase", "Application-level compatibility", "Reversibility at each phase", "Specific SQL for each step"],
-    "antiPatterns": ["Single ALTER TABLE RENAME", "Ignores query volume", "No rollback plan", "Requires downtime"],
+    "qualityCriteria": [
+      "Multi-phase migration approach",
+      "No table locks",
+      "Dual-write/dual-read phase",
+      "Application-level compatibility",
+      "Reversibility at each phase",
+      "Specific SQL for each step"
+    ],
+    "antiPatterns": [
+      "Single ALTER TABLE RENAME",
+      "Ignores query volume",
+      "No rollback plan",
+      "Requires downtime"
+    ],
     "tags": ["database-migration", "zero-downtime", "postgres", "operations"]
   },
   {
@@ -875,8 +1444,20 @@
     "domain": "infrastructure",
     "expectedTier": "large",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Multi-tier cache architecture", "Cache invalidation with surrogate keys", "Cache-control header strategy", "Stale-while-revalidate usage", "Cache stampede prevention", "Edge vs origin logic"],
-    "antiPatterns": ["Single cache layer", "No invalidation strategy", "Cache-all or cache-nothing", "No stampede prevention"],
+    "qualityCriteria": [
+      "Multi-tier cache architecture",
+      "Cache invalidation with surrogate keys",
+      "Cache-control header strategy",
+      "Stale-while-revalidate usage",
+      "Cache stampede prevention",
+      "Edge vs origin logic"
+    ],
+    "antiPatterns": [
+      "Single cache layer",
+      "No invalidation strategy",
+      "Cache-all or cache-nothing",
+      "No stampede prevention"
+    ],
     "tags": ["caching", "cdn", "performance", "architecture"]
   },
   {
@@ -886,8 +1467,20 @@
     "domain": "algorithm",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Correct min-heap/sweep-line approach", "O(n log n) time complexity", "Room assignment tracking", "Attendee optimization extension", "Clear complexity analysis", "Handles edge cases (overlapping, single meeting)"],
-    "antiPatterns": ["Brute force O(n^2) without acknowledging it", "Missing edge cases", "No complexity analysis", "Ignores attendee optimization"],
+    "qualityCriteria": [
+      "Correct min-heap/sweep-line approach",
+      "O(n log n) time complexity",
+      "Room assignment tracking",
+      "Attendee optimization extension",
+      "Clear complexity analysis",
+      "Handles edge cases (overlapping, single meeting)"
+    ],
+    "antiPatterns": [
+      "Brute force O(n^2) without acknowledging it",
+      "Missing edge cases",
+      "No complexity analysis",
+      "Ignores attendee optimization"
+    ],
     "tags": ["algorithm", "scheduling", "heap", "optimization"]
   },
   {
@@ -897,8 +1490,21 @@
     "domain": "general",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Identifies request waterfall as primary issue", "API aggregation/BFF pattern", "Code splitting and lazy loading", "Chart rendering optimization", "Critical rendering path analysis", "Progressive loading strategy", "Specific 3G bandwidth calculations"],
-    "antiPatterns": ["Just add a CDN", "Remove charts", "Only addresses one dimension of the problem", "No calculations for 3G constraints"],
+    "qualityCriteria": [
+      "Identifies request waterfall as primary issue",
+      "API aggregation/BFF pattern",
+      "Code splitting and lazy loading",
+      "Chart rendering optimization",
+      "Critical rendering path analysis",
+      "Progressive loading strategy",
+      "Specific 3G bandwidth calculations"
+    ],
+    "antiPatterns": [
+      "Just add a CDN",
+      "Remove charts",
+      "Only addresses one dimension of the problem",
+      "No calculations for 3G constraints"
+    ],
     "tags": ["performance", "frontend", "debugging", "optimization"]
   },
   {
@@ -908,8 +1514,20 @@
     "domain": "algorithm",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Multi-signal scoring approach", "Real-time data structure choices (bloom filter, sliding window)", "Cold-start strategy", "False positive/negative tradeoff analysis", "Throughput-aware design", "Explains why specific thresholds"],
-    "antiPatterns": ["Simple rule-based system only", "Ignores throughput requirements", "No cold-start handling", "No false positive analysis"],
+    "qualityCriteria": [
+      "Multi-signal scoring approach",
+      "Real-time data structure choices (bloom filter, sliding window)",
+      "Cold-start strategy",
+      "False positive/negative tradeoff analysis",
+      "Throughput-aware design",
+      "Explains why specific thresholds"
+    ],
+    "antiPatterns": [
+      "Simple rule-based system only",
+      "Ignores throughput requirements",
+      "No cold-start handling",
+      "No false positive analysis"
+    ],
     "tags": ["algorithm", "fraud-detection", "real-time", "data-structures"]
   },
   {
@@ -919,8 +1537,20 @@
     "domain": "general",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Timeout budget analysis from end to end", "Circuit breaker placement with justification", "Bulkhead isolation pattern", "Graceful degradation strategy for D failure", "Specific timeout values with reasoning", "Fallback behavior per service"],
-    "antiPatterns": ["Same timeout everywhere", "Circuit breakers on every call without analysis", "No graceful degradation", "Generic resilience advice"],
+    "qualityCriteria": [
+      "Timeout budget analysis from end to end",
+      "Circuit breaker placement with justification",
+      "Bulkhead isolation pattern",
+      "Graceful degradation strategy for D failure",
+      "Specific timeout values with reasoning",
+      "Fallback behavior per service"
+    ],
+    "antiPatterns": [
+      "Same timeout everywhere",
+      "Circuit breakers on every call without analysis",
+      "No graceful degradation",
+      "Generic resilience advice"
+    ],
     "tags": ["resilience", "distributed-systems", "circuit-breaker", "architecture"]
   },
   {
@@ -930,8 +1560,20 @@
     "domain": "algorithm",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Correct hash ring implementation", "Virtual nodes for uniformity", "Minimal redistribution on membership change", "Replication across consecutive nodes", "Mathematical analysis of redistribution", "Virtual node count impact analysis"],
-    "antiPatterns": ["Modulo hashing instead of consistent hashing", "No virtual nodes", "Full redistribution on node change", "No mathematical analysis"],
+    "qualityCriteria": [
+      "Correct hash ring implementation",
+      "Virtual nodes for uniformity",
+      "Minimal redistribution on membership change",
+      "Replication across consecutive nodes",
+      "Mathematical analysis of redistribution",
+      "Virtual node count impact analysis"
+    ],
+    "antiPatterns": [
+      "Modulo hashing instead of consistent hashing",
+      "No virtual nodes",
+      "Full redistribution on node change",
+      "No mathematical analysis"
+    ],
     "tags": ["consistent-hashing", "distributed-systems", "algorithm", "data-structures"]
   },
   {
@@ -941,8 +1583,20 @@
     "domain": "database",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Write amplification analysis for fan-out on write", "Read latency analysis for fan-out on read", "Celebrity problem identification", "Hybrid approach with threshold", "Specific capacity calculations", "Storage and throughput estimates"],
-    "antiPatterns": ["Picks one without analyzing both", "Ignores celebrity problem", "No numerical analysis", "No hybrid consideration"],
+    "qualityCriteria": [
+      "Write amplification analysis for fan-out on write",
+      "Read latency analysis for fan-out on read",
+      "Celebrity problem identification",
+      "Hybrid approach with threshold",
+      "Specific capacity calculations",
+      "Storage and throughput estimates"
+    ],
+    "antiPatterns": [
+      "Picks one without analyzing both",
+      "Ignores celebrity problem",
+      "No numerical analysis",
+      "No hybrid consideration"
+    ],
     "tags": ["system-design", "database", "feed", "tradeoff-analysis"]
   },
   {
@@ -952,8 +1606,20 @@
     "domain": "database",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Identifies TOCTOU race condition", "SELECT FOR UPDATE solution", "CHECK constraint solution", "Application-level mutex option", "Atomicoperator (UPDATE ... WHERE balance >= amount)", "Performance analysis of each approach under concurrency"],
-    "antiPatterns": ["Only provides one solution", "Doesn't explain the race condition clearly", "No performance analysis", "Suggests only application-level locking"],
+    "qualityCriteria": [
+      "Identifies TOCTOU race condition",
+      "SELECT FOR UPDATE solution",
+      "CHECK constraint solution",
+      "Application-level mutex option",
+      "Atomicoperator (UPDATE ... WHERE balance >= amount)",
+      "Performance analysis of each approach under concurrency"
+    ],
+    "antiPatterns": [
+      "Only provides one solution",
+      "Doesn't explain the race condition clearly",
+      "No performance analysis",
+      "Suggests only application-level locking"
+    ],
     "tags": ["race-condition", "concurrency", "database", "debugging"]
   },
   {
@@ -963,8 +1629,20 @@
     "domain": "general",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Base62 encoding with 56.8B combinations for 6 chars", "Async analytics to avoid latency impact", "Collision detection strategy", "URL expiration with TTL", "Abuse prevention (rate limiting, blocklists)", "Migration strategy for code length increase"],
-    "antiPatterns": ["No capacity calculation", "Synchronous analytics blocking redirects", "No collision handling", "No abuse prevention"],
+    "qualityCriteria": [
+      "Base62 encoding with 56.8B combinations for 6 chars",
+      "Async analytics to avoid latency impact",
+      "Collision detection strategy",
+      "URL expiration with TTL",
+      "Abuse prevention (rate limiting, blocklists)",
+      "Migration strategy for code length increase"
+    ],
+    "antiPatterns": [
+      "No capacity calculation",
+      "Synchronous analytics blocking redirects",
+      "No collision handling",
+      "No abuse prevention"
+    ],
     "tags": ["system-design", "url-shortener", "scale", "calculation"]
   },
   {
@@ -974,8 +1652,20 @@
     "domain": "algorithm",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Structural sharing or diff-based approach", "Command pattern with inverse operations", "Branch handling (undo + new edit)", "Memory analysis comparison", "1000+ step performance", "Handles nested structures"],
-    "antiPatterns": ["Full state snapshots", "No branch handling", "No memory analysis", "Ignores nested structure complexity"],
+    "qualityCriteria": [
+      "Structural sharing or diff-based approach",
+      "Command pattern with inverse operations",
+      "Branch handling (undo + new edit)",
+      "Memory analysis comparison",
+      "1000+ step performance",
+      "Handles nested structures"
+    ],
+    "antiPatterns": [
+      "Full state snapshots",
+      "No branch handling",
+      "No memory analysis",
+      "Ignores nested structure complexity"
+    ],
     "tags": ["undo-redo", "algorithm", "data-structures", "performance"]
   },
   {
@@ -985,8 +1675,20 @@
     "domain": "infrastructure",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Dependency graph construction", "Content hashing for change detection", "Topological sort for build order", "Parallel execution within dependency constraints", "Diamond dependency correct handling", "Comparison with Turborepo/Nx approaches"],
-    "antiPatterns": ["Timestamp-based detection", "Serial builds", "Ignores diamond dependency", "No caching strategy"],
+    "qualityCriteria": [
+      "Dependency graph construction",
+      "Content hashing for change detection",
+      "Topological sort for build order",
+      "Parallel execution within dependency constraints",
+      "Diamond dependency correct handling",
+      "Comparison with Turborepo/Nx approaches"
+    ],
+    "antiPatterns": [
+      "Timestamp-based detection",
+      "Serial builds",
+      "Ignores diamond dependency",
+      "No caching strategy"
+    ],
     "tags": ["build-system", "monorepo", "performance", "incremental-builds"]
   },
   {
@@ -996,8 +1698,20 @@
     "domain": "security",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Immediate token blacklist/denylist", "JTI-based revocation without global invalidation", "Log sanitization middleware", "Signing key rotation analysis", "Impact assessment for 100K sessions", "Timeline of actions"],
-    "antiPatterns": ["Just rotate the signing key immediately", "No log prevention strategy", "Ignores impact on other sessions", "No urgency timeline"],
+    "qualityCriteria": [
+      "Immediate token blacklist/denylist",
+      "JTI-based revocation without global invalidation",
+      "Log sanitization middleware",
+      "Signing key rotation analysis",
+      "Impact assessment for 100K sessions",
+      "Timeline of actions"
+    ],
+    "antiPatterns": [
+      "Just rotate the signing key immediately",
+      "No log prevention strategy",
+      "Ignores impact on other sessions",
+      "No urgency timeline"
+    ],
     "tags": ["incident-response", "jwt", "security", "auth"]
   },
   {
@@ -1007,8 +1721,21 @@
     "domain": "algorithm",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Cron expression parsing", "Persistent task storage", "Dependency graph execution", "Priority queue for scheduling", "Missed task recovery strategy", "Clock skew handling", "Multi-instance coordination"],
-    "antiPatterns": ["In-memory only", "No missed task handling", "No multi-instance safety", "Ignores clock skew"],
+    "qualityCriteria": [
+      "Cron expression parsing",
+      "Persistent task storage",
+      "Dependency graph execution",
+      "Priority queue for scheduling",
+      "Missed task recovery strategy",
+      "Clock skew handling",
+      "Multi-instance coordination"
+    ],
+    "antiPatterns": [
+      "In-memory only",
+      "No missed task handling",
+      "No multi-instance safety",
+      "Ignores clock skew"
+    ],
     "tags": ["scheduler", "cron", "algorithm", "distributed-systems"]
   },
   {
@@ -1018,8 +1745,20 @@
     "domain": "infrastructure",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["All three approaches fully analyzed", "Bandwidth calculation (50GB concurrent)", "Server resource analysis", "Failure handling per approach", "Security comparison", "Clear recommendation with justification"],
-    "antiPatterns": ["Picks one without analyzing others", "No bandwidth calculations", "Ignores failure handling", "No security analysis"],
+    "qualityCriteria": [
+      "All three approaches fully analyzed",
+      "Bandwidth calculation (50GB concurrent)",
+      "Server resource analysis",
+      "Failure handling per approach",
+      "Security comparison",
+      "Clear recommendation with justification"
+    ],
+    "antiPatterns": [
+      "Picks one without analyzing others",
+      "No bandwidth calculations",
+      "Ignores failure handling",
+      "No security analysis"
+    ],
     "tags": ["file-upload", "system-design", "s3", "tradeoff-analysis"]
   },
   {
@@ -1029,8 +1768,20 @@
     "domain": "database",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Explains PgBouncer transaction mode connection reassignment", "MVCC snapshot timing explanation", "Connection affinity solution or explicit transaction", "Performance impact quantification", "Doesn't default to serializable", "Addresses ORM connection behavior"],
-    "antiPatterns": ["Just change isolation level", "Doesn't explain PgBouncer interaction", "No performance analysis", "Misidentifies the cause"],
+    "qualityCriteria": [
+      "Explains PgBouncer transaction mode connection reassignment",
+      "MVCC snapshot timing explanation",
+      "Connection affinity solution or explicit transaction",
+      "Performance impact quantification",
+      "Doesn't default to serializable",
+      "Addresses ORM connection behavior"
+    ],
+    "antiPatterns": [
+      "Just change isolation level",
+      "Doesn't explain PgBouncer interaction",
+      "No performance analysis",
+      "Misidentifies the cause"
+    ],
     "tags": ["postgres", "pgbouncer", "mvcc", "debugging", "concurrency"]
   },
   {
@@ -1040,8 +1791,20 @@
     "domain": "general",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Channel x event type preference matrix", "Quiet hours with timezone handling", "Frequency cap implementation", "Escalation chain logic", "Batch digest aggregation", "Timezone change edge case handling"],
-    "antiPatterns": ["Simple on/off per channel", "Ignores timezone complexity", "No frequency caps", "No escalation logic"],
+    "qualityCriteria": [
+      "Channel x event type preference matrix",
+      "Quiet hours with timezone handling",
+      "Frequency cap implementation",
+      "Escalation chain logic",
+      "Batch digest aggregation",
+      "Timezone change edge case handling"
+    ],
+    "antiPatterns": [
+      "Simple on/off per channel",
+      "Ignores timezone complexity",
+      "No frequency caps",
+      "No escalation logic"
+    ],
     "tags": ["notifications", "system-design", "preferences", "timezone"]
   },
   {
@@ -1051,8 +1814,21 @@
     "domain": "algorithm",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Root set traversal", "Cycle-handling mark phase", "Sweep with compaction", "Generational optimization", "Pause time analysis", "Mark-sweep vs refcount comparison", "Worst-case calculation for 1GB heap"],
-    "antiPatterns": ["Reference counting without cycle handling", "No compaction", "No generational optimization", "No pause time analysis"],
+    "qualityCriteria": [
+      "Root set traversal",
+      "Cycle-handling mark phase",
+      "Sweep with compaction",
+      "Generational optimization",
+      "Pause time analysis",
+      "Mark-sweep vs refcount comparison",
+      "Worst-case calculation for 1GB heap"
+    ],
+    "antiPatterns": [
+      "Reference counting without cycle handling",
+      "No compaction",
+      "No generational optimization",
+      "No pause time analysis"
+    ],
     "tags": ["garbage-collection", "algorithm", "memory-management", "runtime"]
   },
   {
@@ -1062,8 +1838,20 @@
     "domain": "database",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Three approaches fully analyzed", "Storage overhead calculations", "Write amplification analysis", "Staleness guarantee comparison", "Operational complexity assessment", "Clear recommendation for 2B row scale"],
-    "antiPatterns": ["Only considers one approach", "No storage calculations", "Ignores write amplification", "Recommendation without scale analysis"],
+    "qualityCriteria": [
+      "Three approaches fully analyzed",
+      "Storage overhead calculations",
+      "Write amplification analysis",
+      "Staleness guarantee comparison",
+      "Operational complexity assessment",
+      "Clear recommendation for 2B row scale"
+    ],
+    "antiPatterns": [
+      "Only considers one approach",
+      "No storage calculations",
+      "Ignores write amplification",
+      "Recommendation without scale analysis"
+    ],
     "tags": ["database", "postgres", "scale", "materialized-view", "tradeoff-analysis"]
   },
   {
@@ -1073,8 +1861,20 @@
     "domain": "api",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["All features addressed", "Hot path vs async separation", "Sub-5ms latency design", "Canary routing implementation", "Circuit breaker integration", "Metrics collection without blocking"],
-    "antiPatterns": ["All features synchronous in hot path", "No latency analysis", "Missing features", "No canary deployment handling"],
+    "qualityCriteria": [
+      "All features addressed",
+      "Hot path vs async separation",
+      "Sub-5ms latency design",
+      "Canary routing implementation",
+      "Circuit breaker integration",
+      "Metrics collection without blocking"
+    ],
+    "antiPatterns": [
+      "All features synchronous in hot path",
+      "No latency analysis",
+      "Missing features",
+      "No canary deployment handling"
+    ],
     "tags": ["api-gateway", "architecture", "performance", "system-design"]
   },
   {
@@ -1084,8 +1884,20 @@
     "domain": "general",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Contract testing between packages", "Build-time type verification across packages", "Deployment ordering strategy", "Runtime compatibility check", "API versioning approach", "CI pipeline changes to catch cross-package breaks"],
-    "antiPatterns": ["Only adds more unit tests", "No runtime verification", "No deployment ordering", "Ignores built artifact compatibility"],
+    "qualityCriteria": [
+      "Contract testing between packages",
+      "Build-time type verification across packages",
+      "Deployment ordering strategy",
+      "Runtime compatibility check",
+      "API versioning approach",
+      "CI pipeline changes to catch cross-package breaks"
+    ],
+    "antiPatterns": [
+      "Only adds more unit tests",
+      "No runtime verification",
+      "No deployment ordering",
+      "Ignores built artifact compatibility"
+    ],
     "tags": ["monorepo", "type-safety", "deployment", "contract-testing"]
   },
   {
@@ -1095,8 +1907,20 @@
     "domain": "algorithm",
     "expectedTier": "reasoning",
     "expectedPipeline": "complex",
-    "qualityCriteria": ["Correct BFT protocol implementation", "3f+1 bound proof", "Message exchange with pre-prepare/prepare/commit phases", "Network partition handling", "Message complexity analysis O(n^2)", "Raft comparison (crash vs Byzantine faults)"],
-    "antiPatterns": ["Raft implementation labeled as BFT", "No Byzantine fault handling", "No mathematical proof of bounds", "Ignores network partitions"],
+    "qualityCriteria": [
+      "Correct BFT protocol implementation",
+      "3f+1 bound proof",
+      "Message exchange with pre-prepare/prepare/commit phases",
+      "Network partition handling",
+      "Message complexity analysis O(n^2)",
+      "Raft comparison (crash vs Byzantine faults)"
+    ],
+    "antiPatterns": [
+      "Raft implementation labeled as BFT",
+      "No Byzantine fault handling",
+      "No mathematical proof of bounds",
+      "Ignores network partitions"
+    ],
     "tags": ["distributed-systems", "consensus", "bft", "algorithm", "fault-tolerance"]
   }
 ]

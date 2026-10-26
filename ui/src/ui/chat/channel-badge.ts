@@ -88,7 +88,9 @@ export function extractChannelFromSessionKey(sessionKey: string): string | null 
  * @param channel - Channel identifier (e.g., "whatsapp", "telegram")
  * @returns Lit TemplateResult for the badge, or `nothing`
  */
-export function renderChannelBadge(channel: string | null | undefined): typeof nothing | TemplateResult {
+export function renderChannelBadge(
+  channel: string | null | undefined,
+): typeof nothing | TemplateResult {
   if (!channel) {
     return nothing;
   }

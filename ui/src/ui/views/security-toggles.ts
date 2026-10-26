@@ -1,5 +1,9 @@
 import { html, nothing, type TemplateResult } from "lit";
-import { SECURITY_TOGGLE_GROUPS, type ToggleGroup, type ToggleMeta } from "./security-toggles.data.ts";
+import {
+  SECURITY_TOGGLE_GROUPS,
+  type ToggleGroup,
+  type ToggleMeta,
+} from "./security-toggles.data.ts";
 
 export type SecurityTogglesProps = {
   configForm: Record<string, unknown> | null;
@@ -34,11 +38,13 @@ function renderToggle(toggle: ToggleMeta, props: SecurityTogglesProps): Template
         <div style="flex:1;">
           <div style="font-weight:500;font-size:0.875rem;">${toggle.label}</div>
           <div style="font-size:0.75rem;opacity:0.6;">${toggle.description}</div>
-          ${toggle.restartRequired
-            ? html`<div style="font-size:0.7rem;color:var(--warning);margin-top:2px;">
-                Requires restart
-              </div>`
-            : nothing}
+          ${
+            toggle.restartRequired
+              ? html`
+                  <div style="font-size: 0.7rem; color: var(--warning); margin-top: 2px">Requires restart</div>
+                `
+              : nothing
+          }
         </div>
         <label
           class="switch"
@@ -74,11 +80,13 @@ function renderToggle(toggle: ToggleMeta, props: SecurityTogglesProps): Template
         <div style="flex:1;">
           <div style="font-weight:500;font-size:0.875rem;">${toggle.label}</div>
           <div style="font-size:0.75rem;opacity:0.6;">${toggle.description}</div>
-          ${toggle.restartRequired
-            ? html`<div style="font-size:0.7rem;color:var(--warning);margin-top:2px;">
-                Requires restart
-              </div>`
-            : nothing}
+          ${
+            toggle.restartRequired
+              ? html`
+                  <div style="font-size: 0.7rem; color: var(--warning); margin-top: 2px">Requires restart</div>
+                `
+              : nothing
+          }
         </div>
         <select
           style="background:var(--surface-2, rgba(255,255,255,0.04));color:inherit;border:1px solid var(--border, rgba(255,255,255,0.08));border-radius:6px;padding:4px 8px;font-size:0.8rem;"
@@ -115,11 +123,13 @@ function renderGroup(group: ToggleGroup, props: SecurityTogglesProps): TemplateR
         </div>
         <span style="font-size:1.1rem;opacity:0.5;">${expanded ? "−" : "+"}</span>
       </button>
-      ${expanded
-        ? html`<div class="accordion-body" style="padding:8px 16px;">
+      ${
+        expanded
+          ? html`<div class="accordion-body" style="padding:8px 16px;">
             ${group.toggles.map((t) => renderToggle(t, props))}
           </div>`
-        : nothing}
+          : nothing
+      }
     </div>
   `;
 }
@@ -129,8 +139,9 @@ export function renderSecurityToggles(props: SecurityTogglesProps): TemplateResu
     <section class="card" style="margin-bottom:24px;">
       <h3 style="margin:0 0 16px;font-size:1rem;font-weight:600;">Security Controls</h3>
       ${SECURITY_TOGGLE_GROUPS.map((g) => renderGroup(g, props))}
-      ${props.configDirty
-        ? html`<div
+      ${
+        props.configDirty
+          ? html`<div
             class="sticky-footer"
             style="position:sticky;bottom:0;background:var(--surface-1, #1a1a2e);padding:12px 0;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border, rgba(255,255,255,0.08));margin-top:16px;"
           >
@@ -149,7 +160,8 @@ export function renderSecurityToggles(props: SecurityTogglesProps): TemplateResu
               Save & Apply
             </button>
           </div>`
-        : nothing}
+          : nothing
+      }
     </section>
   `;
 }

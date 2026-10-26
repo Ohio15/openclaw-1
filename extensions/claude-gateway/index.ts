@@ -25,12 +25,12 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { createPresetLoader, type PresetStore } from "./src/preset-loader.js";
-import { syncPresetsToCron, type CronApi } from "./src/preset-cron-sync.js";
+import { registerMigrateCli } from "./src/migrate.js";
 import { createAlertKeywordHandler } from "./src/preset-alert-keywords.js";
+import { syncPresetsToCron, type CronApi } from "./src/preset-cron-sync.js";
+import { createPresetLoader, type PresetStore } from "./src/preset-loader.js";
 import { createPresetHttpHandler } from "./src/preset-routes.js";
 import { createPwaHttpHandler } from "./src/pwa-routes.js";
-import { registerMigrateCli } from "./src/migrate.js";
 import type { ClaudeGatewayConfig } from "./src/types.js";
 
 let presetStore: PresetStore | undefined;
@@ -69,7 +69,9 @@ const claudeGatewayPlugin = {
 
     // Hook: gateway_start — sync presets to cron
     api.on("gateway_start", async () => {
-      api.logger.info(`[claude-gateway] Gateway started, syncing ${presetStore!.scheduled().length} scheduled presets to cron`);
+      api.logger.info(
+        `[claude-gateway] Gateway started, syncing ${presetStore!.scheduled().length} scheduled presets to cron`,
+      );
     });
 
     // Gateway method: preset.list
@@ -192,7 +194,12 @@ const claudeGatewayPlugin = {
       reload: async () => {
         presetStore!.reload();
         if (cronRef) {
-          const cronResult = await syncPresetsToCron(cronRef, presetStore!.listAll(), cfg.delivery, api.logger);
+          const cronResult = await syncPresetsToCron(
+            cronRef,
+            presetStore!.listAll(),
+            cfg.delivery,
+            api.logger,
+          );
           return { presetsLoaded: presetStore!.listAll().length, cronSync: cronResult };
         }
         return { presetsLoaded: presetStore!.listAll().length, cronSync: null };
@@ -218,7 +225,9 @@ const claudeGatewayPlugin = {
       { commands: ["gateway:migrate"] },
     );
 
-    api.logger.info(`[claude-gateway] Registered with ${presetStore.listAll().length} presets (${presetStore.scheduled().length} scheduled)`);
+    api.logger.info(
+      `[claude-gateway] Registered with ${presetStore.listAll().length} presets (${presetStore.scheduled().length} scheduled)`,
+    );
     api.logger.info(`[claude-gateway] HTTP handlers: /gateway/presets/* and /gateway/ui/*`);
   },
 

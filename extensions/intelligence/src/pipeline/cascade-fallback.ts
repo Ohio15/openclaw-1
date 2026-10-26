@@ -16,8 +16,8 @@
  * @module cascade-fallback
  */
 
-import { MODEL_TIERS } from "../config/routing-authority.js";
 import { consumeCascadeSignal } from "../../../../src/intelligence/cascade-state.js";
+import { MODEL_TIERS } from "../config/routing-authority.js";
 import type { ModelTierResolver } from "./model-tier-resolver.js";
 
 // ============================================================================
@@ -111,18 +111,14 @@ export async function runWithQualityCascade<T>(params: CascadeRunParams<T>): Pro
 
     // Already at ceiling tier — accept whatever we got
     if (currentTier === CEILING_TIER) {
-      logger.info(
-        `intelligence: cascade — at ceiling tier "${CEILING_TIER}", accepting response`,
-      );
+      logger.info(`intelligence: cascade — at ceiling tier "${CEILING_TIER}", accepting response`);
       break;
     }
 
     // Resolve next tier
     const nextTier = getNextTier(currentTier);
     if (!nextTier) {
-      logger.warn(
-        `intelligence: cascade — no tier above "${currentTier}", accepting response`,
-      );
+      logger.warn(`intelligence: cascade — no tier above "${currentTier}", accepting response`);
       break;
     }
 
@@ -138,8 +134,8 @@ export async function runWithQualityCascade<T>(params: CascadeRunParams<T>): Pro
     cascadeAttempts += 1;
     logger.info(
       `intelligence: cascade — escalating from "${currentTier}" to "${nextTier}" ` +
-      `(attempt ${cascadeAttempts}/${config.cascadeMaxRetries}, ` +
-      `model=${override.modelOverride}, provider=${override.providerOverride ?? "default"})`,
+        `(attempt ${cascadeAttempts}/${config.cascadeMaxRetries}, ` +
+        `model=${override.modelOverride}, provider=${override.providerOverride ?? "default"})`,
     );
 
     // Re-invoke with the higher-tier model

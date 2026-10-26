@@ -20,7 +20,7 @@ describe("EnhancedCompactionManager", () => {
     manager = new EnhancedCompactionManager({
       enabled: true,
       triggers: {
-        tokenCountThreshold: 1000,    // low for testing
+        tokenCountThreshold: 1000, // low for testing
         messageCountThreshold: 10,
         capacityFraction: 0.35,
       },

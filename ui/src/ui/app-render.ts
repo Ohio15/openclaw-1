@@ -7,6 +7,7 @@ import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.h
 import type { AppViewState } from "./app-view-state.ts";
 import type { OpenClawApp } from "./app.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
+import { compileAgentGraphData } from "./controllers/agent-graph.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
@@ -45,8 +46,10 @@ import {
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
 import { loadLogs } from "./controllers/logs.ts";
+import { buildMetricsDashboardData } from "./controllers/metrics.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
+import { fetchPreset, fetchPresets, reloadPresets, runPreset } from "./controllers/presets.ts";
 import { loadSecurityAudit, patchSecurityToggle } from "./controllers/security.ts";
 import { deleteSessionAndRefresh, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
@@ -58,6 +61,7 @@ import {
 } from "./controllers/skills.ts";
 import { icons } from "./icons.ts";
 import { normalizeBasePath, SIDEBAR_TABS, subtitleForTab, titleForTab } from "./navigation.ts";
+import { renderAgentsGraph } from "./views/agents-graph.ts";
 import { renderAgents } from "./views/agents.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
@@ -67,21 +71,17 @@ import { renderDebug } from "./views/debug.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
 import { renderInstances } from "./views/instances.ts";
-import { renderLogs } from "./views/logs.ts";
-import { renderNodes } from "./views/nodes.ts";
 import { renderIntelligenceDashboard } from "./views/intelligence-dashboard.ts";
+import { renderLogs } from "./views/logs.ts";
+import { renderMetricsDashboard } from "./views/metrics-dashboard.ts";
+import { renderNodes } from "./views/nodes.ts";
 import { renderOverview } from "./views/overview.ts";
-import { renderSettingsSubTabs, renderAppearanceSettings } from "./views/settings-page.ts";
+import { renderPresets } from "./views/presets.ts";
+import { renderRoutingDashboard } from "./views/routing-dashboard.ts";
 import { renderSecurity } from "./views/security.ts";
 import { renderSessions } from "./views/sessions.ts";
+import { renderSettingsSubTabs, renderAppearanceSettings } from "./views/settings-page.ts";
 import { renderSkills } from "./views/skills.ts";
-import { renderPresets } from "./views/presets.ts";
-import { fetchPreset, fetchPresets, reloadPresets, runPreset } from "./controllers/presets.ts";
-import { renderRoutingDashboard } from "./views/routing-dashboard.ts";
-import { renderMetricsDashboard } from "./views/metrics-dashboard.ts";
-import { buildMetricsDashboardData } from "./controllers/metrics.ts";
-import { renderAgentsGraph } from "./views/agents-graph.ts";
-import { compileAgentGraphData } from "./controllers/agent-graph.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -155,7 +155,9 @@ export function renderApp(state: AppViewState) {
             <span class="mono">${state.connected ? t("common.ok") : t("common.offline")}</span>
           </div>
         </div>
-        ${isChat ? html`
+        ${
+          isChat
+            ? html`
           <button
             class="topbar-new-session"
             ?disabled=${!state.connected}
@@ -182,7 +184,9 @@ export function renderApp(state: AppViewState) {
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
           </button>
-        ` : nothing}
+        `
+            : nothing
+        }
       </header>
       <aside class="nav ${state.settings.navCollapsed ? "nav--collapsed" : ""}">
         <div class="nav-group__items">
@@ -350,7 +354,9 @@ export function renderApp(state: AppViewState) {
                 detailLoading: state.presetsDetailLoading,
                 running: state.presetsRunning,
                 reloading: state.presetsReloading,
-                onFilterChange: (value: string) => { (state as any).presetsFilter = value; },
+                onFilterChange: (value: string) => {
+                  (state as any).presetsFilter = value;
+                },
                 onReload: () => reloadPresets(state as any),
                 onRun: (name: string) => runPreset(state as any, name),
                 onToggleExpand: async (name: string) => {
@@ -993,131 +999,132 @@ export function renderApp(state: AppViewState) {
           state.tab === "settings"
             ? html`
                 ${renderSettingsSubTabs(state)}
-                ${state.settingsSubTab === "connection"
-                  ? renderOverview({
-                      connected: state.connected,
-                      hello: state.hello,
-                      settings: state.settings,
-                      password: state.password,
-                      lastError: state.lastError,
-                      presenceCount,
-                      sessionsCount,
-                      cronEnabled: state.cronStatus?.enabled ?? null,
-                      cronNext,
-                      lastChannelsRefresh: state.channelsLastSuccess,
-                      onSettingsChange: (next) => state.applySettings(next),
-                      onPasswordChange: (next) => (state.password = next),
-                      onSessionKeyChange: (next) => {
-                        state.sessionKey = next;
-                        state.chatMessage = "";
-                        state.resetToolStream();
-                        state.applySettings({
-                          ...state.settings,
-                          sessionKey: next,
-                          lastActiveSessionKey: next,
-                        });
-                        void state.loadAssistantIdentity();
-                      },
-                      onConnect: () => state.connect(),
-                      onRefresh: () => state.loadOverview(),
-                    })
-                  : nothing
+                ${
+                  state.settingsSubTab === "connection"
+                    ? renderOverview({
+                        connected: state.connected,
+                        hello: state.hello,
+                        settings: state.settings,
+                        password: state.password,
+                        lastError: state.lastError,
+                        presenceCount,
+                        sessionsCount,
+                        cronEnabled: state.cronStatus?.enabled ?? null,
+                        cronNext,
+                        lastChannelsRefresh: state.channelsLastSuccess,
+                        onSettingsChange: (next) => state.applySettings(next),
+                        onPasswordChange: (next) => (state.password = next),
+                        onSessionKeyChange: (next) => {
+                          state.sessionKey = next;
+                          state.chatMessage = "";
+                          state.resetToolStream();
+                          state.applySettings({
+                            ...state.settings,
+                            sessionKey: next,
+                            lastActiveSessionKey: next,
+                          });
+                          void state.loadAssistantIdentity();
+                        },
+                        onConnect: () => state.connect(),
+                        onRefresh: () => state.loadOverview(),
+                      })
+                    : nothing
                 }
-                ${state.settingsSubTab === "config" || !state.settingsSubTab
-                  ? renderConfig({
-                      raw: state.configRaw,
-                      originalRaw: state.configRawOriginal,
-                      valid: state.configValid,
-                      issues: state.configIssues,
-                      loading: state.configLoading,
-                      saving: state.configSaving,
-                      applying: state.configApplying,
-                      updating: state.updateRunning,
-                      connected: state.connected,
-                      schema: state.configSchema,
-                      schemaLoading: state.configSchemaLoading,
-                      uiHints: state.configUiHints,
-                      formMode: state.configFormMode,
-                      formValue: state.configForm,
-                      originalValue: state.configFormOriginal,
-                      searchQuery: state.configSearchQuery,
-                      activeSection: state.configActiveSection,
-                      activeSubsection: state.configActiveSubsection,
-                      onRawChange: (next) => {
-                        state.configRaw = next;
-                      },
-                      onFormModeChange: (mode) => (state.configFormMode = mode),
-                      onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
-                      onSearchChange: (query) => (state.configSearchQuery = query),
-                      onSectionChange: (section) => {
-                        state.configActiveSection = section;
-                        state.configActiveSubsection = null;
-                      },
-                      onSubsectionChange: (section) => (state.configActiveSubsection = section),
-                      onReload: () => loadConfig(state),
-                      onSave: () => saveConfig(state),
-                      onApply: () => applyConfig(state),
-                      onUpdate: () => runUpdate(state),
-                      historyEntries: state.configHistoryEntries,
-                      historyVisible: state.configHistoryVisible,
-                      historySelectedIndex: state.configHistorySelectedIndex,
-                      onHistoryToggle: () => {
-                        state.configHistoryVisible = !state.configHistoryVisible;
-                        state.configHistorySelectedIndex = null;
-                      },
-                      onHistorySelect: (index) => {
-                        state.configHistorySelectedIndex =
-                          state.configHistorySelectedIndex === index ? null : index;
-                      },
-                      onHistoryRestore: (index) => restoreConfigHistoryEntry(state, index),
-                      onHistoryClear: () => clearConfigHistory(state),
-                    })
-                  : nothing
+                ${
+                  state.settingsSubTab === "config" || !state.settingsSubTab
+                    ? renderConfig({
+                        raw: state.configRaw,
+                        originalRaw: state.configRawOriginal,
+                        valid: state.configValid,
+                        issues: state.configIssues,
+                        loading: state.configLoading,
+                        saving: state.configSaving,
+                        applying: state.configApplying,
+                        updating: state.updateRunning,
+                        connected: state.connected,
+                        schema: state.configSchema,
+                        schemaLoading: state.configSchemaLoading,
+                        uiHints: state.configUiHints,
+                        formMode: state.configFormMode,
+                        formValue: state.configForm,
+                        originalValue: state.configFormOriginal,
+                        searchQuery: state.configSearchQuery,
+                        activeSection: state.configActiveSection,
+                        activeSubsection: state.configActiveSubsection,
+                        onRawChange: (next) => {
+                          state.configRaw = next;
+                        },
+                        onFormModeChange: (mode) => (state.configFormMode = mode),
+                        onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
+                        onSearchChange: (query) => (state.configSearchQuery = query),
+                        onSectionChange: (section) => {
+                          state.configActiveSection = section;
+                          state.configActiveSubsection = null;
+                        },
+                        onSubsectionChange: (section) => (state.configActiveSubsection = section),
+                        onReload: () => loadConfig(state),
+                        onSave: () => saveConfig(state),
+                        onApply: () => applyConfig(state),
+                        onUpdate: () => runUpdate(state),
+                        historyEntries: state.configHistoryEntries,
+                        historyVisible: state.configHistoryVisible,
+                        historySelectedIndex: state.configHistorySelectedIndex,
+                        onHistoryToggle: () => {
+                          state.configHistoryVisible = !state.configHistoryVisible;
+                          state.configHistorySelectedIndex = null;
+                        },
+                        onHistorySelect: (index) => {
+                          state.configHistorySelectedIndex =
+                            state.configHistorySelectedIndex === index ? null : index;
+                        },
+                        onHistoryRestore: (index) => restoreConfigHistoryEntry(state, index),
+                        onHistoryClear: () => clearConfigHistory(state),
+                      })
+                    : nothing
                 }
-                ${state.settingsSubTab === "debug"
-                  ? renderDebug({
-                      loading: state.debugLoading,
-                      status: state.debugStatus,
-                      health: state.debugHealth,
-                      models: state.debugModels,
-                      heartbeat: state.debugHeartbeat,
-                      eventLog: state.eventLog,
-                      callMethod: state.debugCallMethod,
-                      callParams: state.debugCallParams,
-                      callResult: state.debugCallResult,
-                      callError: state.debugCallError,
-                      onCallMethodChange: (next) => (state.debugCallMethod = next),
-                      onCallParamsChange: (next) => (state.debugCallParams = next),
-                      onRefresh: () => loadDebug(state),
-                      onCall: () => callDebugMethod(state),
-                    })
-                  : nothing
+                ${
+                  state.settingsSubTab === "debug"
+                    ? renderDebug({
+                        loading: state.debugLoading,
+                        status: state.debugStatus,
+                        health: state.debugHealth,
+                        models: state.debugModels,
+                        heartbeat: state.debugHeartbeat,
+                        eventLog: state.eventLog,
+                        callMethod: state.debugCallMethod,
+                        callParams: state.debugCallParams,
+                        callResult: state.debugCallResult,
+                        callError: state.debugCallError,
+                        onCallMethodChange: (next) => (state.debugCallMethod = next),
+                        onCallParamsChange: (next) => (state.debugCallParams = next),
+                        onRefresh: () => loadDebug(state),
+                        onCall: () => callDebugMethod(state),
+                      })
+                    : nothing
                 }
-                ${state.settingsSubTab === "logs"
-                  ? renderLogs({
-                      loading: state.logsLoading,
-                      error: state.logsError,
-                      file: state.logsFile,
-                      entries: state.logsEntries,
-                      filterText: state.logsFilterText,
-                      levelFilters: state.logsLevelFilters,
-                      autoFollow: state.logsAutoFollow,
-                      truncated: state.logsTruncated,
-                      onFilterTextChange: (next) => (state.logsFilterText = next),
-                      onLevelToggle: (level, enabled) => {
-                        state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
-                      },
-                      onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
-                      onRefresh: () => loadLogs(state, { reset: true }),
-                      onExport: (lines, label) => state.exportLogs(lines, label),
-                      onScroll: (event) => state.handleLogsScroll(event),
-                    })
-                  : nothing
+                ${
+                  state.settingsSubTab === "logs"
+                    ? renderLogs({
+                        loading: state.logsLoading,
+                        error: state.logsError,
+                        file: state.logsFile,
+                        entries: state.logsEntries,
+                        filterText: state.logsFilterText,
+                        levelFilters: state.logsLevelFilters,
+                        autoFollow: state.logsAutoFollow,
+                        truncated: state.logsTruncated,
+                        onFilterTextChange: (next) => (state.logsFilterText = next),
+                        onLevelToggle: (level, enabled) => {
+                          state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
+                        },
+                        onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
+                        onRefresh: () => loadLogs(state, { reset: true }),
+                        onExport: (lines, label) => state.exportLogs(lines, label),
+                        onScroll: (event) => state.handleLogsScroll(event),
+                      })
+                    : nothing
                 }
-                ${state.settingsSubTab === "appearance"
-                  ? renderAppearanceSettings(state)
-                  : nothing
-                }
+                ${state.settingsSubTab === "appearance" ? renderAppearanceSettings(state) : nothing}
               `
             : nothing
         }

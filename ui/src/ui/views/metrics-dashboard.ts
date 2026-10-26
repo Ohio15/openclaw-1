@@ -1,5 +1,4 @@
 import { html, nothing } from "lit";
-import { formatRelativeTimestamp, formatDurationHuman } from "../format.ts";
 import type {
   BudgetSnapshot,
   ChannelHealthEntry,
@@ -9,6 +8,7 @@ import type {
   SystemHealthSnapshot,
   UsageSummarySnapshot,
 } from "../controllers/metrics.ts";
+import { formatRelativeTimestamp, formatDurationHuman } from "../format.ts";
 
 // ============================================================================
 // Props
@@ -28,11 +28,9 @@ export type MetricsDashboardProps = {
 export function renderMetricsDashboard(props: MetricsDashboardProps) {
   if (!props.connected) {
     return html`
-      <section class="card" style="text-align: center; padding: 48px 24px;">
-        <div class="card-title" style="font-size: 1.25rem;">Metrics Dashboard</div>
-        <div class="muted" style="margin-top: 12px;">
-          Connect to the gateway to view system metrics.
-        </div>
+      <section class="card" style="text-align: center; padding: 48px 24px">
+        <div class="card-title" style="font-size: 1.25rem">Metrics Dashboard</div>
+        <div class="muted" style="margin-top: 12px">Connect to the gateway to view system metrics.</div>
       </section>
     `;
   }
@@ -82,12 +80,8 @@ export function renderMetricsDashboard(props: MetricsDashboardProps) {
 // ============================================================================
 
 function renderSystemHealth(health: SystemHealthSnapshot) {
-  const uptimeText = health.uptimeMs
-    ? formatDurationHuman(health.uptimeMs)
-    : "--";
-  const tickText = health.tickIntervalMs
-    ? `${health.tickIntervalMs}ms`
-    : "--";
+  const uptimeText = health.uptimeMs ? formatDurationHuman(health.uptimeMs) : "--";
+  const tickText = health.tickIntervalMs ? `${health.tickIntervalMs}ms` : "--";
   const authText = health.authMode ?? "--";
   const versionText = health.gatewayVersion ?? "--";
 
@@ -141,31 +135,28 @@ function renderSystemHealth(health: SystemHealthSnapshot) {
 function renderBudget(budget: BudgetSnapshot | null) {
   if (!budget) {
     return html`
-      <section class="card" style="margin-bottom: 18px;">
+      <section class="card" style="margin-bottom: 18px">
         <div class="card-title">Token Budget</div>
         <div class="card-sub">Budget tracking from the intelligence pipeline</div>
-        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0;">
+        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0">
           No budget data available. Intelligence pipeline may be disabled.
         </div>
       </section>
     `;
   }
 
-  const dailyCostPct = budget.dailyCostCap > 0
-    ? Math.min(100, (budget.dailyCost / budget.dailyCostCap) * 100)
-    : 0;
-  const sessionCostPct = budget.sessionCostCap > 0
-    ? Math.min(100, (budget.sessionCost / budget.sessionCostCap) * 100)
-    : 0;
+  const dailyCostPct =
+    budget.dailyCostCap > 0 ? Math.min(100, (budget.dailyCost / budget.dailyCostCap) * 100) : 0;
+  const sessionCostPct =
+    budget.sessionCostCap > 0
+      ? Math.min(100, (budget.sessionCost / budget.sessionCostCap) * 100)
+      : 0;
 
   const dailyColor = barColor(dailyCostPct);
   const sessionColor = barColor(sessionCostPct);
 
   const tierKeys = Object.keys(budget.byTier);
-  const maxTierTokens = tierKeys.reduce(
-    (max, key) => Math.max(max, budget.byTier[key].tokens),
-    1,
-  );
+  const maxTierTokens = tierKeys.reduce((max, key) => Math.max(max, budget.byTier[key].tokens), 1);
 
   return html`
     <section class="grid grid-cols-2" style="margin-bottom: 18px;">
@@ -206,12 +197,15 @@ function renderBudget(budget: BudgetSnapshot | null) {
         <div class="card-title">Budget by Tier</div>
         <div class="card-sub">Token and cost consumption per model tier</div>
         <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 10px;">
-          ${tierKeys.length === 0
-            ? html`<div class="muted" style="text-align: center; padding: 24px 0;">No tier data.</div>`
-            : tierKeys.map((tier) => {
-                const data = budget.byTier[tier];
-                const widthPct = Math.max(2, (data.tokens / maxTierTokens) * 100);
-                return html`
+          ${
+            tierKeys.length === 0
+              ? html`
+                  <div class="muted" style="text-align: center; padding: 24px 0">No tier data.</div>
+                `
+              : tierKeys.map((tier) => {
+                  const data = budget.byTier[tier];
+                  const widthPct = Math.max(2, (data.tokens / maxTierTokens) * 100);
+                  return html`
                   <div style="display: flex; align-items: center; gap: 12px;">
                     <span class="metrics-tier-label">${tier}</span>
                     <div class="metrics-bar-track">
@@ -224,7 +218,7 @@ function renderBudget(budget: BudgetSnapshot | null) {
                     <span class="metrics-tier-cost">$${data.cost.toFixed(2)}</span>
                   </div>
                 `;
-              })
+                })
           }
         </div>
       </div>
@@ -239,10 +233,10 @@ function renderBudget(budget: BudgetSnapshot | null) {
 function renderUsageSummary(usage: UsageSummarySnapshot | null) {
   if (!usage) {
     return html`
-      <section class="card" style="margin-bottom: 18px;">
+      <section class="card" style="margin-bottom: 18px">
         <div class="card-title">Usage Summary</div>
         <div class="card-sub">Token usage and cost from loaded sessions</div>
-        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0;">
+        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0">
           No usage data loaded. Open the Usage tab and load a date range first.
         </div>
       </section>
@@ -296,9 +290,12 @@ function renderUsageSummary(usage: UsageSummarySnapshot | null) {
         <div class="card">
           <div class="card-title">Daily Tokens</div>
           <div class="card-sub">Last ${dailySlice.length} days</div>
-          ${dailySlice.length === 0
-            ? html`<div class="muted" style="margin-top: 16px; text-align: center;">No daily data.</div>`
-            : html`
+          ${
+            dailySlice.length === 0
+              ? html`
+                  <div class="muted" style="margin-top: 16px; text-align: center">No daily data.</div>
+                `
+              : html`
               <div class="metrics-daily-chart" style="margin-top: 16px;">
                 ${dailySlice.map((day) => {
                   const heightPct = Math.max(2, (day.totalTokens / maxDailyTokens) * 100);
@@ -318,12 +315,15 @@ function renderUsageSummary(usage: UsageSummarySnapshot | null) {
           <div class="card-title">Top Models</div>
           <div class="card-sub">By token consumption</div>
           <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
-            ${usage.topModels.length === 0
-              ? html`<div class="muted" style="text-align: center;">No model data.</div>`
-              : usage.topModels.map((m) => {
-                  const maxModelTokens = Math.max(1, usage.topModels[0]?.tokens ?? 1);
-                  const widthPct = Math.max(2, (m.tokens / maxModelTokens) * 100);
-                  return html`
+            ${
+              usage.topModels.length === 0
+                ? html`
+                    <div class="muted" style="text-align: center">No model data.</div>
+                  `
+                : usage.topModels.map((m) => {
+                    const maxModelTokens = Math.max(1, usage.topModels[0]?.tokens ?? 1);
+                    const widthPct = Math.max(2, (m.tokens / maxModelTokens) * 100);
+                    return html`
                     <div style="display: flex; align-items: center; gap: 10px;">
                       <span class="metrics-model-label" title="${m.provider}/${m.model}">${m.model}</span>
                       <div class="metrics-bar-track" style="flex: 1;">
@@ -332,24 +332,27 @@ function renderUsageSummary(usage: UsageSummarySnapshot | null) {
                       <span class="metrics-tier-value">${formatTokenCount(m.tokens)}</span>
                     </div>
                   `;
-                })
+                  })
             }
           </div>
-          ${usage.topChannels.length > 0
-            ? html`
+          ${
+            usage.topChannels.length > 0
+              ? html`
               <div class="card-title" style="margin-top: 20px;">Top Channels</div>
               <div style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
-                ${usage.topChannels.map((c) => html`
+                ${usage.topChannels.map(
+                  (c) => html`
                   <div class="row" style="justify-content: space-between;">
                     <span style="font-family: var(--mono); font-size: 0.85rem;">${c.channel}</span>
                     <span class="muted" style="font-family: var(--mono); font-size: 0.85rem;">
                       ${formatTokenCount(c.tokens)} / $${c.cost.toFixed(2)}
                     </span>
                   </div>
-                `)}
+                `,
+                )}
               </div>
             `
-            : nothing
+              : nothing
           }
         </div>
       </div>
@@ -364,10 +367,10 @@ function renderUsageSummary(usage: UsageSummarySnapshot | null) {
 function renderChannelGrid(channels: ChannelHealthEntry[]) {
   if (channels.length === 0) {
     return html`
-      <section class="card" style="margin-bottom: 18px;">
+      <section class="card" style="margin-bottom: 18px">
         <div class="card-title">Channel Status</div>
         <div class="card-sub">Status of all messaging channels</div>
-        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0;">
+        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0">
           No channel data. Connect to the gateway and refresh channels.
         </div>
       </section>
@@ -391,18 +394,17 @@ function renderChannelCard(channel: ChannelHealthEntry) {
   const lastActivity = channel.lastInboundAt
     ? formatRelativeTimestamp(channel.lastInboundAt)
     : null;
-  const lastProbe = channel.lastProbeAt
-    ? formatRelativeTimestamp(channel.lastProbeAt)
-    : null;
+  const lastProbe = channel.lastProbeAt ? formatRelativeTimestamp(channel.lastProbeAt) : null;
 
   return html`
     <div class="metrics-channel-card">
       <div class="metrics-channel-header">
         <span class="metrics-channel-dot ${statusClass}"></span>
         <span class="metrics-channel-name">${channel.label}</span>
-        ${channel.accountCount > 1
-          ? html`<span class="muted" style="font-size: 0.75rem;">(${channel.accountCount} accounts)</span>`
-          : nothing
+        ${
+          channel.accountCount > 1
+            ? html`<span class="muted" style="font-size: 0.75rem;">(${channel.accountCount} accounts)</span>`
+            : nothing
         }
       </div>
       <div class="metrics-channel-status">
@@ -411,18 +413,21 @@ function renderChannelCard(channel: ChannelHealthEntry) {
         </span>
       </div>
       <div class="metrics-channel-meta">
-        ${lastActivity
-          ? html`<div class="muted" style="font-size: 0.75rem;">Last msg: ${lastActivity}</div>`
-          : nothing
+        ${
+          lastActivity
+            ? html`<div class="muted" style="font-size: 0.75rem;">Last msg: ${lastActivity}</div>`
+            : nothing
         }
-        ${lastProbe
-          ? html`<div class="muted" style="font-size: 0.75rem;">Probed: ${lastProbe}</div>`
-          : nothing
+        ${
+          lastProbe
+            ? html`<div class="muted" style="font-size: 0.75rem;">Probed: ${lastProbe}</div>`
+            : nothing
         }
       </div>
-      ${channel.lastError
-        ? html`<div class="metrics-channel-error">${truncate(channel.lastError, 80)}</div>`
-        : nothing
+      ${
+        channel.lastError
+          ? html`<div class="metrics-channel-error">${truncate(channel.lastError, 80)}</div>`
+          : nothing
       }
     </div>
   `;
@@ -455,9 +460,7 @@ function renderCronSummary(cron: CronSummary | null) {
     return nothing;
   }
 
-  const nextWake = cron.nextWakeAtMs
-    ? formatRelativeTimestamp(cron.nextWakeAtMs)
-    : "--";
+  const nextWake = cron.nextWakeAtMs ? formatRelativeTimestamp(cron.nextWakeAtMs) : "--";
 
   return html`
     <section class="card" style="margin-bottom: 18px;">
@@ -483,22 +486,26 @@ function renderCronSummary(cron: CronSummary | null) {
           <div class="stat-value" style="font-size: 0.85rem;">${nextWake}</div>
         </div>
       </div>
-      ${cron.recentErrors.length > 0
-        ? html`
+      ${
+        cron.recentErrors.length > 0
+          ? html`
           <div style="margin-top: 14px;">
             <div class="card-sub" style="margin-bottom: 8px;">Recent cron errors</div>
-            ${cron.recentErrors.map((err) => html`
+            ${cron.recentErrors.map(
+              (err) => html`
               <div class="callout danger" style="margin-bottom: 6px; font-size: 0.85rem;">
                 <strong>${err.jobName}</strong>: ${truncate(err.error, 120)}
-                ${err.lastRunAtMs
-                  ? html`<span class="muted" style="margin-left: 8px;">${formatRelativeTimestamp(err.lastRunAtMs)}</span>`
-                  : nothing
+                ${
+                  err.lastRunAtMs
+                    ? html`<span class="muted" style="margin-left: 8px;">${formatRelativeTimestamp(err.lastRunAtMs)}</span>`
+                    : nothing
                 }
               </div>
-            `)}
+            `,
+            )}
           </div>
         `
-        : nothing
+          : nothing
       }
     </section>
   `;
@@ -511,10 +518,10 @@ function renderCronSummary(cron: CronSummary | null) {
 function renderRecentErrors(errors: RecentLogError[]) {
   if (errors.length === 0) {
     return html`
-      <section class="card" style="margin-bottom: 18px;">
+      <section class="card" style="margin-bottom: 18px">
         <div class="card-title">Recent Errors</div>
         <div class="card-sub">Error-level log entries from the gateway</div>
-        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0;">
+        <div class="muted" style="margin-top: 16px; text-align: center; padding: 24px 0">
           No recent errors found in loaded logs.
         </div>
       </section>
@@ -535,7 +542,8 @@ function renderRecentErrors(errors: RecentLogError[]) {
             </tr>
           </thead>
           <tbody>
-            ${errors.map((err) => html`
+            ${errors.map(
+              (err) => html`
               <tr style="border-bottom: 1px solid var(--border);">
                 <td style="padding: 6px 8px; font-family: var(--mono); color: var(--muted); white-space: nowrap;">
                   ${err.time ?? "--"}
@@ -547,7 +555,8 @@ function renderRecentErrors(errors: RecentLogError[]) {
                   ${truncate(err.message ?? "--", 200)}
                 </td>
               </tr>
-            `)}
+            `,
+            )}
           </tbody>
         </table>
       </div>
@@ -561,10 +570,13 @@ function renderRecentErrors(errors: RecentLogError[]) {
 
 function renderProgressBar(pct: number, colorClass: string) {
   const cssColor =
-    colorClass === "ok" ? "var(--ok)"
-    : colorClass === "warn" ? "var(--warn)"
-    : colorClass === "danger" ? "var(--danger)"
-    : "var(--accent)";
+    colorClass === "ok"
+      ? "var(--ok)"
+      : colorClass === "warn"
+        ? "var(--warn)"
+        : colorClass === "danger"
+          ? "var(--danger)"
+          : "var(--accent)";
 
   return html`
     <div style="height: 8px; background: var(--border); border-radius: 4px; overflow: hidden;">

@@ -5,8 +5,8 @@
  * Applies security headers matching the original Gateway's SecurityHeadersMiddleware.
  */
 
-import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "node:fs";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 
 const UI_PREFIX = "/gateway/ui";

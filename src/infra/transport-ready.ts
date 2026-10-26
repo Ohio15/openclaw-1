@@ -46,9 +46,7 @@ export async function waitForTransportReady(params: WaitForTransportReadyParams)
     // is nothing to wait for — instead of burning the full timeout.
     const failFastReason = params.failFast?.();
     if (failFastReason) {
-      params.runtime.error?.(
-        danger(`${params.label} aborted readiness wait (${failFastReason})`),
-      );
+      params.runtime.error?.(danger(`${params.label} aborted readiness wait (${failFastReason})`));
       throw new Error(`${params.label} not ready (${failFastReason})`);
     }
     const res = await params.check();

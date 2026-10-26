@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { OpenClawConfig } from "../config/config.js";
 import { resetInboundDedupe } from "../auto-reply/reply/inbound-dedupe.js";
+import type { OpenClawConfig } from "../config/config.js";
 import { resetSystemEventsForTest } from "../infra/system-events.js";
 import type { MockFn } from "../test-utils/vitest-mock-fn.js";
 
@@ -134,21 +134,19 @@ describe("CRITICAL #3 — daemon/SSE abort signals are independent", () => {
     // own abort signal so the SSE reconnect loop holds. We never abort
     // the parent — daemon must remain running because no one stopped it.
     let streamCalls = 0;
-    streamMock.mockImplementation(
-      ({ abortSignal }: { abortSignal?: AbortSignal }) => {
-        streamCalls += 1;
-        if (streamCalls === 1) {
-          return Promise.reject(new Error("SSE upstream blew up"));
+    streamMock.mockImplementation(({ abortSignal }: { abortSignal?: AbortSignal }) => {
+      streamCalls += 1;
+      if (streamCalls === 1) {
+        return Promise.reject(new Error("SSE upstream blew up"));
+      }
+      return new Promise<void>((resolve) => {
+        if (abortSignal?.aborted) {
+          resolve();
+          return;
         }
-        return new Promise<void>((resolve) => {
-          if (abortSignal?.aborted) {
-            resolve();
-            return;
-          }
-          abortSignal?.addEventListener("abort", () => resolve(), { once: true });
-        });
-      },
-    );
+        abortSignal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+    });
 
     const runtime = createMonitorRuntime();
     const parent = new AbortController();

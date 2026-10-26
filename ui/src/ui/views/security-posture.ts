@@ -1,6 +1,6 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { SecurityAuditReport } from "./security.types.ts";
 import { severityBanner, statChip } from "./security-shared.ts";
+import type { SecurityAuditReport } from "./security.types.ts";
 
 export type SecurityPostureProps = {
   report: SecurityAuditReport | null;
@@ -20,10 +20,7 @@ function resolve(obj: Record<string, unknown> | null, path: string[]): unknown {
   return current;
 }
 
-function levelForValue(
-  key: string,
-  value: unknown,
-): "safe" | "caution" | "risky" {
+function levelForValue(key: string, value: unknown): "safe" | "caution" | "risky" {
   const s = String(value ?? "").toLowerCase();
   switch (key) {
     case "sandbox":
@@ -48,8 +45,7 @@ export function renderSecurityPosture(props: SecurityPostureProps): TemplateResu
   const gatewayBind = String(resolve(cfg, ["gateway", "bind"]) ?? "loopback");
   const authMode = String(resolve(cfg, ["gateway", "auth", "mode"]) ?? "none");
   const elevated = resolve(cfg, ["tools", "elevated", "enabled"]);
-  const sessionsStr =
-    props.sessionsCount != null ? String(props.sessionsCount) : "—";
+  const sessionsStr = props.sessionsCount != null ? String(props.sessionsCount) : "—";
 
   const summary = props.report?.summary;
 

@@ -1,11 +1,11 @@
 import { html, type TemplateResult } from "lit";
 import type { ExecApprovalRequest } from "../controllers/exec-approval.ts";
-import type { SecurityAuditReport, SecurityActivityEntry } from "./security.types.ts";
+import { renderSecurityActivity } from "./security-activity.ts";
+import { renderSecurityApprovals } from "./security-approvals.ts";
+import { renderSecurityAudit } from "./security-audit.ts";
 import { renderSecurityPosture } from "./security-posture.ts";
 import { renderSecurityToggles } from "./security-toggles.ts";
-import { renderSecurityActivity } from "./security-activity.ts";
-import { renderSecurityAudit } from "./security-audit.ts";
-import { renderSecurityApprovals } from "./security-approvals.ts";
+import type { SecurityAuditReport, SecurityActivityEntry } from "./security.types.ts";
 
 export type SecurityProps = {
   // Posture

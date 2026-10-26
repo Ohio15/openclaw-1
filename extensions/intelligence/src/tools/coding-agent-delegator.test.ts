@@ -83,7 +83,7 @@ describe("CodingAgentDelegator", () => {
       const longRunning = new CodingAgentDelegator({
         ...TEST_CONFIG,
         agents: {
-          "slow": {
+          slow: {
             command: "node",
             args: ["-e", "setTimeout(function(){},60000)"], // hang for 60s
             timeoutMs: 1_000, // 1 second timeout
@@ -111,7 +111,7 @@ describe("CodingAgentDelegator", () => {
         ...TEST_CONFIG,
         maxConcurrentDelegations: 1,
         agents: {
-          "slow": {
+          slow: {
             command: "node",
             args: ["-e", "setTimeout(function(){},30000)"],
             timeoutMs: 30_000,
@@ -136,10 +136,7 @@ describe("CodingAgentDelegator", () => {
       // Clean up — kill processes and don't wait for first to finish
       limited.killAll();
       // Race: either first resolves or we time out gracefully
-      await Promise.race([
-        first.catch(() => {}),
-        new Promise((r) => setTimeout(r, 3000)),
-      ]);
+      await Promise.race([first.catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
     }, 30_000);
 
     it("tracks active delegations count", () => {
@@ -158,14 +155,21 @@ describe("CodingAgentDelegator", () => {
         ...TEST_CONFIG,
         defaultAgent: "verbose",
         agents: {
-          "verbose": {
+          verbose: {
             command: process.platform === "win32" ? "cmd" : "bash",
-            args: process.platform === "win32"
-              ? ["/c", "for /L %i in (1,1,200) do @echo line-%i-padding-text-to-make-output-very-long"]
-              : ["-c"],
+            args:
+              process.platform === "win32"
+                ? [
+                    "/c",
+                    "for /L %i in (1,1,200) do @echo line-%i-padding-text-to-make-output-very-long",
+                  ]
+                : ["-c"],
             timeoutMs: 5_000,
             maxOutputChars: 200, // very small
-            promptTemplate: process.platform === "win32" ? "{task}" : "for i in $(seq 1 200); do echo line-$i-padding-text-to-make-output-very-long; done",
+            promptTemplate:
+              process.platform === "win32"
+                ? "{task}"
+                : "for i in $(seq 1 200); do echo line-$i-padding-text-to-make-output-very-long; done",
           },
         },
       };
@@ -191,7 +195,7 @@ describe("CodingAgentDelegator", () => {
         ...TEST_CONFIG,
         defaultAgent: "slow",
         agents: {
-          "slow": {
+          slow: {
             command: "node",
             args: ["-e", "setTimeout(function(){},60000)"], // hang for 60s
             timeoutMs: 60_000,
@@ -232,7 +236,7 @@ describe("CodingAgentDelegator", () => {
         ...TEST_CONFIG,
         defaultAgent: "nonexistent",
         agents: {
-          "nonexistent": {
+          nonexistent: {
             command: "/absolutely/nonexistent/binary/xyz123",
             args: [],
             timeoutMs: 5_000,

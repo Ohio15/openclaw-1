@@ -143,10 +143,7 @@ function buildSystemHealth(opts: {
     | undefined;
 
   // Try to extract version from presence entries or hello payload
-  const version =
-    snapshot?.version ??
-    opts.presenceEntries.find((e) => e.version)?.version ??
-    null;
+  const version = snapshot?.version ?? opts.presenceEntries.find((e) => e.version)?.version ?? null;
 
   return {
     connected: opts.connected,
@@ -174,24 +171,17 @@ function extractBudget(stats: IntelligenceStats | null): BudgetSnapshot | null {
   };
 }
 
-function extractChannelHealth(
-  snapshot: ChannelsStatusSnapshot | null,
-): ChannelHealthEntry[] {
+function extractChannelHealth(snapshot: ChannelsStatusSnapshot | null): ChannelHealthEntry[] {
   if (!snapshot) {
     return [];
   }
 
-  const order =
-    snapshot.channelMeta?.map((e) => e.id) ??
-    snapshot.channelOrder ??
-    [];
+  const order = snapshot.channelMeta?.map((e) => e.id) ?? snapshot.channelOrder ?? [];
 
   const channels = snapshot.channels as Record<string, Record<string, unknown>> | null;
   const accounts = snapshot.channelAccounts ?? {};
   const labels = snapshot.channelLabels ?? {};
-  const metaMap = new Map(
-    (snapshot.channelMeta ?? []).map((e) => [e.id, e]),
-  );
+  const metaMap = new Map((snapshot.channelMeta ?? []).map((e) => [e.id, e]));
 
   return order.map((id) => {
     const status = channels?.[id] ?? {};
@@ -219,23 +209,23 @@ function extractChannelHealth(
     const hasAccounts = accountEntries.length > 0;
     const configured = hasAccounts
       ? accountEntries.some((a) => a.configured)
-      : (status.configured as boolean | undefined) ?? false;
+      : ((status.configured as boolean | undefined) ?? false);
     const running = hasAccounts
       ? accountEntries.some((a) => a.running)
-      : (status.running as boolean | undefined) ?? false;
+      : ((status.running as boolean | undefined) ?? false);
     const connected = hasAccounts
       ? accountEntries.some((a) => a.connected === true)
         ? true
         : accountEntries.every((a) => a.connected === false)
           ? false
           : null
-      : (status.connected as boolean | undefined) ?? null;
+      : ((status.connected as boolean | undefined) ?? null);
     const lastError = hasAccounts
-      ? accountEntries.find((a) => a.lastError)?.lastError ?? null
-      : (status.lastError as string | undefined) ?? null;
+      ? (accountEntries.find((a) => a.lastError)?.lastError ?? null)
+      : ((status.lastError as string | undefined) ?? null);
     const lastProbeAt = hasAccounts
       ? Math.max(0, ...accountEntries.map((a) => a.lastProbeAt ?? 0)) || null
-      : (status.lastProbeAt as number | undefined) ?? null;
+      : ((status.lastProbeAt as number | undefined) ?? null);
     const lastInboundAt = hasAccounts
       ? Math.max(0, ...accountEntries.map((a) => a.lastInboundAt ?? 0)) || null
       : null;
@@ -267,19 +257,20 @@ function extractUsageSummary(
     return null;
   }
 
-  const totals: SessionsUsageTotals = result?.totals ?? costSummary?.totals ?? {
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-    totalTokens: 0,
-    totalCost: 0,
-    inputCost: 0,
-    outputCost: 0,
-    cacheReadCost: 0,
-    cacheWriteCost: 0,
-    missingCostEntries: 0,
-  };
+  const totals: SessionsUsageTotals = result?.totals ??
+    costSummary?.totals ?? {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      totalCost: 0,
+      inputCost: 0,
+      outputCost: 0,
+      cacheReadCost: 0,
+      cacheWriteCost: 0,
+      missingCostEntries: 0,
+    };
 
   const agg = result?.aggregates;
 
@@ -302,9 +293,7 @@ function extractUsageSummary(
       cost: entry.totals.totalCost,
     }));
 
-  const latency = agg?.latency
-    ? { avgMs: agg.latency.avgMs, p95Ms: agg.latency.p95Ms }
-    : null;
+  const latency = agg?.latency ? { avgMs: agg.latency.avgMs, p95Ms: agg.latency.p95Ms } : null;
 
   return {
     totalTokens: totals.totalTokens,
@@ -320,10 +309,7 @@ function extractUsageSummary(
   };
 }
 
-function extractCronSummary(
-  status: CronStatus | null,
-  jobs: CronJob[],
-): CronSummary | null {
+function extractCronSummary(status: CronStatus | null, jobs: CronJob[]): CronSummary | null {
   if (!status) {
     return null;
   }

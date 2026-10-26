@@ -43,11 +43,41 @@ export interface TierModelConfig {
  * Not active by default — provided as a starting point for local deployments.
  */
 export const LOCAL_TIER_DEFAULTS: TierModelConfig = {
-  tiny: { model: "deepseek-r1-distill-7b-q4", provider: "llama.cpp", backend: "local", latencyClass: "instant", costClass: "free" },
-  small: { model: "deepseek-r1-distill-7b-q4", provider: "llama.cpp", backend: "local", latencyClass: "instant", costClass: "free" },
-  medium: { model: "qwen2.5-72b-q4", provider: "llama.cpp", backend: "local", latencyClass: "fast", costClass: "free" },
-  large: { model: "deepseek-v3-q2", provider: "llama.cpp", backend: "local", latencyClass: "slow", costClass: "free" },
-  reasoning: { model: "claude-opus-4-6", provider: "anthropic", backend: "api", latencyClass: "fast", costClass: "expensive" },
+  tiny: {
+    model: "deepseek-r1-distill-7b-q4",
+    provider: "llama.cpp",
+    backend: "local",
+    latencyClass: "instant",
+    costClass: "free",
+  },
+  small: {
+    model: "deepseek-r1-distill-7b-q4",
+    provider: "llama.cpp",
+    backend: "local",
+    latencyClass: "instant",
+    costClass: "free",
+  },
+  medium: {
+    model: "qwen2.5-72b-q4",
+    provider: "llama.cpp",
+    backend: "local",
+    latencyClass: "fast",
+    costClass: "free",
+  },
+  large: {
+    model: "deepseek-v3-q2",
+    provider: "llama.cpp",
+    backend: "local",
+    latencyClass: "slow",
+    costClass: "free",
+  },
+  reasoning: {
+    model: "claude-opus-4-6",
+    provider: "anthropic",
+    backend: "api",
+    latencyClass: "fast",
+    costClass: "expensive",
+  },
 };
 
 export class ModelTierResolver {
@@ -76,9 +106,7 @@ export class ModelTierResolver {
    * @param tierSelection - The tier selection from the intelligence pipeline's analysis
    * @returns Override config if a mapping exists for the tier, or null if no override applies
    */
-  resolve(
-    tierSelection: { tier: string; reason: string },
-  ): {
+  resolve(tierSelection: { tier: string; reason: string }): {
     modelOverride?: string;
     providerOverride?: string;
     backend?: BackendType;

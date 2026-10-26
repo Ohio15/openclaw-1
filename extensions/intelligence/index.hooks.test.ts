@@ -20,9 +20,9 @@ vi.mock("./src/pipeline/quality-gate.js", () => ({
 }));
 
 import { setCascadeSignal } from "../../src/intelligence/cascade-state.js";
-import { assessQualityWithJudge } from "./src/pipeline/quality-gate.js";
-import { IntelligenceControlPlane, extractUserPrompt } from "./src/pipeline/control-plane.js";
 import plugin from "./index.js";
+import { IntelligenceControlPlane, extractUserPrompt } from "./src/pipeline/control-plane.js";
+import { assessQualityWithJudge } from "./src/pipeline/quality-gate.js";
 
 type Handler = (event: any, ctx?: any) => Promise<any>;
 

@@ -18,8 +18,8 @@
  */
 
 import fs from "node:fs";
-import path from "node:path";
 import os from "node:os";
+import path from "node:path";
 import { parseArgs } from "node:util";
 
 // ---------------------------------------------------------------------------
@@ -149,7 +149,9 @@ function migratePasskeys(
 
   if (!fs.existsSync(srcPath)) {
     log.warn(`Passkeys file not found: ${srcPath}`);
-    log.info("  This is expected if running locally — passkeys are in the Docker volume on the server");
+    log.info(
+      "  This is expected if running locally — passkeys are in the Docker volume on the server",
+    );
     return "not_found";
   }
 
@@ -224,7 +226,9 @@ function readSessionHistory(
 
   if (!fs.existsSync(dbPath)) {
     log.warn(`SQLite database not found: ${dbPath}`);
-    log.info("  This is expected if running locally — the database is in the Docker volume on the server");
+    log.info(
+      "  This is expected if running locally — the database is in the Docker volume on the server",
+    );
     return null;
   }
 
@@ -451,10 +455,14 @@ export async function runMigration(opts: MigrateOptions): Promise<MigrateResult>
     if (sessionSummary.lastTen.length > 0) {
       log.info("  Last 10 sessions:");
       for (const s of sessionSummary.lastTen) {
-        log.info(`    ${s.createdAt} | ${s.status.padEnd(10)} | ${s.preset} (${s.id.slice(0, 8)}...)`);
+        log.info(
+          `    ${s.createdAt} | ${s.status.padEnd(10)} | ${s.preset} (${s.id.slice(0, 8)}...)`,
+        );
       }
     }
-    log.info("  NOTE: Sessions are not imported — they reference CLI process handles that cannot be migrated");
+    log.info(
+      "  NOTE: Sessions are not imported — they reference CLI process handles that cannot be migrated",
+    );
   } else {
     log.info("  No session data available (database not found or not readable)");
   }
@@ -483,7 +491,9 @@ export async function runMigration(opts: MigrateOptions): Promise<MigrateResult>
   log.info(`Presets copied:    ${presetsCopied}`);
   log.info(`Presets skipped:   ${presetsSkipped}`);
   log.info(`Passkeys:          ${passkeysStatus}`);
-  log.info(`Sessions:          ${sessionSummary ? `${sessionSummary.totalSessions} found (not imported)` : "N/A"}`);
+  log.info(
+    `Sessions:          ${sessionSummary ? `${sessionSummary.totalSessions} found (not imported)` : "N/A"}`,
+  );
   log.info(`Validation errors: ${validationErrors.length}`);
 
   if (opts.dryRun) {
@@ -520,18 +530,20 @@ export function registerMigrateCli(program: import("commander").Command): void {
     )
     .option("--dry-run", "Show what would be migrated without making changes", false)
     .option("-q, --quiet", "Suppress informational output", false)
-    .action(async (cmdOpts: { source: string; target: string; dryRun: boolean; quiet: boolean }) => {
-      const result = await runMigration({
-        sourceDir: cmdOpts.source,
-        targetDir: cmdOpts.target,
-        dryRun: cmdOpts.dryRun,
-        quiet: cmdOpts.quiet,
-      });
+    .action(
+      async (cmdOpts: { source: string; target: string; dryRun: boolean; quiet: boolean }) => {
+        const result = await runMigration({
+          sourceDir: cmdOpts.source,
+          targetDir: cmdOpts.target,
+          dryRun: cmdOpts.dryRun,
+          quiet: cmdOpts.quiet,
+        });
 
-      if (result.validationErrors.length > 0) {
-        process.exitCode = 1;
-      }
-    });
+        if (result.validationErrors.length > 0) {
+          process.exitCode = 1;
+        }
+      },
+    );
 }
 
 // ---------------------------------------------------------------------------

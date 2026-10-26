@@ -51,14 +51,14 @@ export function createAlertKeywordHandler(opts: {
   const log = opts.logger ?? console;
   const alertHistory: AlertEntry[] = [];
 
-  const handler = async (
-    event: { messages?: unknown[]; success?: boolean; error?: string },
-  ): Promise<void> => {
+  const handler = async (event: {
+    messages?: unknown[];
+    success?: boolean;
+    error?: string;
+  }): Promise<void> => {
     // Extract the last assistant message text
     const messages = event.messages ?? [];
-    const lastAssistant = [...messages]
-      .reverse()
-      .find((m: any) => m?.role === "assistant");
+    const lastAssistant = [...messages].reverse().find((m: any) => m?.role === "assistant");
     if (!lastAssistant) return;
 
     const text =

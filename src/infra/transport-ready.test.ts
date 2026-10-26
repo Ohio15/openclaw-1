@@ -121,9 +121,7 @@ describe("waitForTransportReady", () => {
       check: checkSpy,
       failFast: () => "already dead",
     });
-    const asserted = expect(waitPromise).rejects.toThrow(
-      "signal daemon not ready (already dead)",
-    );
+    const asserted = expect(waitPromise).rejects.toThrow("signal daemon not ready (already dead)");
     await vi.advanceTimersByTimeAsync(10);
     await asserted;
     expect(checkSpy).not.toHaveBeenCalled();

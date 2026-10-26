@@ -24,7 +24,8 @@ export interface RegistryIndex {
   skills: RegistryEntry[];
 }
 
-const DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/openclaw/clawhub-registry/main/index.json";
+const DEFAULT_REGISTRY_URL =
+  "https://raw.githubusercontent.com/openclaw/clawhub-registry/main/index.json";
 const FETCH_TIMEOUT_MS = 10_000;
 
 let cachedRegistry: RegistryIndex | null = null;
@@ -34,9 +35,7 @@ const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 /**
  * Fetch the skill registry index. Caches for 30 minutes.
  */
-export async function fetchRegistry(
-  registryUrl?: string,
-): Promise<RegistryIndex | null> {
+export async function fetchRegistry(registryUrl?: string): Promise<RegistryIndex | null> {
   if (cachedRegistry && Date.now() - cacheTimestamp < CACHE_TTL_MS) {
     return cachedRegistry;
   }
@@ -160,9 +159,7 @@ export async function installFromRegistry(
 /**
  * List all available skills from the registry.
  */
-export async function listRegistry(
-  registryUrl?: string,
-): Promise<RegistryEntry[]> {
+export async function listRegistry(registryUrl?: string): Promise<RegistryEntry[]> {
   const registry = await fetchRegistry(registryUrl);
   if (!registry) return [];
   return registry.skills;

@@ -20,9 +20,8 @@ const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
 // Dynamic imports after mocks are registered
-const { complexityBasedMaxResults, getSemanticKnowledge } = await import(
-  "./knowledge-retrieval.js"
-);
+const { complexityBasedMaxResults, getSemanticKnowledge } =
+  await import("./knowledge-retrieval.js");
 const { buildKnowledgeContext } = await import("./domain-knowledge.js");
 
 // ---------------------------------------------------------------------------
@@ -52,9 +51,7 @@ function makeRecallResult(
 }
 
 /** Build an SSE body for a brain_recall response with the given results. */
-function makeBrainRecallSSE(
-  results: ReturnType<typeof makeRecallResult>[],
-): string {
+function makeBrainRecallSSE(results: ReturnType<typeof makeRecallResult>[]): string {
   return [
     `data: ${JSON.stringify({
       result: {
@@ -99,13 +96,10 @@ function setupSmartFetch(
       if (initStatus !== 200) {
         return new Response("Error", { status: initStatus });
       }
-      return new Response(
-        JSON.stringify({ jsonrpc: "2.0", result: {}, id: 1 }),
-        {
-          status: 200,
-          headers: { "mcp-session-id": sessionId },
-        },
-      );
+      return new Response(JSON.stringify({ jsonrpc: "2.0", result: {}, id: 1 }), {
+        status: 200,
+        headers: { "mcp-session-id": sessionId },
+      });
     }
 
     if (body.method === "tools/call" && body.params?.name === "brain_recall") {
@@ -198,11 +192,7 @@ describe("getSemanticKnowledge — static source", () => {
     const staticContent = "Static knowledge about authentication patterns.";
     vi.mocked(buildKnowledgeContext).mockReturnValue(staticContent);
 
-    const result = await getSemanticKnowledge(
-      "how does auth work",
-      defaultOptions,
-      "static",
-    );
+    const result = await getSemanticKnowledge("how does auth work", defaultOptions, "static");
 
     expect(buildKnowledgeContext).toHaveBeenCalledWith("how does auth work");
     expect(result).toBe(staticContent);
@@ -211,11 +201,7 @@ describe("getSemanticKnowledge — static source", () => {
   it("returns null when buildKnowledgeContext returns null", async () => {
     vi.mocked(buildKnowledgeContext).mockReturnValue(null);
 
-    const result = await getSemanticKnowledge(
-      "unknown topic",
-      defaultOptions,
-      "static",
-    );
+    const result = await getSemanticKnowledge("unknown topic", defaultOptions, "static");
 
     expect(result).toBeNull();
   });
@@ -226,11 +212,7 @@ describe("getSemanticKnowledge — static source", () => {
     const longContent = "A".repeat(100);
     vi.mocked(buildKnowledgeContext).mockReturnValue(longContent);
 
-    const result = await getSemanticKnowledge(
-      "some query",
-      tinyOptions,
-      "static",
-    );
+    const result = await getSemanticKnowledge("some query", tinyOptions, "static");
 
     expect(result).not.toBeNull();
     // Truncated to maxChars: 40 chars total (37 A's + "...")
@@ -247,11 +229,7 @@ describe("getSemanticKnowledge — semantic source", () => {
   it("returns formatted context when fetch succeeds with results", async () => {
     setupSmartFetch([makeRecallResult()]);
 
-    const result = await getSemanticKnowledge(
-      "JWT signing algorithm",
-      defaultOptions,
-      "semantic",
-    );
+    const result = await getSemanticKnowledge("JWT signing algorithm", defaultOptions, "semantic");
 
     expect(result).not.toBeNull();
     expect(result).toContain("<context-knowledge>");
@@ -263,11 +241,7 @@ describe("getSemanticKnowledge — semantic source", () => {
   it("returns null when MCP session init fails with HTTP 500", async () => {
     setupSmartFetch([], { initStatus: 500 });
 
-    const result = await getSemanticKnowledge(
-      "some query",
-      defaultOptions,
-      "semantic",
-    );
+    const result = await getSemanticKnowledge("some query", defaultOptions, "semantic");
 
     expect(result).toBeNull();
   });
@@ -322,11 +296,7 @@ describe("getSemanticKnowledge — semantic source", () => {
       return Promise.reject(err);
     });
 
-    const result = await getSemanticKnowledge(
-      "slow query",
-      defaultOptions,
-      "semantic",
-    );
+    const result = await getSemanticKnowledge("slow query", defaultOptions, "semantic");
 
     expect(result).toBeNull();
   });
@@ -340,11 +310,7 @@ describe("getSemanticKnowledge — hybrid source", () => {
   it("returns semantic results when available", async () => {
     setupSmartFetch([makeRecallResult({ c: "Semantic hybrid result" })]);
 
-    const result = await getSemanticKnowledge(
-      "hybrid query",
-      defaultOptions,
-      "hybrid",
-    );
+    const result = await getSemanticKnowledge("hybrid query", defaultOptions, "hybrid");
 
     expect(result).not.toBeNull();
     expect(result).toContain("Semantic hybrid result");
@@ -353,15 +319,9 @@ describe("getSemanticKnowledge — hybrid source", () => {
 
   it("falls back to static when semantic fails", async () => {
     setupSmartFetch([], { initStatus: 503 });
-    vi.mocked(buildKnowledgeContext).mockReturnValue(
-      "Fallback static knowledge about auth.",
-    );
+    vi.mocked(buildKnowledgeContext).mockReturnValue("Fallback static knowledge about auth.");
 
-    const result = await getSemanticKnowledge(
-      "auth patterns",
-      defaultOptions,
-      "hybrid",
-    );
+    const result = await getSemanticKnowledge("auth patterns", defaultOptions, "hybrid");
 
     expect(result).toBe("Fallback static knowledge about auth.");
     expect(buildKnowledgeContext).toHaveBeenCalledWith("auth patterns");
@@ -419,13 +379,10 @@ describe("session management", () => {
       const body = JSON.parse(init.body as string);
 
       if (body.method === "initialize") {
-        return new Response(
-          JSON.stringify({ jsonrpc: "2.0", result: {}, id: 1 }),
-          {
-            status: 200,
-            headers: { "mcp-session-id": `session-${++recallCallCount}` },
-          },
-        );
+        return new Response(JSON.stringify({ jsonrpc: "2.0", result: {}, id: 1 }), {
+          status: 200,
+          headers: { "mcp-session-id": `session-${++recallCallCount}` },
+        });
       }
 
       if (body.method === "tools/call" && body.params?.name === "brain_recall") {
@@ -435,23 +392,16 @@ describe("session management", () => {
           return new Response("Conflict", { status: 409 });
         }
         // Retry recall: return valid results
-        return new Response(
-          makeBrainRecallSSE([makeRecallResult({ c: "Retried result" })]),
-          {
-            status: 200,
-            headers: { "mcp-session-id": "session-fresh" },
-          },
-        );
+        return new Response(makeBrainRecallSSE([makeRecallResult({ c: "Retried result" })]), {
+          status: 200,
+          headers: { "mcp-session-id": "session-fresh" },
+        });
       }
 
       return new Response("Not Found", { status: 404 });
     });
 
-    const result = await getSemanticKnowledge(
-      "retry query",
-      defaultOptions,
-      "semantic",
-    );
+    const result = await getSemanticKnowledge("retry query", defaultOptions, "semantic");
 
     expect(result).not.toBeNull();
     expect(result).toContain("Retried result");

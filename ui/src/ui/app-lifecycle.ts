@@ -101,10 +101,7 @@ export function handleConnected(host: LifecycleHost) {
       const viewport = window.visualViewport;
       if (!viewport) return;
       const keyboardHeight = Math.max(0, window.innerHeight - viewport.height);
-      document.documentElement.style.setProperty(
-        "--keyboard-height",
-        `${keyboardHeight}px`,
-      );
+      document.documentElement.style.setProperty("--keyboard-height", `${keyboardHeight}px`);
     };
     host._viewportResizeHandler = updateKeyboardHeight;
     window.visualViewport.addEventListener("resize", updateKeyboardHeight);

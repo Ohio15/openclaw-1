@@ -106,7 +106,7 @@ export async function generateCompletion(
       };
     }
 
-    const data = await res.json() as { response?: string };
+    const data = (await res.json()) as { response?: string };
 
     if (typeof data.response !== "string") {
       return {

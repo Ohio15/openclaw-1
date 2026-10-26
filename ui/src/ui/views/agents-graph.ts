@@ -71,9 +71,7 @@ export function renderAgentsGraph(props: AgentsGraphProps) {
 
 function renderSummaryBar(data: AgentGraphData) {
   const activeChannels = data.channelOrder.length;
-  const channelNames = data.channelOrder
-    .map((id) => data.channelLabels[id] ?? id)
-    .join(", ");
+  const channelNames = data.channelOrder.map((id) => data.channelLabels[id] ?? id).join(", ");
 
   return html`
     <section class="card agent-graph-summary">
@@ -122,9 +120,10 @@ function renderCardsGrid(cards: AgentGraphCard[]) {
 
 function renderAgentCard(card: AgentGraphCard) {
   const avatarContent = card.emoji || card.displayName.slice(0, 1);
-  const fallbackLabel = card.fallbacks.length > 0
-    ? `+${card.fallbacks.length} fallback${card.fallbacks.length > 1 ? "s" : ""}`
-    : null;
+  const fallbackLabel =
+    card.fallbacks.length > 0
+      ? `+${card.fallbacks.length} fallback${card.fallbacks.length > 1 ? "s" : ""}`
+      : null;
 
   return html`
     <div class="card agent-graph-card">
@@ -134,7 +133,13 @@ function renderAgentCard(card: AgentGraphCard) {
           <div class="agent-graph-card-name">${card.displayName}</div>
           <div class="agent-sub mono">${card.id}</div>
         </div>
-        ${card.isDefault ? html`<span class="agent-pill">default</span>` : nothing}
+        ${
+          card.isDefault
+            ? html`
+                <span class="agent-pill">default</span>
+              `
+            : nothing
+        }
       </div>
 
       ${card.identityTheme ? html`<div class="agent-graph-card-theme muted">${card.identityTheme}</div>` : nothing}
@@ -224,7 +229,7 @@ function renderComparisonTable(cards: AgentGraphCard[]) {
     },
     {
       label: "Default",
-      values: cards.map((c) => c.isDefault ? "yes" : "no"),
+      values: cards.map((c) => (c.isDefault ? "yes" : "no")),
     },
   ];
 
@@ -270,9 +275,7 @@ function renderComparisonTable(cards: AgentGraphCard[]) {
               (row) => html`
                 <tr>
                   <td class="agent-graph-table-label label">${row.label}</td>
-                  ${row.values.map(
-                    (val) => html`<td class="mono">${val}</td>`,
-                  )}
+                  ${row.values.map((val) => html`<td class="mono">${val}</td>`)}
                 </tr>
               `,
             )}

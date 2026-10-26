@@ -1,11 +1,7 @@
 import JSON5 from "json5";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { getOwnProperty, hasOwnKey, setOwnProperty } from "../safe-object.js";
-import {
-  findDecodedMatches,
-  type LiteralReplacement,
-  scanJson5Document,
-} from "./json5-strings.js";
+import { findDecodedMatches, type LiteralReplacement, scanJson5Document } from "./json5-strings.js";
 import { isSensitiveConfigPath, type ConfigUiHints } from "./schema.hints.js";
 import type { ConfigFileSnapshot } from "./types.openclaw.js";
 

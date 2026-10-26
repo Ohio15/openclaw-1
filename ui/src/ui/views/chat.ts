@@ -409,14 +409,18 @@ export function renderChat(props: ChatProps) {
             ></textarea>
           </label>
           <div class="chat-compose__actions">
-            ${canAbort ? html`
+            ${
+              canAbort
+                ? html`
               <button
                 class="btn"
                 @click=${props.onAbort}
               >
                 Stop
               </button>
-            ` : nothing}
+            `
+                : nothing
+            }
             <button
               class="btn primary"
               @click=${props.onSend}

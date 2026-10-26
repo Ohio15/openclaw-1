@@ -151,9 +151,11 @@ export function renderMessageGroup(
         <div class="chat-group-footer">
           <span class="chat-sender-name">${who}</span>
           ${renderChannelBadge(opts.sessionChannel)}
-          ${normalizedRole === "assistant" && opts.modelName
-            ? html`<span class="chat-model-badge" title="${opts.modelName}">${opts.modelName}</span>`
-            : nothing}
+          ${
+            normalizedRole === "assistant" && opts.modelName
+              ? html`<span class="chat-model-badge" title="${opts.modelName}">${opts.modelName}</span>`
+              : nothing
+          }
           <span class="chat-group-timestamp">${timestamp}</span>
         </div>
       </div>

@@ -144,16 +144,19 @@ export function renderSessionTranscript(props: SessionTranscriptProps) {
         </span>
       </div>
 
-      ${state.loading
-        ? html`<div class="transcript-loading">Loading transcript...</div>`
-        : nothing}
+      ${
+        state.loading
+          ? html`
+              <div class="transcript-loading">Loading transcript...</div>
+            `
+          : nothing
+      }
 
-      ${state.error
-        ? html`<div class="transcript-empty">${state.error}</div>`
-        : nothing}
+      ${state.error ? html`<div class="transcript-empty">${state.error}</div>` : nothing}
 
-      ${!state.loading && !state.error && state.items.length > 0
-        ? html`
+      ${
+        !state.loading && !state.error && state.items.length > 0
+          ? html`
             <div class="transcript-messages">
               ${state.items.map(
                 (item) => html`
@@ -167,7 +170,8 @@ export function renderSessionTranscript(props: SessionTranscriptProps) {
               )}
             </div>
           `
-        : nothing}
+          : nothing
+      }
     </div>
   `;
 }
