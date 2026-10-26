@@ -1,7 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveGatewayRuntimeConfig } from "./server-runtime-config.js";
 
 describe("resolveGatewayRuntimeConfig", () => {
+  // resolveGatewayAuth falls back to OPENCLAW_GATEWAY_TOKEN/PASSWORD, so a
+  // developer machine with gateway auth exported would satisfy the
+  // "no token configured" cases. Isolate every case from the host env.
+  beforeEach(() => {
+    vi.stubEnv("OPENCLAW_GATEWAY_TOKEN", undefined);
+    vi.stubEnv("OPENCLAW_GATEWAY_PASSWORD", undefined);
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   describe("trusted-proxy auth mode", () => {
     // This test validates BOTH validation layers:
     // 1. CLI validation in src/cli/gateway-cli/run.ts (line 246)
