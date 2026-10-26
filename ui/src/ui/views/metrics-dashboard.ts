@@ -434,20 +434,40 @@ function renderChannelCard(channel: ChannelHealthEntry) {
 }
 
 function deriveChannelStatusClass(ch: ChannelHealthEntry): string {
-  if (!ch.configured) return "muted";
-  if (ch.connected === true) return "ok";
-  if (ch.running && ch.connected === null) return "warn";
-  if (ch.running) return "ok";
-  if (ch.lastError) return "danger";
+  if (!ch.configured) {
+    return "muted";
+  }
+  if (ch.connected === true) {
+    return "ok";
+  }
+  if (ch.running && ch.connected === null) {
+    return "warn";
+  }
+  if (ch.running) {
+    return "ok";
+  }
+  if (ch.lastError) {
+    return "danger";
+  }
   return "muted";
 }
 
 function deriveChannelStatusLabel(ch: ChannelHealthEntry): string {
-  if (!ch.configured) return "Not configured";
-  if (ch.connected === true) return "Connected";
-  if (ch.running && ch.connected === null) return "Running";
-  if (ch.running && ch.connected === false) return "Disconnected";
-  if (ch.lastError) return "Error";
+  if (!ch.configured) {
+    return "Not configured";
+  }
+  if (ch.connected === true) {
+    return "Connected";
+  }
+  if (ch.running && ch.connected === null) {
+    return "Running";
+  }
+  if (ch.running && ch.connected === false) {
+    return "Disconnected";
+  }
+  if (ch.lastError) {
+    return "Error";
+  }
   return "Stopped";
 }
 
@@ -592,8 +612,12 @@ function renderProgressBar(pct: number, colorClass: string) {
 }
 
 function barColor(pct: number): string {
-  if (pct >= 90) return "danger";
-  if (pct >= 70) return "warn";
+  if (pct >= 90) {
+    return "danger";
+  }
+  if (pct >= 70) {
+    return "warn";
+  }
   return "ok";
 }
 
@@ -608,7 +632,9 @@ function formatTokenCount(tokens: number): string {
 }
 
 function truncate(value: string, max: number): string {
-  if (value.length <= max) return value;
+  if (value.length <= max) {
+    return value;
+  }
   return `${value.slice(0, max - 1)}\u2026`;
 }
 

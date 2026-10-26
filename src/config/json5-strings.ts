@@ -114,7 +114,7 @@ function readStringLiteral(source: string, start: number): Json5StringLiteral {
     }
     if (next === "u") {
       const hex = source.slice(index + 2, index + 6);
-      if (hex.length === 4 && [...hex].every((digit) => isHexDigit(digit))) {
+      if (hex.length === 4 && hex.split("").every((digit) => isHexDigit(digit))) {
         pushDecoded(String.fromCharCode(Number.parseInt(hex, 16)), index, index + 6);
         index += 6;
         continue;
@@ -240,7 +240,7 @@ function readBareToken(source: string, start: number): { end: number; decoded: s
     }
     if (ch === "\\" && source[index + 1] === "u") {
       const hex = source.slice(index + 2, index + 6);
-      if (hex.length === 4 && [...hex].every((digit) => isHexDigit(digit))) {
+      if (hex.length === 4 && hex.split("").every((digit) => isHexDigit(digit))) {
         decoded += String.fromCharCode(Number.parseInt(hex, 16));
         index += 6;
         continue;

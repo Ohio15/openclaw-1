@@ -83,6 +83,7 @@ import type {
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
 import type { ConfigHistoryEntry } from "./views/config-history.ts";
+import type { IntelligenceStats } from "./views/intelligence-dashboard.ts";
 import type { SecurityAuditReport, SecurityActivityEntry } from "./views/security.types.ts";
 import { createSessionTranscriptState } from "./views/session-transcript.ts";
 
@@ -310,7 +311,7 @@ export class OpenClawApp extends LitElement {
   securityPollInterval: number | null = null;
 
   @state() intelligenceLoading = false;
-  @state() intelligenceStats: any = null;
+  @state() intelligenceStats: IntelligenceStats | null = null;
 
   @state() cronLoading = false;
   @state() cronJobs: CronJob[] = [];
@@ -333,7 +334,7 @@ export class OpenClawApp extends LitElement {
   @state() presetsExpandedDetail: import("./controllers/presets.ts").PresetDetail | null = null;
 
   @state() routingLoading = false;
-  @state() routingStats: any = null;
+  @state() routingStats: IntelligenceStats | null = null;
   @state() routingError: string | null = null;
 
   @state() unreadChatCount = 0;
@@ -403,7 +404,7 @@ export class OpenClawApp extends LitElement {
 
   protected firstUpdated() {
     handleFirstUpdated(this as unknown as Parameters<typeof handleFirstUpdated>[0]);
-    setupChatGestures(this as any, () => {
+    setupChatGestures(this, () => {
       this.resetToolStream();
       void this.loadAssistantIdentity();
     });

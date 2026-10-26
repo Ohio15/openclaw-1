@@ -17,8 +17,12 @@ export async function loadSecurityAudit(
   state: SecurityState,
   opts?: { quiet?: boolean; deep?: boolean },
 ): Promise<void> {
-  if (!state.client || !state.connected) return;
-  if (state.securityAuditLoading && !opts?.quiet) return;
+  if (!state.client || !state.connected) {
+    return;
+  }
+  if (state.securityAuditLoading && !opts?.quiet) {
+    return;
+  }
 
   if (!opts?.quiet) {
     state.securityAuditLoading = true;

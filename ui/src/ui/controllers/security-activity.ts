@@ -26,14 +26,18 @@ export function addSecurityActivityEntry(
 export function parseToolEventToActivity(
   payload: Record<string, unknown> | undefined,
 ): Omit<SecurityActivityEntry, "id"> | null {
-  if (!payload) return null;
+  if (!payload) {
+    return null;
+  }
   const toolName =
     typeof payload.tool === "string"
       ? payload.tool
       : typeof payload.name === "string"
         ? payload.name
         : null;
-  if (!toolName) return null;
+  if (!toolName) {
+    return null;
+  }
 
   const status = typeof payload.status === "string" ? payload.status : "invoked";
   const sessionKey = typeof payload.sessionKey === "string" ? payload.sessionKey : undefined;
@@ -53,7 +57,9 @@ export function parseExecApprovalToActivity(
   payload: Record<string, unknown> | undefined,
   eventType: "requested" | "resolved",
 ): Omit<SecurityActivityEntry, "id"> | null {
-  if (!payload) return null;
+  if (!payload) {
+    return null;
+  }
   const command = typeof payload.command === "string" ? payload.command : "unknown";
   const decision = typeof payload.decision === "string" ? payload.decision : undefined;
   const severity: SecurityAuditSeverity = eventType === "requested" ? "warn" : "info";

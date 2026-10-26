@@ -19,7 +19,7 @@ export function renderSettingsSubTabs(state: AppViewState) {
           <button
             class="settings-subtab ${active === tab.id ? "settings-subtab--active" : ""}"
             @click=${() => {
-              (state as any).settingsSubTab = tab.id;
+              state.settingsSubTab = tab.id;
             }}
           >
             ${tab.label}

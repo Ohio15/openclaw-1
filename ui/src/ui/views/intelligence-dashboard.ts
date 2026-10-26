@@ -61,14 +61,22 @@ export type IntelligenceDashboardProps = {
 // ============================================================================
 
 function confidenceColor(value: number): string {
-  if (value >= 0.8) return "ok";
-  if (value >= 0.6) return "warn";
+  if (value >= 0.8) {
+    return "ok";
+  }
+  if (value >= 0.6) {
+    return "warn";
+  }
   return "danger";
 }
 
 function refusalColor(value: number): string {
-  if (value <= 0.05) return "ok";
-  if (value <= 0.15) return "warn";
+  if (value <= 0.05) {
+    return "ok";
+  }
+  if (value <= 0.15) {
+    return "warn";
+  }
   return "danger";
 }
 
@@ -85,7 +93,9 @@ function formatTimestamp(ts: number): string {
 function maxTierCount(byTier: Record<string, { count: number; avgConfidence: number }>): number {
   let max = 0;
   for (const key of Object.keys(byTier)) {
-    if (byTier[key].count > max) max = byTier[key].count;
+    if (byTier[key].count > max) {
+      max = byTier[key].count;
+    }
   }
   return max || 1;
 }
@@ -129,7 +139,7 @@ export function renderIntelligenceDashboard(props: IntelligenceDashboardProps) {
     </div>
 
     <!-- Section 1: Pipeline Status -->
-    ${renderPipelineStatus(config, skeleton)}
+    ${renderPipelineStatus(config)}
 
     <!-- Section 2: Quality Metrics -->
     ${renderQualityMetrics(feedback, skeleton)}
@@ -158,16 +168,6 @@ function skel(width: string, height = "14px") {
     border-radius: 4px;
     animation: skeleton-pulse 1.8s ease-in-out infinite;
   "></span>`;
-}
-
-function skelBlock(height = "24px") {
-  return html`<div style="
-    width: 100%;
-    height: ${height};
-    background: var(--border);
-    border-radius: 4px;
-    animation: skeleton-pulse 1.8s ease-in-out infinite;
-  "></div>`;
 }
 
 function renderSkeletonStyles() {
@@ -203,7 +203,7 @@ function statusRow(label: string, value: unknown, skeleton: boolean, colorClass 
 // Section 1: Pipeline Status
 // ============================================================================
 
-function renderPipelineStatus(config: IntelligenceStats["config"] | null, skeleton: boolean) {
+function renderPipelineStatus(config: IntelligenceStats["config"] | null) {
   return html`
     ${renderSkeletonStyles()}
     <section class="grid grid-cols-2" style="margin-bottom: 18px;">
@@ -263,10 +263,10 @@ function renderQualityMetrics(feedback: IntelligenceStats["feedback"] | null, sk
 
   return html`
     <section style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px;">
-      ${metricCard("Avg Confidence", hasData ? pct(feedback!.avgConfidence) : "--", hasData ? confidenceColor(feedback!.avgConfidence) : "")}
-      ${metricCard("Coherence Rate", hasData ? pct(feedback!.coherenceRate) : "--", hasData ? confidenceColor(feedback!.coherenceRate) : "")}
-      ${metricCard("Refusal Rate", hasData ? pct(feedback!.refusalRate) : "--", hasData ? refusalColor(feedback!.refusalRate) : "")}
-      ${metricCard("Total Evaluations", hasData ? feedback!.totalEntries.toLocaleString() : "0", "")}
+      ${metricCard("Avg Confidence", hasData ? pct(feedback.avgConfidence) : "--", hasData ? confidenceColor(feedback.avgConfidence) : "")}
+      ${metricCard("Coherence Rate", hasData ? pct(feedback.coherenceRate) : "--", hasData ? confidenceColor(feedback.coherenceRate) : "")}
+      ${metricCard("Refusal Rate", hasData ? pct(feedback.refusalRate) : "--", hasData ? refusalColor(feedback.refusalRate) : "")}
+      ${metricCard("Total Evaluations", hasData ? feedback.totalEntries.toLocaleString() : "0", "")}
     </section>
   `;
 }
@@ -318,7 +318,7 @@ function renderTierDistribution(
     `;
   }
 
-  const sortedTiers = tiers.sort(
+  const sortedTiers = tiers.toSorted(
     (a, b) =>
       (tierOrder.indexOf(a) === -1 ? 99 : tierOrder.indexOf(a)) -
       (tierOrder.indexOf(b) === -1 ? 99 : tierOrder.indexOf(b)),
@@ -554,7 +554,9 @@ function renderRecentActivity(
 // ============================================================================
 
 function renderBudgetStatus(budget: IntelligenceStats["budget"] | null, skeleton: boolean) {
-  if (!budget && !skeleton) return nothing;
+  if (!budget && !skeleton) {
+    return nothing;
+  }
 
   if (!budget) {
     return html`
