@@ -50,6 +50,12 @@ describe("profile CRUD endpoints", () => {
     state.cdpBaseUrl = `http://127.0.0.1:${state.testPort + 1}`;
     state.prevGatewayPort = process.env.OPENCLAW_GATEWAY_PORT;
     process.env.OPENCLAW_GATEWAY_PORT = String(state.testPort - 2);
+    // Same isolation as installBrowserControlServerHooks: host gateway auth env
+    // would make the control server answer 401 before request validation.
+    state.prevGatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+    state.prevGatewayPassword = process.env.OPENCLAW_GATEWAY_PASSWORD;
+    delete process.env.OPENCLAW_GATEWAY_TOKEN;
+    delete process.env.OPENCLAW_GATEWAY_PASSWORD;
 
     vi.stubGlobal(
       "fetch",
@@ -70,6 +76,16 @@ describe("profile CRUD endpoints", () => {
       delete process.env.OPENCLAW_GATEWAY_PORT;
     } else {
       process.env.OPENCLAW_GATEWAY_PORT = state.prevGatewayPort;
+    }
+    if (state.prevGatewayToken === undefined) {
+      delete process.env.OPENCLAW_GATEWAY_TOKEN;
+    } else {
+      process.env.OPENCLAW_GATEWAY_TOKEN = state.prevGatewayToken;
+    }
+    if (state.prevGatewayPassword === undefined) {
+      delete process.env.OPENCLAW_GATEWAY_PASSWORD;
+    } else {
+      process.env.OPENCLAW_GATEWAY_PASSWORD = state.prevGatewayPassword;
     }
     await stopBrowserControlServer();
   });

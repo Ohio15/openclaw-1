@@ -171,13 +171,13 @@ describe("server-channels auto restart", () => {
     // concurrent callers (health-monitor + auto-restart) to race past the
     // check and both materialise daemons. The per-channel:account mutex
     // collapses concurrent entries to a single in-flight start.
-    let resolveStart: (() => void) | null = null;
-    const startAccount = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveStart = resolve;
-        }),
-    );
+    // Assigned synchronously by the Promise executor, so it is always set
+    // before use (a `| null` local narrowed to `never` after the closure write).
+    let resolveStart!: () => void;
+    const startGate = new Promise<void>((resolve) => {
+      resolveStart = resolve;
+    });
+    const startAccount = vi.fn(() => startGate);
     installTestRegistry(
       createTestPlugin({
         startAccount: startAccount as unknown as NonNullable<
@@ -199,7 +199,7 @@ describe("server-channels auto restart", () => {
     expect(startAccount).toHaveBeenCalledTimes(1);
 
     // Now resolve the in-flight start and let both promises settle.
-    resolveStart?.();
+    resolveStart();
     await a;
     await b;
   });

@@ -16,17 +16,14 @@ import type {
   AgentIdentityResult,
   AgentsListResult,
   ChannelsStatusSnapshot,
-  GatewayAgentRow,
   SessionsListResult,
 } from "../types.ts";
 import {
-  buildAgentContext,
   resolveAgentConfig,
   resolveAgentEmoji,
   resolveModelFallbacks,
   resolveModelLabel,
   resolveModelPrimary,
-  type AgentContext,
 } from "../views/agents-utils.ts";
 
 // ---------------------------------------------------------------------------
@@ -175,7 +172,7 @@ export function compileAgentGraphData(opts: {
 
   // Delegation edges — extract from coding agent delegation config if present
   const delegationEdges: DelegationEdge[] = [];
-  const cfgAny = configForm as Record<string, unknown> | null;
+  const cfgAny = configForm;
   const plugins = cfgAny?.plugins as Record<string, unknown> | undefined;
   const intellCfg = plugins?.intelligence as Record<string, unknown> | undefined;
   const codingDelegation = intellCfg?.codingAgentDelegation as Record<string, unknown> | undefined;

@@ -19,7 +19,9 @@ export type SecurityTogglesProps = {
 function resolveValue(obj: Record<string, unknown> | null, path: (string | number)[]): unknown {
   let current: unknown = obj;
   for (const key of path) {
-    if (current == null || typeof current !== "object") return undefined;
+    if (current == null || typeof current !== "object") {
+      return undefined;
+    }
     current = (current as Record<string, unknown>)[String(key)];
   }
   return current;
@@ -71,7 +73,7 @@ function renderToggle(toggle: ToggleMeta, props: SecurityTogglesProps): Template
   }
 
   if (toggle.type === "select" && toggle.options) {
-    const strValue = String(currentValue ?? "");
+    const strValue = scalarText(currentValue, "");
     return html`
       <div
         class="toggle-row"
@@ -132,6 +134,13 @@ function renderGroup(group: ToggleGroup, props: SecurityTogglesProps): TemplateR
       }
     </div>
   `;
+}
+
+/** Render a scalar config value as text; non-scalars (objects/arrays) fall back. */
+function scalarText(value: unknown, fallback: string): string {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+    ? String(value)
+    : fallback;
 }
 
 export function renderSecurityToggles(props: SecurityTogglesProps): TemplateResult {

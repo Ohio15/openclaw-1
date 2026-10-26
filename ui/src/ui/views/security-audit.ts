@@ -48,7 +48,7 @@ export function renderSecurityAudit(props: SecurityAuditProps): TemplateResult {
   const findings = props.report?.findings ?? [];
   const summary = props.report?.summary;
 
-  const sorted = [...findings].sort(
+  const sorted = [...findings].toSorted(
     (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
   );
   const filtered =

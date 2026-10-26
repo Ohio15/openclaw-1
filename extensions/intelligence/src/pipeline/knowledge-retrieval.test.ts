@@ -198,8 +198,9 @@ describe("getSemanticKnowledge — static source", () => {
     expect(result).toBe(staticContent);
   });
 
-  it("returns null when buildKnowledgeContext returns null", async () => {
-    vi.mocked(buildKnowledgeContext).mockReturnValue(null);
+  it("returns null when buildKnowledgeContext finds no match (empty string)", async () => {
+    // buildKnowledgeContext returns "" (never null) when no trigger matches.
+    vi.mocked(buildKnowledgeContext).mockReturnValue("");
 
     const result = await getSemanticKnowledge("unknown topic", defaultOptions, "static");
 

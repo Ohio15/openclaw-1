@@ -42,7 +42,8 @@ self.addEventListener("fetch", (event) => {
           fetch(request).then((response) => {
             if (response.ok) {
               const clone = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+              // Keep the worker alive until the cache write settles.
+              event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)));
             }
             return response;
           }),

@@ -23,6 +23,13 @@ import { getAllQueueItems } from "./db.ts";
 import type { Tab } from "./navigation.ts";
 import type { ChatQueueItem } from "./ui-types.ts";
 
+declare global {
+  interface Window {
+    /** Deferred PWA `beforeinstallprompt` event, kept for a later install action. */
+    __openclawInstallPrompt?: Event;
+  }
+}
+
 type LifecycleHost = {
   basePath: string;
   tab: Tab;
@@ -67,7 +74,7 @@ function loadPersistedQueue(host: LifecycleHost) {
 export function captureInstallPrompt() {
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
-    (window as any).__openclawInstallPrompt = e;
+    window.__openclawInstallPrompt = e;
   });
 }
 
@@ -99,7 +106,9 @@ export function handleConnected(host: LifecycleHost) {
   if (window.visualViewport) {
     const updateKeyboardHeight = () => {
       const viewport = window.visualViewport;
-      if (!viewport) return;
+      if (!viewport) {
+        return;
+      }
       const keyboardHeight = Math.max(0, window.innerHeight - viewport.height);
       document.documentElement.style.setProperty("--keyboard-height", `${keyboardHeight}px`);
     };

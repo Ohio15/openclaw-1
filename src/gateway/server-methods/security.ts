@@ -7,7 +7,7 @@ import type { GatewayRequestHandlers } from "./types.js";
 export const securityHandlers: GatewayRequestHandlers = {
   "security.audit": async ({ respond, params }) => {
     try {
-      const config = await loadConfig();
+      const config = loadConfig();
       const deep = params?.deep === true;
       const report = await runSecurityAudit({
         config,

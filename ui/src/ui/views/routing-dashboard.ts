@@ -157,7 +157,9 @@ function tierColor(tier: string): string {
 }
 
 function formatTokens(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(0)}K`;
+  if (n >= 1000) {
+    return `${(n / 1000).toFixed(0)}K`;
+  }
   return String(n);
 }
 
@@ -323,7 +325,7 @@ function renderTierCards(
                     skeleton
                       ? skel("30px")
                       : html`<span style="font-family: var(--mono); color: var(--text-strong);">
-                        ${hasLive ? liveData!.count.toLocaleString() : "0"}
+                        ${hasLive ? liveData.count.toLocaleString() : "0"}
                       </span>`
                   }
                 </div>
@@ -332,8 +334,8 @@ function renderTierCards(
                   ${
                     skeleton
                       ? skel("40px")
-                      : html`<span style="font-family: var(--mono); color: ${hasLive && liveData!.avgConfidence >= 0.8 ? "var(--ok)" : hasLive && liveData!.avgConfidence >= 0.6 ? "var(--warn)" : hasLive ? "var(--danger)" : "var(--muted)"};">
-                        ${hasLive ? pct(liveData!.avgConfidence) : "--"}
+                      : html`<span style="font-family: var(--mono); color: ${hasLive && liveData.avgConfidence >= 0.8 ? "var(--ok)" : hasLive && liveData.avgConfidence >= 0.6 ? "var(--warn)" : hasLive ? "var(--danger)" : "var(--muted)"};">
+                        ${hasLive ? pct(liveData.avgConfidence) : "--"}
                       </span>`
                   }
                 </div>
