@@ -94,7 +94,8 @@ jobs:
             esac
 
             case "$path" in
-              apps/android/*|apps/shared/*)
+              # ci.yml holds the android job itself, so editing it must exercise it.
+              apps/android/*|apps/shared/*|.github/workflows/ci.yml)
                 run_android=true
                 ;;
             esac
@@ -679,6 +680,9 @@ jobs:
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           accept-android-sdk-licenses: false
+          # The action's default packages ("tools platform-tools") fail: the legacy
+          # `tools` package no longer exists in the SDK repository.
+          packages: platform-tools
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
