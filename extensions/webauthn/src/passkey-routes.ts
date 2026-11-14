@@ -5,7 +5,7 @@
  * Uses @simplewebauthn/server for all WebAuthn ceremony logic.
  */
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   generateRegistrationOptions,
@@ -23,6 +23,14 @@ import type { PasskeyStore } from "./passkey-store.js";
 import type { SessionTokenStore } from "./session-tokens.js";
 
 // ── Helpers ──────────────────────────────────────────────────
+
+/** Constant-time setup-token comparison (digests equalise the lengths). */
+function setupTokenMatches(candidate: string, expected: string): boolean {
+  if (!candidate) return false;
+  const a = createHash("sha256").update(candidate).digest();
+  const b = createHash("sha256").update(expected).digest();
+  return timingSafeEqual(a, b);
+}
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
@@ -169,7 +177,7 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
       }
 
       const bodySetupToken = String(body.setup_token ?? "");
-      if (!bodySetupToken || bodySetupToken !== setupToken) {
+      if (!setupTokenMatches(bodySetupToken, setupToken)) {
         sendJson(res, 403, { error: "Invalid setup token." });
         return true;
       }
@@ -226,7 +234,7 @@ export function createPasskeyHandler(deps: PasskeyRoutesDeps) {
       }
 
       const bodySetupToken = String(body.setup_token ?? "");
-      if (!bodySetupToken || bodySetupToken !== setupToken) {
+      if (!setupTokenMatches(bodySetupToken, setupToken)) {
         sendJson(res, 403, { error: "Invalid setup token." });
         return true;
       }

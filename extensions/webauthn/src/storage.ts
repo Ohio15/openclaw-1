@@ -201,3 +201,19 @@ export function removeSetupTokenFile(stateDir: string, logger: PluginLogger): vo
     }
   }
 }
+
+// ── Setup Token Policy ───────────────────────────────────────
+
+/**
+ * How long a setup token redeems after it is issued (startup or admin
+ * endpoint). It is also single-use: a successful registration clears it.
+ */
+export const SETUP_TOKEN_TTL_MS = 15 * 60 * 1000;
+
+/**
+ * Log-safe identifier for a setup token: the first 6 characters and the
+ * length. Enough to tell tokens apart in logs, far too little to redeem one.
+ */
+export function setupTokenFingerprint(token: string): string {
+  return `${token.slice(0, 6)}… (len ${token.length})`;
+}

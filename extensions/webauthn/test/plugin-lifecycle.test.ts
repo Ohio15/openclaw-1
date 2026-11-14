@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import webauthnPlugin from "../index.js";
 import { PasskeyStore } from "../src/passkey-store.js";
+import { SETUP_TOKEN_TTL_MS } from "../src/storage.js";
 
 const isWindows = process.platform === "win32";
 const GATEWAY_TOKEN = "gateway-token-for-tests";
@@ -27,9 +28,15 @@ function mockReq(
   method: string,
   url: string,
   headers: Record<string, string> = {},
+  body?: unknown,
 ): IncomingMessage {
+  let sent = false;
   const readable = new Readable({
     read() {
+      if (body !== undefined && !sent) {
+        sent = true;
+        this.push(Buffer.from(JSON.stringify(body)));
+      }
       this.push(null);
     },
   });
@@ -101,9 +108,15 @@ describe("webauthn plugin lifecycle", () => {
     };
   }
 
-  async function request(handler: HttpHandler, method: string, url: string, headers = {}) {
+  async function request(
+    handler: HttpHandler,
+    method: string,
+    url: string,
+    headers: Record<string, string> = {},
+    body?: unknown,
+  ) {
     const { res, captured } = mockRes();
-    await handler(mockReq(method, url, headers), res);
+    await handler(mockReq(method, url, headers, body), res);
     return captured;
   }
 
@@ -284,5 +297,105 @@ describe("webauthn plugin lifecycle", () => {
 
     const res = await request(plugin.handler, "GET", "/auth/register");
     expect(res.status).toBe(503);
+  });
+
+  it("logs only a fingerprint of the startup token: first 6 chars and length", async () => {
+    const plugin = loadPlugin();
+    await plugin.start();
+    const token = readToken();
+
+    const announce = logs.find((l) => l.msg.includes("registration is open"));
+    expect(announce?.msg).toContain(`${token.slice(0, 6)}… (len ${token.length})`);
+    expect(announce?.msg).not.toContain(token);
+    expect(allOutput()).not.toContain(token.slice(0, 7));
+    plugin.stop();
+  });
+
+  it("accepts the startup token for registration options and rejects a wrong one", async () => {
+    const plugin = loadPlugin();
+    await plugin.start();
+    const token = readToken();
+
+    const wrong = await request(
+      plugin.handler,
+      "POST",
+      "/auth/passkey/register/options",
+      {},
+      {
+        name: "Phone",
+        setup_token: `${token.slice(0, -1)}x`,
+      },
+    );
+    expect(wrong.status).toBe(403);
+
+    const ok = await request(
+      plugin.handler,
+      "POST",
+      "/auth/passkey/register/options",
+      {},
+      {
+        name: "Phone",
+        setup_token: token,
+      },
+    );
+    expect(ok.status).toBe(200);
+    plugin.stop();
+  });
+
+  it("expires the startup token after the TTL and removes its file", async () => {
+    const t0 = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(t0);
+    const plugin = loadPlugin();
+    await plugin.start();
+    const token = readToken();
+
+    now.mockReturnValue(t0 + SETUP_TOKEN_TTL_MS - 1);
+    expect((await request(plugin.handler, "GET", "/auth/register")).status).toBe(200);
+
+    now.mockReturnValue(t0 + SETUP_TOKEN_TTL_MS);
+    expect((await request(plugin.handler, "GET", "/auth/register")).status).toBe(403);
+    const late = await request(
+      plugin.handler,
+      "POST",
+      "/auth/passkey/register/options",
+      {},
+      {
+        name: "Phone",
+        setup_token: token,
+      },
+    );
+    expect(late.status).toBe(403);
+    expect(fs.existsSync(tokenFile())).toBe(false);
+    expect(logs.some((l) => l.msg.includes("setup token expired"))).toBe(true);
+    plugin.stop();
+  });
+
+  it("expires an admin-issued token after the TTL and reports its expiry", async () => {
+    const t0 = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(t0);
+    const plugin = loadPlugin();
+    await plugin.start();
+
+    const issued = await request(plugin.handler, "POST", "/auth/passkey/admin/new-setup-token", {
+      authorization: `Bearer ${GATEWAY_TOKEN}`,
+    });
+    const parsed = JSON.parse(issued.body) as { setup_token: string; expires_at: string };
+    expect(Date.parse(parsed.expires_at)).toBe(t0 + SETUP_TOKEN_TTL_MS);
+    expect(allOutput()).toContain(`${parsed.setup_token.slice(0, 6)}… (len 43)`);
+    expect(allOutput()).not.toContain(parsed.setup_token);
+
+    now.mockReturnValue(t0 + SETUP_TOKEN_TTL_MS + 1);
+    const late = await request(
+      plugin.handler,
+      "POST",
+      "/auth/passkey/register/options",
+      {},
+      {
+        name: "Phone",
+        setup_token: parsed.setup_token,
+      },
+    );
+    expect(late.status).toBe(403);
+    plugin.stop();
   });
 });

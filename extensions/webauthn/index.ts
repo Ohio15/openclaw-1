@@ -34,6 +34,8 @@ import {
   isWithinDir,
   removeSetupTokenFile,
   resolvePasskeysPath,
+  SETUP_TOKEN_TTL_MS,
+  setupTokenFingerprint,
   tightenFileMode,
   webauthnStateDir,
   writeSetupTokenFile,
@@ -108,14 +110,40 @@ const webauthnPlugin = {
     // owner-only file in the state dir (or the bearer-authenticated admin
     // endpoint response).
     let setupToken: string | null = null;
+    // Epoch ms after which the setup token no longer redeems.
+    let setupTokenExpiresAt = 0;
     // Set at service start; used to remove the token file once it is stale.
     let stateDirForToken: string | null = null;
 
     function clearSetupToken(): void {
       setupToken = null;
+      setupTokenExpiresAt = 0;
       if (stateDirForToken) {
         removeSetupTokenFile(stateDirForToken, api.logger);
       }
+    }
+
+    /** Mint a fresh setup token, valid for SETUP_TOKEN_TTL_MS. Replaces any prior one. */
+    function issueSetupToken(): string {
+      const issued = randomBytes(32).toString("base64url");
+      setupToken = issued;
+      setupTokenExpiresAt = Date.now() + SETUP_TOKEN_TTL_MS;
+      return issued;
+    }
+
+    /**
+     * The active setup token, or null when none is active. An expired token is
+     * cleared (and its file removed) on first sight, so a token copied out of
+     * an old log or file stops redeeming after the TTL even if nobody used it.
+     */
+    function currentSetupToken(): string | null {
+      if (setupToken && Date.now() >= setupTokenExpiresAt) {
+        clearSetupToken();
+        api.logger.info(
+          "webauthn: setup token expired — registration is closed. Restart the gateway or use the admin endpoint to issue a new one.",
+        );
+      }
+      return setupToken;
     }
 
     // PasskeyStore is initialized in the service start handler
@@ -135,7 +163,7 @@ const webauthnPlugin = {
           sessionTokens,
           pendingDevices,
           logger: api.logger,
-          getSetupToken: () => setupToken,
+          getSetupToken: currentSetupToken,
           clearSetupToken,
           getHmacSecret: () => hmacSecret,
           validateBearerAuth,
@@ -197,13 +225,14 @@ const webauthnPlugin = {
         }
         // Rotating invalidates any token still sitting in the startup file.
         clearSetupToken();
-        const issued = randomBytes(32).toString("base64url");
-        setupToken = issued;
+        const issued = issueSetupToken();
+        const expiresAt = new Date(setupTokenExpiresAt).toISOString();
         api.logger.info(
-          "webauthn: new setup token issued via admin endpoint (returned in the response only)",
+          `webauthn: new setup token ${setupTokenFingerprint(issued)} issued via admin endpoint ` +
+            `(returned in the response only; expires ${expiresAt})`,
         );
         res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-        res.end(JSON.stringify({ setup_token: issued }));
+        res.end(JSON.stringify({ setup_token: issued, expires_at: expiresAt }));
         return true;
       }
 
@@ -262,12 +291,17 @@ const webauthnPlugin = {
         stateDirForToken = ctx.stateDir;
 
         if (!nextStore.hasCredentials) {
+          // Write the file before activating the token, so a failed write
+          // never leaves a live token the owner has no way to read.
           const issued = randomBytes(32).toString("base64url");
           const tokenFile = writeSetupTokenFile(ctx.stateDir, issued);
           setupToken = issued;
+          setupTokenExpiresAt = Date.now() + SETUP_TOKEN_TTL_MS;
           api.logger.warn(
-            `webauthn: no passkeys registered — registration is open. The setup token is in ${tokenFile} ` +
-              `(mode 0600). Open ${origin}/auth/register#setup_token=<token> to register the first passkey.`,
+            `webauthn: no passkeys registered — registration is open until ` +
+              `${new Date(setupTokenExpiresAt).toISOString()}. Setup token ${setupTokenFingerprint(issued)} ` +
+              `is in ${tokenFile} (mode 0600). Open ${origin}/auth/register#setup_token=<token> ` +
+              "to register the first passkey.",
           );
         } else {
           clearSetupToken();
