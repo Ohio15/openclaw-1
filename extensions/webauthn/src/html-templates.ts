@@ -44,16 +44,7 @@ function bufferToBase64url(buffer) {
   return btoa(binary).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=/g, '');
 }`;
 
-export function registrationPage(
-  setupToken: string,
-  rpName: string,
-  credentialCount: number,
-): string {
-  const hasExisting = credentialCount > 0;
-  const existingNote = hasExisting
-    ? `<br><span style="color:#3fb950">${credentialCount} passkey(s) registered</span>`
-    : "";
-
+export function registrationPage(rpName: string): string {
   return pageShell(
     "Register Device",
     rpName,
@@ -63,8 +54,10 @@ export function registrationPage(
       <h2 style="color:#58a6ff;margin-bottom:8px">Register Your Phone</h2>
       <p style="color:#8b949e;font-size:14px;margin-bottom:24px">
         Create a passkey to authorize new devices with Face ID / fingerprint.
-        ${existingNote}
       </p>
+      <input id="setup-token" type="password" autocomplete="off" placeholder="Setup token"
+        style="display:none;background:#161b22;border:1px solid #30363d;border-radius:8px;
+        padding:10px 14px;color:#e6edf3;font-size:14px;width:220px;margin:0 auto 12px;text-align:center">
       <input id="device-name" type="text" placeholder="Name this device (e.g. iPhone)"
         value="Phone" style="background:#161b22;border:1px solid #30363d;border-radius:8px;
         padding:10px 14px;color:#e6edf3;font-size:14px;width:220px;margin-bottom:16px;text-align:center">
@@ -77,10 +70,23 @@ export function registrationPage(
       <div id="status" style="margin-top:20px;font-size:14px"></div>
     </div>
     <script>
-      const setupToken = '${escapeHtml(setupToken)}';
+      // The token arrives in the URL fragment, which is never sent to the
+      // server; drop it from the address bar and history once read.
+      const fragmentToken = new URLSearchParams(location.hash.slice(1)).get('setup_token') || '';
+      if (location.hash) {
+        history.replaceState(null, '', location.pathname);
+      }
+      if (!fragmentToken) {
+        document.getElementById('setup-token').style.display = 'block';
+      }
       ${BASE64URL_HELPERS}
 
       async function startRegistration() {
+        const setupToken = fragmentToken || document.getElementById('setup-token').value.trim();
+        if (!setupToken) {
+          document.getElementById('status').innerHTML = '<span style="color:#f85149">Enter the setup token.</span>';
+          return;
+        }
         const name = document.getElementById('device-name').value || 'Phone';
         document.getElementById('reg-btn').textContent = 'Setting up...';
         document.getElementById('reg-btn').disabled = true;
@@ -152,23 +158,6 @@ export function registrationClosedPage(rpName: string): string {
       <p style="color:#8b949e;font-size:14px">
         No setup token is active. Registration is closed.
         An admin must generate a new setup token to register additional passkeys.
-      </p>
-    </div>
-  `,
-  );
-}
-
-export function invalidTokenPage(rpName: string): string {
-  return pageShell(
-    "Invalid Token",
-    rpName,
-    `
-    <div style="text-align:center;padding:20px;max-width:400px;margin:0 auto">
-      <div style="font-size:48px;margin-bottom:12px">&#x1f512;</div>
-      <h2 style="color:#f85149;margin-bottom:8px">Invalid Setup Token</h2>
-      <p style="color:#8b949e;font-size:14px">
-        A valid setup token is required to register a passkey.
-        Check the server console output for the token.
       </p>
     </div>
   `,

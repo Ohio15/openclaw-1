@@ -208,8 +208,14 @@ function migratePasskeys(
     return "copied";
   }
 
-  fs.mkdirSync(targetWebauthnDir, { recursive: true });
-  fs.writeFileSync(dstPath, srcContent, "utf-8");
+  // Owner-only, matching the webauthn plugin's own writes: anyone who can write
+  // this file can add a credential that approves devices.
+  fs.mkdirSync(targetWebauthnDir, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(dstPath, srcContent, { encoding: "utf-8", mode: 0o600 });
+  if (process.platform !== "win32") {
+    // `mode` only applies when the file is created; narrow an existing one.
+    fs.chmodSync(dstPath, 0o600);
+  }
   log.success(`Copied ${parsed.length} passkey credential(s) to ${dstPath}`);
   return "copied";
 }
