@@ -356,6 +356,7 @@ Provider options:
 - `channels.signal.tlsCaFile`, `channels.signal.tlsCertFile`, `channels.signal.tlsKeyFile`: client-certificate material for an mTLS-fronted backend (all three required together; unset = plaintext).
 - `channels.signal.startupTimeoutMs`: startup wait timeout in ms (cap 120000).
 - `channels.signal.receiveMode`: `on-start | manual`.
+- `channels.signal.accounts.<id>.receive`: `false` makes the account send-only (no inbound subscription; outbound still resolves it). Default `true`. Never subscribe to an account that is a linked device of a person's own number.
 - `channels.signal.ignoreAttachments`: skip attachment downloads.
 - `channels.signal.ignoreStories`: ignore stories from the daemon.
 - `channels.signal.sendReadReceipts`: forward read receipts.

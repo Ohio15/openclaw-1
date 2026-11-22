@@ -689,6 +689,7 @@ export const SignalAccountSchemaBase = z
     tlsCertFile: z.string().optional(),
     tlsKeyFile: z.string().optional(),
     receiveMode: z.union([z.literal("on-start"), z.literal("manual")]).optional(),
+    receive: z.boolean().optional(),
     ignoreAttachments: z.boolean().optional(),
     ignoreStories: z.boolean().optional(),
     sendReadReceipts: z.boolean().optional(),

@@ -226,3 +226,68 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2_000): Promise<voi
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
+
+// Work item cc0c85af: a gateway that only SENDS from an account must not hold
+// a receive stream on it (an account can be a linked device of a person's own
+// number, so its inbound carries their 2FA codes). `receive: false` keeps the
+// account for outbound and opens no subscription.
+describe("monitorSignalProvider per-account receive flag", () => {
+  const twoAccounts = () =>
+    ({
+      channels: {
+        signal: {
+          transport: "rest",
+          httpUrl: "http://signal-api:8080",
+          dmPolicy: "open",
+          allowFrom: ["*"],
+          accounts: {
+            bot: { account: "+15550001111" },
+            cortex: { account: "+15550002222", receive: false, dmPolicy: "disabled" },
+          },
+        },
+      },
+    }) as unknown as Record<string, unknown>;
+
+  it("opens no receive stream for a receive:false account and parks until abort", async () => {
+    monitorConfig = twoAccounts();
+    const runtime = createMonitorRuntime();
+    const statuses: Array<Record<string, unknown>> = [];
+    const parent = new AbortController();
+    let done = false;
+    const finished = monitorSignalProvider({
+      runtime,
+      abortSignal: parent.signal,
+      accountId: "cortex",
+      setStatus: (s) => statuses.push(s as Record<string, unknown>),
+    }).then(() => {
+      done = true;
+    });
+
+    await waitFor(() => statuses.length > 0);
+    expect(statuses[0]).toMatchObject({ accountId: "cortex", running: false, enabled: false });
+    expect(String(statuses[0]?.lastError)).toContain("receive: false");
+    expect(wsLoopMock).not.toHaveBeenCalled();
+    expect(sseLoopMock).not.toHaveBeenCalled();
+    expect(spawnDaemonMock).not.toHaveBeenCalled();
+    expect(waitForTransportReadyMock).not.toHaveBeenCalled();
+    expect(done).toBe(false);
+
+    parent.abort();
+    await finished;
+    expect(done).toBe(true);
+  });
+
+  it("still subscribes an account without the flag, on its own number only", async () => {
+    monitorConfig = twoAccounts();
+    const runtime = createMonitorRuntime();
+    const parent = new AbortController();
+    const finished = monitorSignalProvider({ runtime, abortSignal: parent.signal, accountId: "bot" });
+
+    await waitFor(() => wsLoopMock.mock.calls.length > 0);
+    expect(wsLoopMock).toHaveBeenCalledTimes(1);
+    expect((wsLoopMock.mock.calls[0][0] as { account: string }).account).toBe("+15550001111");
+
+    parent.abort();
+    await finished;
+  });
+});
