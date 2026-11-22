@@ -281,7 +281,11 @@ describe("monitorSignalProvider per-account receive flag", () => {
     monitorConfig = twoAccounts();
     const runtime = createMonitorRuntime();
     const parent = new AbortController();
-    const finished = monitorSignalProvider({ runtime, abortSignal: parent.signal, accountId: "bot" });
+    const finished = monitorSignalProvider({
+      runtime,
+      abortSignal: parent.signal,
+      accountId: "bot",
+    });
 
     await waitFor(() => wsLoopMock.mock.calls.length > 0);
     expect(wsLoopMock).toHaveBeenCalledTimes(1);
