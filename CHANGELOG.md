@@ -15,6 +15,7 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
+- Signal: per-account `receive: false` makes an account send-only. Outbound still resolves it; no receive WebSocket/SSE is opened and no inbound on it reaches the agent. The monitor parks with a terminal `enabled:false` status so the auto-restart loop does not spin. Used to stop the gateway subscribing to accounts it only sends from (work item cc0c85af, v2026.2.49).
 - Agents/Subagents: add an accepted response note for `sessions_spawn` explaining polling subagents are disabled for one-off calls. Thanks @tyler6204.
 - Agents/Subagents: prefix spawned subagent task messages with context to preserve source information in downstream handling. Thanks @tyler6204.
 - iOS/Talk: add a `Background Listening` toggle that keeps Talk Mode active while the app is backgrounded (off by default for battery safety). Thanks @zeulewan.

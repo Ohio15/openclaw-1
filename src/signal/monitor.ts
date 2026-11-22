@@ -304,6 +304,36 @@ async function deliverReplies(params: {
   }
 }
 
+// Publish a terminal `enabled:false` status (so the gateway's auto-restart
+// loop short-circuits) and suspend until the owning channel aborts. Returning
+// eagerly previously caused the server-channels.ts auto-restart logic to
+// reschedule the monitor every 5s forever.
+async function suspendInbound(
+  opts: MonitorSignalOpts,
+  accountId: string,
+  reason: string,
+): Promise<void> {
+  opts.setStatus?.({
+    accountId,
+    running: false,
+    enabled: false,
+    lastError: reason,
+  });
+  const abortSignal = opts.abortSignal;
+  if (!abortSignal) {
+    // No abort wiring available — return so we don't leak a never-resolving
+    // promise. The auto-restart guard added in server-channels.ts will keep
+    // us from being rescheduled.
+    return;
+  }
+  if (abortSignal.aborted) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    abortSignal.addEventListener("abort", () => resolve(), { once: true });
+  });
+}
+
 export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promise<void> {
   const runtime = resolveRuntime(opts);
 
@@ -320,25 +350,11 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     runtime.log?.(
       "Signal inbound listener disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false; outbound unaffected.",
     );
-    opts.setStatus?.({
-      accountId: accountIdForStatus,
-      running: false,
-      enabled: false,
-      lastError: "inbound disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false",
-    });
-    const abortSignal = opts.abortSignal;
-    if (!abortSignal) {
-      // No abort wiring available — return so we don't leak a never-resolving
-      // promise. The auto-restart guard added in server-channels.ts will keep
-      // us from being rescheduled.
-      return;
-    }
-    if (abortSignal.aborted) {
-      return;
-    }
-    await new Promise<void>((resolve) => {
-      abortSignal.addEventListener("abort", () => resolve(), { once: true });
-    });
+    await suspendInbound(
+      opts,
+      accountIdForStatus,
+      "inbound disabled via OPENCLAW_SIGNAL_INBOUND_ENABLED=false",
+    );
     return;
   }
 
@@ -347,6 +363,24 @@ export async function monitorSignalProvider(opts: MonitorSignalOpts = {}): Promi
     cfg,
     accountId: opts.accountId,
   });
+
+  // Per-account send-only mode (`receive: false`): the account stays
+  // resolvable for outbound sends, but no receive stream is opened. A
+  // receive stream on an account hands every inbound message on it to this
+  // process — including accounts that are a linked device of a person's own
+  // number (2FA codes) — so accounts that only send must not subscribe.
+  if (accountInfo.config.receive === false) {
+    runtime.log?.(
+      `[${accountInfo.accountId}] Signal receive disabled for this account (receive: false); outbound unaffected.`,
+    );
+    await suspendInbound(
+      opts,
+      accountInfo.accountId,
+      "inbound disabled for this account (receive: false)",
+    );
+    return;
+  }
+
   const historyLimit = Math.max(
     0,
     accountInfo.config.historyLimit ??

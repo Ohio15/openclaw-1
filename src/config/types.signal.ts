@@ -69,6 +69,14 @@ export type SignalAccountConfig = {
   /** Max time to wait for signal-cli daemon startup (ms, cap 120000). */
   startupTimeoutMs?: number;
   receiveMode?: "on-start" | "manual";
+  /**
+   * Open a receive stream for this account (default: true). `false` makes the
+   * account send-only: outbound sends still resolve it, but no inbound
+   * WebSocket/SSE subscription is opened and no inbound message on it reaches
+   * the agent. Use it for accounts this gateway only sends from, and never
+   * subscribe to an account that is a linked device of a person's own number.
+   */
+  receive?: boolean;
   ignoreAttachments?: boolean;
   ignoreStories?: boolean;
   sendReadReceipts?: boolean;
