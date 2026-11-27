@@ -6,6 +6,8 @@ on:
       - main
     tags:
       - "v*"
+      # Ohio15 release tags are built by ohio-release.yml on nexus-ci only.
+      - "!v*-ohio.*"
     paths-ignore:
       - "docs/**"
       - "**/*.md"

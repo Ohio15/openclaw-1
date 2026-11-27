@@ -1,0 +1,161 @@
+name: Ohio15 Release
+
+# Ohio15 release path for the OpenClaw gateway image (docs/RELEASE.md).
+#
+# Trigger: an annotated tag `v<upstream-base>-ohio.<N>` pushed to this fork,
+# e.g. v2026.2.24-ohio.1 = the Ohio15 line built on upstream tag v2026.2.24.
+# Pushing a tag needs write access, so no fork pull request can start this
+# workflow. Upstream's own docker-release.yml ignores `*-ohio.*` tags.
+#
+# Output: ghcr.io/ohio15/openclaw-gateway:<tag> and :<commit sha>, plus a
+# GitHub Release for the tag whose notes record the image digest, commit,
+# upstream base and workflow run (the digest record the deploy pins to).
+# Deploy is NOT done here: the nexus-deploy stack spec lives in Ohio15/infra
+# (nexus-deploy/stacks/openclaw.json) and is installed and run from there.
+#
+# Why this is not a caller of dev-standards docker-release.yml: its
+# release-gates require the tag to equal package.json's version and run
+# `npm ci`; this fork's tags name the upstream base (package.json carries the
+# Ohio15 app version) and it is a pnpm workspace with its own CI.
+#
+# Runner: the repository variable CI_RUNNER, else the fenced ephemeral-VM
+# label nexus-ci (Ohio15/infra ci-vm/). Never a GitHub-hosted label.
+
+on:
+  push:
+    tags:
+      - "v*-ohio.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohio-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/ohio15/openclaw-gateway
+
+jobs:
+  release:
+    if: github.repository == 'Ohio15/openclaw-1' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ${{ vars.CI_RUNNER || 'nexus-ci' }}
+    timeout-minutes: 90
+    permissions:
+      contents: write # create the GitHub Release that records the digest
+      packages: write # push to ghcr.io/ohio15/openclaw-gateway
+    steps:
+      - name: Checkout tagged commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate tag
+        id: tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # v<YYYY.M.D[-beta.K]>-ohio.<N>; N starts at 1, no leading zeros.
+          re='^v([0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(-beta\.[0-9]+)?)-ohio\.([1-9][0-9]*)$'
+          if [[ ! "$TAG" =~ $re ]]; then
+            echo "::error::Tag '$TAG' is not v<upstream-base>-ohio.<N> (docs/RELEASE.md)"
+            exit 1
+          fi
+          base="v${BASH_REMATCH[1]}"
+          # Asked of the API: actions/checkout can rewrite the fetched tag as
+          # lightweight, so the local ref cannot answer this.
+          tag_type=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" -q .object.type)
+          if [ "$tag_type" != "tag" ]; then
+            echo "::error::$TAG is a lightweight tag ($tag_type); release tags are annotated (git tag -a)"
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/$base^{commit}" >/dev/null; then
+            echo "::error::Upstream base tag $base does not exist in this repository"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$base^{commit}" "$GITHUB_SHA"; then
+            echo "::error::Upstream base $base is not an ancestor of $GITHUB_SHA"
+            exit 1
+          fi
+          # fetch-depth: 0 fetched every branch, so origin/main is present.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not on main: only merged code is released"
+            exit 1
+          fi
+          past=$(git rev-list --count "$base..$GITHUB_SHA")
+          app_version=$(jq -r .version package.json)
+          {
+            echo "base=$base"
+            echo "past=$past"
+            echo "app_version=$app_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push gateway image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.ref_name }}
+            ${{ env.IMAGE }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.title=openclaw-gateway
+
+      - name: Verify pushed digest and record the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          BASE: ${{ steps.tag.outputs.base }}
+          PAST: ${{ steps.tag.outputs.past }}
+          APP_VERSION: ${{ steps.tag.outputs.app_version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::build-push-action returned no usable digest ('$DIGEST')"
+            exit 1
+          fi
+          # The registry must serve the digest we just built under the tag.
+          remote=$(docker buildx imagetools inspect "$IMAGE:$TAG" --format '{{json .Manifest}}' | jq -r .digest)
+          if [ "$remote" != "$DIGEST" ]; then
+            echo "::error::Registry digest for $IMAGE:$TAG is $remote, build reported $DIGEST"
+            exit 1
+          fi
+          notes=$(mktemp)
+          {
+            echo "Ohio15 release of the OpenClaw gateway image."
+            echo
+            echo "- image: \`$IMAGE:$TAG@$DIGEST\`"
+            echo "- digest: \`$DIGEST\`"
+            echo "- commit: \`$GITHUB_SHA\`"
+            echo "- upstream base: \`$BASE\` + $PAST commits"
+            echo "- app version (package.json): \`$APP_VERSION\`"
+            echo "- workflow run: $RUN_URL"
+            echo
+            echo "Deploy: through the nexus-deploy stack \`openclaw\` in Ohio15/infra (docs/RELEASE.md section 7)."
+          } > "$notes"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$TAG" --notes-file "$notes"
+          cat "$notes" >> "$GITHUB_STEP_SUMMARY"

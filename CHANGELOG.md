@@ -15,6 +15,7 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
+- Release (Ohio15): tag-driven release path. An annotated `v<upstream-base>-ohio.<N>` tag (first: `v2026.2.24-ohio.1`) runs `.github/workflows/ohio-release.yml` on the fenced `nexus-ci` runner (repository variable `CI_RUNNER`, never a GitHub-hosted label), builds `ghcr.io/ohio15/openclaw-gateway:<tag>` and records its digest, commit, upstream base and run in the tag's GitHub Release. Upstream's `docker-release.yml` no longer builds `*-ohio.*` tags. Runbook: `docs/RELEASE.md`. Deploy configuration lives in Ohio15/infra, not this repo (work item d1c6c3d3, v2026.2.50).
 - Signal: per-account `receive: false` makes an account send-only. Outbound still resolves it; no receive WebSocket/SSE is opened and no inbound on it reaches the agent. The monitor parks with a terminal `enabled:false` status so the auto-restart loop does not spin. Used to stop the gateway subscribing to accounts it only sends from (work item cc0c85af, v2026.2.49).
 - Agents/Subagents: add an accepted response note for `sessions_spawn` explaining polling subagents are disabled for one-off calls. Thanks @tyler6204.
 - Agents/Subagents: prefix spawned subagent task messages with context to preserve source information in downstream handling. Thanks @tyler6204.
