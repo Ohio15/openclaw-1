@@ -103,6 +103,17 @@ docker buildx imagetools inspect "ghcr.io/ohio15/openclaw-gateway:$TAG"
 
 Upstream's `docker-release.yml` ignores `*-ohio.*` tags.
 
+Controls held in repository settings, not in the workflow file (a tag push
+runs the tagged commit's own copy of the workflow, so in-file checks alone
+cannot bound a release):
+
+- Environment `ohio-release`: the job may run only for tags matching
+  `v*-ohio.*`.
+- Ruleset `ohio-release-tags-immutable`: tags matching `v*-ohio.*` cannot be
+  moved or deleted once pushed.
+- Deploy pins `image@digest` from the release notes, never the mutable tag
+  (requirement on the `openclaw` stack in `Ohio15/infra`).
+
 ## 7. Manual fallback
 
 Use when CI cannot run (runner unavailable). Build on a Docker host that is
